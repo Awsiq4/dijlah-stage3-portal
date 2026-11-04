@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "verify": "node scripts/verify-structure.mjs"
+    "verify": "node scripts/verify-structure.mjs",
+    "verify:schedule": "node --experimental-strip-types scripts/verify-schedule.mjs",
+    "gen:schedule-csv": "node --experimental-strip-types scripts/gen-schedule-csv.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",

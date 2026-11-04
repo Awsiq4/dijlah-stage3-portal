@@ -27,6 +27,11 @@
       "sha256": "4eebf36ab5c03fcc4a7111421ced65b73659ff7e103e9c56895b7679629c8ece"
     },
     {
+      "path": "data/schedule-2026-10-17.csv",
+      "bytes": 5691,
+      "sha256": "b48c6f0518dfb657db38e4871277942984fa591e35ee04a60dd6311c4cca12d5"
+    },
+    {
       "path": "data/schedule-template.csv",
       "bytes": 105,
       "sha256": "3d5adeade8b3110cbafbdd7c8fa52c6403ad99c9e8d4757eec10a22169be7f02"
@@ -53,8 +58,8 @@
     },
     {
       "path": "docs/IMPLEMENTATION_STATUS.md",
-      "bytes": 3817,
-      "sha256": "9dd41c7e9a42f85df0595e50d0f07f5a9795b2ddc5947593ed89afc1a243b5a9"
+      "bytes": 3994,
+      "sha256": "ef31252feeeafd6d7060ae00c6209262357c48433fb43d864ee1ea4ca8f831cd"
     },
     {
       "path": "integrations/ai-rag-implementation.md",
@@ -73,13 +78,23 @@
     },
     {
       "path": "package.json",
-      "bytes": 557,
-      "sha256": "d5214e5e8479d96e02c103a6ddb434d43814316a70fdeac7967d6cbde343a5d5"
+      "bytes": 731,
+      "sha256": "4b2bd44a95b3c8eca757c1fffde4821164a344033779dad3139dd41020029f12"
     },
     {
       "path": "references/schedule-2026-10-17-extracted.txt",
       "bytes": 16419,
       "sha256": "69922f5ffcae059760710c58d0c6228332a3fd6a85520f212cbcb20af51f2ed9"
+    },
+    {
+      "path": "scripts/gen-schedule-csv.mjs",
+      "bytes": 923,
+      "sha256": "2d4476dc112c497a0c716dd522ab80b19166a0d62412ff2a146bc0d21becc9ca"
+    },
+    {
+      "path": "scripts/verify-schedule.mjs",
+      "bytes": 4100,
+      "sha256": "4ddbbeaa9dad4ac77f1255d0c97d13e3e6ece17aa4180f8d9974d8c68167655e"
     },
     {
       "path": "scripts/verify-structure.mjs",
@@ -143,13 +158,13 @@
     },
     {
       "path": "src/app/page.tsx",
-      "bytes": 5465,
-      "sha256": "faaba72c29c01b9fcd065327ec31285c17728075c87b65299471394bf03944a5"
+      "bytes": 5481,
+      "sha256": "d135ddb947094953ab124083a2c638371974877676b49ef5ca459134e0872886"
     },
     {
       "path": "src/app/schedule/page.tsx",
-      "bytes": 2579,
-      "sha256": "190bb3c03e079fc0d12f5f14cf216c0a626d5a2807dd1f347b1573684fe477b1"
+      "bytes": 2845,
+      "sha256": "42e3cae4bf1f6baa371925a933f5449b1097ef6274fa4e5207ee031de45ff984"
     },
     {
       "path": "src/app/subjects/[id]/page.tsx",
@@ -172,14 +187,19 @@
       "sha256": "e6d683bb5b00070171f98cd44a5b943a398f678c63286fee71f2cccc5ac36d4a"
     },
     {
+      "path": "src/lib/schedule-2026-10-17.ts",
+      "bytes": 9780,
+      "sha256": "72bb972b21a1c8eb9e7a40dacce4fbba55cdb52a143952cc0532d36e1bdde6af"
+    },
+    {
       "path": "src/lib/seed.ts",
-      "bytes": 2965,
-      "sha256": "511b73038067520fafb42f69c5dca55a8d9a789036d82c4241b55de408a285fc"
+      "bytes": 3043,
+      "sha256": "ecbc23e17f0c43940b7fb9e32e7d9c209dc5ae6a9666ef2dd167d77be9170aea"
     },
     {
       "path": "src/lib/storage.tsx",
       "bytes": 2336,
-      "sha256": "7b4016991282a47d574f69be06c517e0686e0b58550bfe81e3858c8864fe16b4"
+      "sha256": "d6932fea6e0b12d14aec477c7a56b4d9c9545e2528794403bfd33c0ac6bbb736"
     },
     {
       "path": "src/lib/types.ts",

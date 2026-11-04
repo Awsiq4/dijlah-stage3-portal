@@ -5,7 +5,7 @@ import type {PortalData,Section} from "./types";
 
 type State = { data:PortalData; setData:(updater:(current:PortalData)=>PortalData)=>void; section:Section; setSection:(value:Section)=>void; dark:boolean; toggleDark:()=>void; reset:()=>void; hydrated:boolean };
 const Context=createContext<State|null>(null);
-const STORE_KEY="dijlah-stage3-prototype-data-v1";
+const STORE_KEY="dijlah-stage3-prototype-data-v2";
 const SECTION_KEY="dijlah-stage3-section";
 const THEME_KEY="dijlah-stage3-theme";
 
