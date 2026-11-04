@@ -223,8 +223,8 @@
     },
     {
       "path": "src/app/globals.css",
-      "bytes": 29000,
-      "sha256": "d5278417be1c228073f3b634d5af5044ac52dd2477051707b3d052815bfe1669"
+      "bytes": 29050,
+      "sha256": "6c716d26913035dd91a7986845c5ff3dc2e4d1fe01b74c87a858229689cdafc8"
     },
     {
       "path": "src/app/icon.png",
@@ -253,8 +253,8 @@
     },
     {
       "path": "src/app/page.tsx",
-      "bytes": 5677,
-      "sha256": "bb52cfc33b722df07c99978b5d405ad765aeb74f5f8ebc0497c1ee1983ad5e0a"
+      "bytes": 5626,
+      "sha256": "f853099ca5a46a2fff7fbe38eb15059e76a87e53108725748f6107e0895a006d"
     },
     {
       "path": "src/app/schedule/page.tsx",
