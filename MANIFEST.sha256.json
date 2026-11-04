@@ -183,8 +183,8 @@
     },
     {
       "path": "scripts/verify-schedule-json.mjs",
-      "bytes": 5411,
-      "sha256": "35e91bd8238f243d41c86f4d7ac70896829ee00466bb1e4cc5f75ecfaff42fe9"
+      "bytes": 5923,
+      "sha256": "a270512cea22ba4dcd37700fef0895d32937579293dec9d86c751dfeae65a9c8"
     },
     {
       "path": "scripts/verify-schedule.mjs",
@@ -223,8 +223,8 @@
     },
     {
       "path": "src/app/globals.css",
-      "bytes": 29180,
-      "sha256": "989af4029ff48aa1a5b04e4a2ad10bc27122573105346492a406ceec714409b8"
+      "bytes": 29000,
+      "sha256": "d5278417be1c228073f3b634d5af5044ac52dd2477051707b3d052815bfe1669"
     },
     {
       "path": "src/app/icon.png",
@@ -258,8 +258,8 @@
     },
     {
       "path": "src/app/schedule/page.tsx",
-      "bytes": 5814,
-      "sha256": "c180ec868c456dda66e5a4324b83d152ac2ee49b56ee5a9effde588bef956a8a"
+      "bytes": 5170,
+      "sha256": "b061db65b2079ffa2e167d88be3415d2721fe819916d23c189082df371094606"
     },
     {
       "path": "src/app/subjects/[id]/page.tsx",
@@ -308,8 +308,8 @@
     },
     {
       "path": "src/lib/schedule-2026-10-17.ts",
-      "bytes": 9956,
-      "sha256": "7bfb0e9c9d52be848299fa7ea5619d715df55dab285bf25a4d2f7420833ce959"
+      "bytes": 9820,
+      "sha256": "58bd0d03187d706eedeb108866593b40ae3b4bb566efff78334253fc37b27b9b"
     },
     {
       "path": "src/lib/seed.ts",

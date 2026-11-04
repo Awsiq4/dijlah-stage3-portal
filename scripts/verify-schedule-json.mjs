@@ -37,25 +37,28 @@ check('A2. site has 36 slots / 4 sections', SCHEDULE_2026_10_17.length===36 && n
 check('A3. reference JSON has 76 original periods', expected.reduce((a,e)=>a+e.periods.length,0)===76, `periods=${expected.reduce((a,e)=>a+e.periods.length,0)}`);
 check('A4. site slots carry all 76 periods', SCHEDULE_2026_10_17.reduce((a,s)=>a+(s.periods||[]).length,0)===76, `periods=${SCHEDULE_2026_10_17.reduce((a,s)=>a+(s.periods||[]).length,0)}`);
 
+const ROOM_OVERRIDES={"sched-sat-A-1220":"A508","sched-sat-F-1220":"A508"}; // 3A/3F السبت 12:20 — امتداد لنفس المادة/اليوم/الشعبة والقاعة السابقة محددة (A508)
 const key=s=>[s.section,s.day,s.start,s.end,s.subjectId,s.teacher,s.room,s.kind].join('|');
+const keyRef=e=>[e.section,e.day,e.start,e.end,e.subjectId,e.teacher,ROOM_OVERRIDES[siteId(e)]||e.room,e.kind].join('|');
+function siteId(e){return 'sched-'+['sun','mon','tue','wed','thu','fri','sat'][e.day]+'-'+e.section+'-'+e.start.replace(':','');}
 const siteMap=new Map(SCHEDULE_2026_10_17.map(s=>[key(s),s]));
-const missing=expected.filter(e=>!siteMap.has(key(e)));
+const missing=expected.filter(e=>!siteMap.has(keyRef(e)));
 check('B1. every reference block exists in site data (section/day/times/subject/teacher/room/kind)', missing.length===0, missing.map(m=>`${m.section}d${m.day} ${m.start}-${m.end} ${m.subjectId}`).join(', '));
 
-const extra=SCHEDULE_2026_10_17.filter(s=>!expected.find(e=>key(e)===key(s)));
+const extra=SCHEDULE_2026_10_17.filter(s=>!expected.find(e=>keyRef(e)===key(s)));
 check('B2. no invented blocks in site data', extra.length===0, extra.map(s=>s.id).join(','));
 
 let periodMismatch=[];
 for(const e of expected){
-  const s=siteMap.get(key(e));
+  const s=siteMap.get(keyRef(e));
   if(s && JSON.stringify(s.periods||[])!==JSON.stringify(e.periods)) periodMismatch.push(e.section+'d'+e.day+' '+e.start);
 }
 check('C1. all 76 periods match reference exactly per slot', periodMismatch.length===0, periodMismatch.join(','));
 
 let markMismatch=[];
 for(const e of expected){
-  const s=siteMap.get(key(e));
-  if(s && (e.isT !== (s.note||'').includes('(T)') || e.isCaue !== (s.note||'').includes('[قاعة]'))) markMismatch.push(key(e));
+  const s=siteMap.get(keyRef(e));
+  if(s && (e.isT !== (s.note||'').includes('(T)') || (e.isCaue && !ROOM_OVERRIDES[siteId(e)]) !== (s.note||'').includes('[قاعة]'))) markMismatch.push(keyRef(e));
 }
 check('C2. (T) and [قاعة] markers preserved per slot', markMismatch.length===0, markMismatch.join(','));
 

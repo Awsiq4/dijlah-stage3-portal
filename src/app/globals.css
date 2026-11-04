@@ -440,7 +440,6 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .view-toggle button.selected{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
 .rest-tag{display:block;font-size:.56rem;font-weight:700;color:var(--st-warning-text)}
 .day-picker button .rest-tag{color:inherit;opacity:.8}
-.sched-periods{margin-top:4px;font-size:.68rem;color:var(--muted);background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:4px 8px;display:inline-block}
 .room-badge{display:inline-block;background:var(--primary-soft);color:var(--primary-strong);border-radius:6px;padding:1px 7px;font-weight:800;font-size:.68rem}
 .room-badge.empty-room{background:var(--st-warning-bg);color:var(--st-warning-text)}
 .teacher-name{font-weight:700}
