@@ -283,8 +283,8 @@
     },
     {
       "path": "src/lib/storage.tsx",
-      "bytes": 2978,
-      "sha256": "d9be75b7ba7517ed8228ccded3135d6909a62aff4312614e21d1f34906eb157a"
+      "bytes": 3434,
+      "sha256": "f91c1ca7ba9091d0e1de43b7733b94507585bc15866f92b277b6bd26c835ffb5"
     },
     {
       "path": "src/lib/types.ts",
