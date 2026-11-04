@@ -1,4 +1,5 @@
 import type { PortalData, Section } from "./types";
+import { SCHEDULE_2026_10_17 } from "./schedule-2026-10-17";
 
 // The original site database/export was unavailable. These are verified subject names,
 // not a reproduction of 36 previously imported timetable entries. Teacher names below
@@ -16,7 +17,7 @@ export const SEED: PortalData = {
     { id:"industrial-lasers",name:"تطبيقات الليزر الصناعية",englishName:"Industrial Laser Applications",teacher:"م.م. أحمد حميد",description:"المحاضرات والتطبيقات الصناعية.",color:"#55935b" },
     { id:"quantum-mechanics",name:"ميكانيك الكم",englishName:"Quantum Mechanics",teacher:"د. زهراء عبد الأمير",description:"المحاضرات والمسائل الخاصة بميكانيك الكم.",color:"#6179ba" }
   ],
-  lectures: [], schedule: [], exams: [], announcements: [], assignments: [],
+  lectures: [], schedule: SCHEDULE_2026_10_17, exams: [], announcements: [], assignments: [],
   telegram: {general:"",sections:{A:"",B:"",C:"",F:""},subjects:{}}
 };
 export const getSubject = (data: PortalData, id: string) => data.subjects.find(s => s.id === id);
