@@ -33,8 +33,8 @@
     },
     {
       "path": "data/schedule-2026-10-17.csv",
-      "bytes": 5691,
-      "sha256": "b48c6f0518dfb657db38e4871277942984fa591e35ee04a60dd6311c4cca12d5"
+      "bytes": 5287,
+      "sha256": "48623910ef8d9d0f214bd60f1e50765617e43654ce214de6ef78a03222ba3bc0"
     },
     {
       "path": "data/schedule-template.csv",
@@ -63,8 +63,8 @@
     },
     {
       "path": "docs/IMPLEMENTATION_STATUS.md",
-      "bytes": 4132,
-      "sha256": "f33284ef9aee530653e5a55ac4ddbd61426daab2b641f7d4c119c3255642de4c"
+      "bytes": 3986,
+      "sha256": "9d0db3bbc0adfadbed61bc88afca918867b7f2b8fa796b3fa42e0a874d1caf31"
     },
     {
       "path": "integrations/ai-rag-implementation.md",
@@ -167,6 +167,16 @@
       "sha256": "69922f5ffcae059760710c58d0c6228332a3fd6a85520f212cbcb20af51f2ed9"
     },
     {
+      "path": "references/schedule-2026-2027.json",
+      "bytes": 14222,
+      "sha256": "bc451b0824aaf5089a8f4813f44dcf405218f5fd08fd991baaba5cb887105087"
+    },
+    {
+      "path": "references/schedule-2026-2027.txt",
+      "bytes": 10466,
+      "sha256": "b0bee7c20e21997d8acaad878b55218ade73616700b3a092aa0e419f569fcd14"
+    },
+    {
       "path": "scripts/gen-schedule-csv.mjs",
       "bytes": 923,
       "sha256": "2d4476dc112c497a0c716dd522ab80b19166a0d62412ff2a146bc0d21becc9ca"
@@ -183,8 +193,8 @@
     },
     {
       "path": "src/app/admin/page.tsx",
-      "bytes": 12787,
-      "sha256": "5211a4c49fdc7ad5d0598e89869fd03c04b1bab0978feae1d1d8c5924fa45269"
+      "bytes": 12773,
+      "sha256": "92e5bffdc6ca873633d7a806378a474ea33bc05f02b174839f8b6ef16c0747e2"
     },
     {
       "path": "src/app/announcements/page.tsx",
@@ -238,13 +248,13 @@
     },
     {
       "path": "src/app/page.tsx",
-      "bytes": 5663,
-      "sha256": "74880630596153531f597c0daf30d15fcdad716ad4f226deba34ce408f82f343"
+      "bytes": 5677,
+      "sha256": "bb52cfc33b722df07c99978b5d405ad765aeb74f5f8ebc0497c1ee1983ad5e0a"
     },
     {
       "path": "src/app/schedule/page.tsx",
-      "bytes": 2845,
-      "sha256": "42e3cae4bf1f6baa371925a933f5449b1097ef6274fa4e5207ee031de45ff984"
+      "bytes": 2837,
+      "sha256": "34450b9594fddb377ce2ab34f9efe4747380ca9fac50b7802cb79906bb486b89"
     },
     {
       "path": "src/app/subjects/[id]/page.tsx",
@@ -293,8 +303,8 @@
     },
     {
       "path": "src/lib/schedule-2026-10-17.ts",
-      "bytes": 9780,
-      "sha256": "72bb972b21a1c8eb9e7a40dacce4fbba55cdb52a143952cc0532d36e1bdde6af"
+      "bytes": 8396,
+      "sha256": "694b9260b33843a5be1e9cbf83b9ab74672fba695cbacdec191331bdcc520c11"
     },
     {
       "path": "src/lib/seed.ts",
