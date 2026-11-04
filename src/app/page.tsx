@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import {ArrowUpLeft,BookOpen,CalendarDays,ClipboardList,Megaphone,MessageSquareText,UploadCloud} from "lucide-react";
 import {usePortal} from "@/lib/storage";
 import {DAYS,formatDate,getSubject} from "@/lib/seed";
@@ -14,7 +15,7 @@ export default function Home(){
  const exams=data.exams.filter(e=>e.sections.includes(section)&&e.status!=="cancelled"&&e.date>=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Baghdad",year:"numeric",month:"2-digit",day:"2-digit"}).format(now)).sort((a,b)=>a.date.localeCompare(b.date));
  const assignments=data.assignments.filter(a=>a.sections.includes(section)&&a.status==="active").sort((a,b)=>a.dueAt.localeCompare(b.dueAt)).slice(0,3);
  const lectures=[...data.lectures].filter(l=>l.status==="published").sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)).slice(0,3);
- return <><div className="hero"><div><Badge>السنة الدراسية 2026–2027</Badge><h1>كل أمور المرحلة الثالثة، بمكان واحد.</h1><p>المحاضرات والجدول والتبليغات والواجبات، بتصميم واضح ومناسب للموبايل.</p><Link className="hero-button" href="/announcements">تصفّح التبليغات <ArrowUpLeft size={18}/></Link></div><div className="hero-decor"><BookOpen size={70} strokeWidth={1.2}/><span>III</span></div></div>
+ return <><div className="hero"><div><Badge>السنة الدراسية 2026–2027</Badge><h1>كل أمور المرحلة الثالثة، بمكان واحد.</h1><p>المحاضرات والجدول والتبليغات والواجبات، بتصميم واضح ومناسب للموبايل.</p><Link className="hero-button" href="/announcements">تصفّح التبليغات <ArrowUpLeft size={18}/></Link></div><div className="hero-decor"><Image className="hero-logo" src="/images/university-mark.png" width={1024} height={1024} alt="شعار جامعة دجلة" priority/><span>III</span></div></div>
  <PageHeading title="الرئيسية" description={`${DAYS[day]} · الشعبة ${section} · المرحلة الثالثة`}/>
  <div className="stats"><Link href="/subjects" className="stat"><BookOpen size={21}/><span>المواد الدراسية</span><strong>{data.subjects.length}</strong></Link><Link href="/announcements" className="stat"><MessageSquareText size={21}/><span>التبليغات</span><strong>{data.announcements.length}</strong></Link><Link href="/schedule" className="stat"><CalendarDays size={21}/><span>محاضرات اليوم</span><strong>{slots.length}</strong></Link><Link href="/assignments" className="stat"><ClipboardList size={21}/><span>واجبات نشطة</span><strong>{assignments.length}</strong></Link></div>
  <div className="two-col"><SectionCard title="محاضرات اليوم" href="/schedule" subtitle={`جدول يوم ${DAYS[day]} · الشعبة ${section}`}>{slots.length?slots.map(x=><div className="list-row" key={x.id}><div className="time-box">{x.start}<small>{x.end}</small></div><div className="grow"><strong>{getSubject(data,x.subjectId)?.name||"مادة غير محددة"}</strong><div className="subtle small">{x.room||"القاعة غير محددة"} · {x.kind==="practical"?"عملي":"نظري"}</div></div>{x.status!=="normal"&&<Status tone="warning">{x.status==="cancelled"?"ملغاة":"تغيير"}</Status>}</div>):<Empty description="لا محاضرات لهذا اليوم حسب جدول 17-10-2026 (الاثنين استراحة، ولا دوام الخميس والجمعة)."/>}</SectionCard>

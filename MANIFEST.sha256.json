@@ -87,6 +87,36 @@
       "sha256": "4b2bd44a95b3c8eca757c1fffde4821164a344033779dad3139dd41020029f12"
     },
     {
+      "path": "public/images/department-logo.png",
+      "bytes": 225342,
+      "sha256": "cbcdebbba90040d710830c6d9abd9b1f59c951094e7ccb069bf35a8d491bc2eb"
+    },
+    {
+      "path": "public/images/university-lockup.png",
+      "bytes": 133913,
+      "sha256": "0e007f18902fa694f90637b44dfcc3934653d2a88f24f23301c28e61655fc132"
+    },
+    {
+      "path": "public/images/university-mark.png",
+      "bytes": 14660,
+      "sha256": "9fc055cc49dfb89295a97b114ca87812bcf2b43b10585618b4b1c8b4f213f728"
+    },
+    {
+      "path": "references/logos/9QIVJMkv-شعار جامعة دجلة .pdf",
+      "bytes": 26790,
+      "sha256": "a6c17d784bb4b0786d0ff0f34fb82bebfa02d0f37cb4c5e934d9f151fc920b9e"
+    },
+    {
+      "path": "references/logos/NnoQOzTE-شعار جامعة دجلة 1.pdf",
+      "bytes": 517398,
+      "sha256": "cc37f5d9024322f808fb1b09618b37f5f243d190abab668570a126976fa41688"
+    },
+    {
+      "path": "references/logos/X4YGKNeD-شعار_قسم_هندسة_الليزر_والإلكترونيات_البصرية.pdf",
+      "bytes": 26242450,
+      "sha256": "3ba1e427bba52fc7b842dd69f68f524a17475ca65b6588e8a0b96a969a05602d"
+    },
+    {
       "path": "references/schedule-2026-10-17-extracted.txt",
       "bytes": 16419,
       "sha256": "69922f5ffcae059760710c58d0c6228332a3fd6a85520f212cbcb20af51f2ed9"
@@ -138,8 +168,13 @@
     },
     {
       "path": "src/app/globals.css",
-      "bytes": 24666,
-      "sha256": "908bfbe3a1c8c97bec1dd02c1a8696d11acd8913c3f358da779d019a3dde2f20"
+      "bytes": 25099,
+      "sha256": "a1173f388bf107ae664e110f99014e1685a35ce5e85dacc969fa07384e88e7a7"
+    },
+    {
+      "path": "src/app/icon.png",
+      "bytes": 10497,
+      "sha256": "965e4909646bd9fd045f96704b4af5dd9f9a92c131c388fc1039bd99168d229c"
     },
     {
       "path": "src/app/layout.tsx",
@@ -163,8 +198,8 @@
     },
     {
       "path": "src/app/page.tsx",
-      "bytes": 5481,
-      "sha256": "d135ddb947094953ab124083a2c638371974877676b49ef5ca459134e0872886"
+      "bytes": 5609,
+      "sha256": "d8fce7a878611399ec26e0a6975be18525b46e28d4b159653241a51e16c1588a"
     },
     {
       "path": "src/app/schedule/page.tsx",
@@ -183,8 +218,8 @@
     },
     {
       "path": "src/components/AppShell.tsx",
-      "bytes": 2596,
-      "sha256": "b020986370ddb3dd8a9295838a0fa03b4eb53471e542510cd749b4dc16617db9"
+      "bytes": 3195,
+      "sha256": "cf99bdc1281b147c5c33c09d838b75cfca59c259a166b887e821efab994b9a6a"
     },
     {
       "path": "src/components/UI.tsx",
