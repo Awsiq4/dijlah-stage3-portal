@@ -17,7 +17,12 @@ export const SEED: PortalData = {
     { id:"industrial-lasers",name:"تطبيقات الليزر الصناعية",englishName:"Industrial Laser Applications",teacher:"م.م. أحمد حميد",description:"المحاضرات والتطبيقات الصناعية.",color:"#55935b" },
     { id:"quantum-mechanics",name:"ميكانيك الكم",englishName:"Quantum Mechanics",teacher:"د. زهراء عبد الأمير",description:"المحاضرات والمسائل الخاصة بميكانيك الكم.",color:"#6179ba" }
   ],
-  lectures: [], schedule: SCHEDULE_2026_10_17, exams: [], announcements: [], assignments: [],
+  lectures: [
+    { id:"lec-nonlinear-optics-1",subjectId:"nonlinear-optics",number:1,title:"Nonlinear Optics — Lecture 1",description:"المحاضرة 1 من مادة البصريات اللاخطية — قسم هندسة الليزر والإلكترونيات البصرية (م.م. سجود باسم).",fileUrl:"/lectures/nonlinear-optics-lecture-1.pdf",fileName:"Nonlinear Optics 1.pdf",status:"published",updatedAt:"2026-11-04" },
+    { id:"lec-nonlinear-optics-2",subjectId:"nonlinear-optics",number:2,title:"Nonlinear Optics — Lecture 2",description:"المحاضرة 2 من مادة البصريات اللاخطية (م.م. سجود باسم).",fileUrl:"/lectures/nonlinear-optics-lecture-2.pdf",fileName:"Nonlinear Optics 2.pdf",status:"published",updatedAt:"2026-11-04" },
+    { id:"lec-nonlinear-optics-3",subjectId:"nonlinear-optics",number:3,title:"Nonlinear Optics — Lecture 3: Second Harmonic Generation (SHG)",description:"المحاضرة 3 — توليد التوافق الثاني (SHG) — مادة البصريات اللاخطية (م.م. سجود باسم).",fileUrl:"/lectures/nonlinear-optics-lecture-3.pdf",fileName:"Nonlinear Optics 3.pdf",status:"published",updatedAt:"2026-11-04" },
+    { id:"lec-nonlinear-optics-4-5",subjectId:"nonlinear-optics",number:4,title:"Nonlinear Optics — Lectures 4 & 5",description:"المحاضرتان 4 و5 من مادة البصريات اللاخطية (م.م. سجود باسم).",fileUrl:"/lectures/nonlinear-optics-lectures-4-5.pdf",fileName:"Nonlinear Optics 4&5.pdf",status:"published",updatedAt:"2026-11-04" }
+  ], schedule: SCHEDULE_2026_10_17, exams: [], announcements: [], assignments: [],
   telegram: {general:"",sections:{A:"",B:"",C:"",F:""},subjects:{}}
 };
 export const getSubject = (data: PortalData, id: string) => data.subjects.find(s => s.id === id);

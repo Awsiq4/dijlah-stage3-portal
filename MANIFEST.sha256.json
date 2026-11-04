@@ -102,6 +102,46 @@
       "sha256": "b623bf64227eafd4d21b94cd8c09de4d1ab09ddf55085de8dface464bae65e4f"
     },
     {
+      "path": "public/lectures/nonlinear-optics-lecture-1.pdf",
+      "bytes": 1467913,
+      "sha256": "6f2fdbd4e4687902dc9d0a1a88bfdaf0dda054f8bbe413d33d2416ed3b17e49c"
+    },
+    {
+      "path": "public/lectures/nonlinear-optics-lecture-2.pdf",
+      "bytes": 1442652,
+      "sha256": "2027533e5a73f706efe28c7b362935f6d4aa6ca733db6d6a5fea7993f0067f2a"
+    },
+    {
+      "path": "public/lectures/nonlinear-optics-lecture-3.pdf",
+      "bytes": 1137533,
+      "sha256": "5eda85b2807168737c17898ed51f01a97fb98511a47c098eab4926c59a6ff7f2"
+    },
+    {
+      "path": "public/lectures/nonlinear-optics-lectures-4-5.pdf",
+      "bytes": 1264927,
+      "sha256": "4e90eba7471f12814b4dc4f7e215b43ff97edb95b85e7af94836f8408de04b73"
+    },
+    {
+      "path": "references/lectures/2DO4MGcv-Nonlinear Optics 2.pdf",
+      "bytes": 1442652,
+      "sha256": "2027533e5a73f706efe28c7b362935f6d4aa6ca733db6d6a5fea7993f0067f2a"
+    },
+    {
+      "path": "references/lectures/DT2ZyCIH-Nonlinear Optics 1.pdf",
+      "bytes": 1467913,
+      "sha256": "6f2fdbd4e4687902dc9d0a1a88bfdaf0dda054f8bbe413d33d2416ed3b17e49c"
+    },
+    {
+      "path": "references/lectures/cjWWGKkM-Nonlinear Optics 3.pdf",
+      "bytes": 1137533,
+      "sha256": "5eda85b2807168737c17898ed51f01a97fb98511a47c098eab4926c59a6ff7f2"
+    },
+    {
+      "path": "references/lectures/lYTGvX2t-Nonlinear Optics 4&5.pdf",
+      "bytes": 1264927,
+      "sha256": "4e90eba7471f12814b4dc4f7e215b43ff97edb95b85e7af94836f8408de04b73"
+    },
+    {
       "path": "references/logos/9QIVJMkv-شعار جامعة دجلة .pdf",
       "bytes": 26790,
       "sha256": "a6c17d784bb4b0786d0ff0f34fb82bebfa02d0f37cb4c5e934d9f151fc920b9e"
@@ -183,8 +223,8 @@
     },
     {
       "path": "src/app/lectures/[id]/page.tsx",
-      "bytes": 1951,
-      "sha256": "db7de12436b6b26947d01bc5d38ea3044c4b4b553d3893ad1ab82279df7c9451"
+      "bytes": 1984,
+      "sha256": "f62f23c8a122db1571e44a9f14a950d485eee709b61e7bb354f1d91d30d85258"
     },
     {
       "path": "src/app/more/page.tsx",
@@ -238,8 +278,8 @@
     },
     {
       "path": "src/lib/seed.ts",
-      "bytes": 3043,
-      "sha256": "ecbc23e17f0c43940b7fb9e32e7d9c209dc5ae6a9666ef2dd167d77be9170aea"
+      "bytes": 4624,
+      "sha256": "b2b273c1e387d6a7cc14accd5af625753d61f726e31c470761a04311366e7d11"
     },
     {
       "path": "src/lib/storage.tsx",
