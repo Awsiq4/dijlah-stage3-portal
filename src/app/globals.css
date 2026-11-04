@@ -372,23 +372,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .more-link strong{font-size:.86rem}
 .pdf-toolbar{display:flex;align-items:center;gap:10px;padding:15px 0;border-top:1px solid var(--border);flex-wrap:wrap}
 .pdf-toolbar strong{flex:1}
-.pdf-viewer{width:100%;height:72vh;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
 
-/* ---------- AI assistant ---------- */
-.ai-layout{max-width:800px}
-.ai-panel{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);padding:22px;box-shadow:var(--shadow)}
-.ai-welcome{display:flex;align-items:center;text-align:center;flex-direction:column;padding:26px 10px}
-.ai-welcome svg{color:var(--primary);background:var(--primary-soft);padding:14px;border-radius:50%;width:56px;height:56px}
-.ai-welcome h2{margin:14px 0 0}
-.ai-welcome p{max-width:480px;color:var(--muted);font-size:.83rem}
-.ai-caution{display:flex;align-items:center;gap:10px;border-radius:11px;padding:11px 14px;background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
-.ai-caution p{margin:0;font-size:.75rem}
-.ai-input{display:flex;gap:8px;margin-top:20px}
-.ai-input input{flex:1;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:10px;padding:11px 13px;outline:none;transition:var(--trans)}
-.ai-input input:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 45%,transparent)}
-.ai-input button{border:0;border-radius:10px;background:var(--primary);color:var(--on-primary);padding:12px 18px;font-weight:800;transition:var(--trans)}
-.ai-input button:hover{filter:brightness(1.07)}
-.ai-input button:disabled{opacity:.45;cursor:not-allowed}
+
 
 /* ---------- Admin & forms ---------- */
 .danger-note{
@@ -418,6 +403,35 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .admin-teacher-row input{max-width:270px}
 .admin-teacher-row p{margin:0}
 .panel-body>.form-field{margin-bottom:10px}
+
+
+/* ---------- PDF viewer ---------- */
+.pdf-viewer-wrap{border:1px solid var(--border);border-radius:14px;background:var(--surface2);overflow:hidden;display:flex;flex-direction:column;max-height:82vh}
+.pdf-viewer-wrap:fullscreen{max-height:none;border-radius:0}
+.icon-button.sm{width:34px;height:34px;border-radius:10px}
+.pdf-page-ind{font-size:.74rem;font-weight:800;color:var(--muted);white-space:nowrap}
+.pdf-zoom{font-size:.74rem;font-weight:800;min-width:42px;text-align:center;color:var(--muted)}
+.pdf-pages{overflow-y:auto;overflow-x:hidden;padding:14px;display:flex;flex-direction:column;align-items:center;gap:14px;padding-bottom:96px;overscroll-behavior:contain;touch-action:pan-y}
+.pdf-viewer-wrap:fullscreen .pdf-pages{padding-bottom:24px}
+.pdf-page{background:#fff;border:1px solid var(--border-strong);border-radius:6px;box-shadow:var(--shadow);overflow:hidden;line-height:0;max-width:100%}
+.pdf-canvas{display:block;max-width:none}
+.pdf-state{display:flex;flex-direction:column;align-items:center;gap:10px;padding:44px 16px;color:var(--muted);font-size:.8rem;text-align:center}
+.pdf-state.error{color:var(--st-danger-text)}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- Onboarding ---------- */
+.onboard-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:18px;background:color-mix(in srgb,var(--bg) 55%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.onboard-card{background:var(--surface);border:1px solid var(--border);border-radius:22px;box-shadow:var(--shadow-lg);max-width:430px;width:100%;padding:26px 22px;text-align:center;max-height:92vh;overflow-y:auto}
+.onboard-card h1{font-size:1.3rem;margin:12px 0 6px}
+.onboard-card>p{color:var(--muted);font-size:.82rem;margin:0 0 18px}
+.onboard-logo{width:64px;height:64px;margin:0 auto}
+.onboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px}
+.onboard-opt{border:1.5px solid var(--border);background:var(--surface2);border-radius:14px;padding:16px 8px;font-size:1.05rem;font-weight:900;color:var(--text);transition:var(--trans)}
+.onboard-opt:hover{border-color:var(--border-strong)}
+.onboard-opt.selected{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-strong);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 40%,transparent)}
+.onboard-opt small{display:block;font-size:.64rem;font-weight:700;color:var(--muted);margin-top:3px}
+.onboard-cta{width:100%;min-height:46px;font-size:.85rem}
 
 /* ---------- Responsive ---------- */
 @media(max-width:1080px){

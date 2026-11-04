@@ -1,5 +1,48 @@
 "use client";
-import {BellRing} from "lucide-react";
+import {Send} from "lucide-react";
 import {usePortal} from "@/lib/storage";
-import {PageHeading,Empty,ExternalLink} from "@/components/UI";
-export default function Notifications(){const {data,section}=usePortal();const entries=[{name:"قناة المرحلة العامة",link:data.telegram.general},{name:`قناة الشعبة ${section}`,link:data.telegram.sections[section]}];return <><PageHeading title="إشعارات التليجرام" description="قنوات المرحلة والشعبة وإشعارات التحديثات"/><div className="panel"><div className="panel-body"><div className="stack">{entries.map(item=><div className="list-row" key={item.name}><BellRing size={20}/><strong className="grow">{item.name}</strong><ExternalLink href={item.link}>فتح القناة</ExternalLink></div>)}</div></div></div><div className="panel"><div className="panel-heading"><h2>قنوات المواد</h2></div><div className="panel-body">{data.subjects.filter(s=>data.telegram.subjects[s.id]).length?data.subjects.filter(s=>data.telegram.subjects[s.id]).map(s=><div className="list-row" key={s.id}><strong className="grow">{s.name}</strong><ExternalLink href={data.telegram.subjects[s.id]}>فتح</ExternalLink></div>):<Empty description="روابط القنوات غير متوفرة في الملف الأصلي القابل للنقل."/>}</div></div><p className="note">اشتراك البوت، الإلغاء، إشعارات المحاضرات والامتحانات والتبليغات وتجنّب التكرار كلها وظائف خادم تحتاج تنفيذ وربط آمن ولا تعمل في هذه النسخة التجريبية.</p></>}
+import {SECTIONS} from "@/lib/seed";
+import {Badge,Empty,ExternalLink,PageHeading} from "@/components/UI";
+
+const REP_CHANNEL={name:"قناة مندوب المرحلة — إعلانات عامة",link:"https://t.me/laserandopto1"};
+
+export default function Notifications(){
+  const {data,section}=usePortal();
+  const general=[{name:"القناة الرسمية لطلبة المرحلة الثالثة",link:data.telegram.general},REP_CHANNEL].filter(x=>x.link);
+  const others=SECTIONS.filter(s=>s!==section);
+  const subjectChannels=data.subjects.filter(s=>data.telegram.subjects[s.id]);
+  return <>
+    <PageHeading title="قنوات التليجرام" description="القنوات الرسمية للمرحلة والشعب والمواد — انضم لتصلك إشعارات التحديثات أولًا بأول"/>
+    <section className="panel">
+      <div className="panel-heading"><h2><Send size={19}/> قنوات عامة</h2></div>
+      <div className="panel-body"><div className="stack">
+        {general.map(c=><div className="list-row" key={c.link}><div className="round-icon"><Send size={19}/></div><strong className="grow">{c.name}</strong><ExternalLink href={c.link}>فتح القناة</ExternalLink></div>)}
+      </div></div>
+    </section>
+    <section className="panel">
+      <div className="panel-heading"><h2><Send size={19}/> قنوات الشعب</h2></div>
+      <div className="panel-body"><div className="stack">
+        <div className="list-row">
+          <div className="round-icon"><Send size={19}/></div>
+          <div className="grow"><strong>قناة شعبة {section}</strong><div className="subtle small"><Badge>شعبتك الحالية</Badge></div></div>
+          {data.telegram.sections[section]?<ExternalLink href={data.telegram.sections[section]}>فتح القناة</ExternalLink>:<span className="status">غير متوفرة</span>}
+        </div>
+        {others.map(s=>{
+          const link=data.telegram.sections[s];
+          return <div className="list-row" key={s}>
+            <div className="round-icon"><Send size={19}/></div>
+            <strong className="grow">قناة شعبة {s}</strong>
+            {link?<ExternalLink href={link}>فتح</ExternalLink>:<span className="status">غير متوفرة بعد</span>}
+          </div>;
+        })}
+      </div></div>
+    </section>
+    <section className="panel">
+      <div className="panel-heading"><h2><Send size={19}/> قنوات المواد</h2></div>
+      <div className="panel-body">
+        {subjectChannels.length?<div className="stack">{subjectChannels.map(s=><div className="list-row" key={s.id}><div className="round-icon"><Send size={19}/></div><strong className="grow">{s.name}</strong><ExternalLink href={data.telegram.subjects[s.id]}>فتح القناة</ExternalLink></div>)}</div>:<Empty description="روابط قنوات المواد غير متوفرة في الملف الأصلي — لا تُضاف إلا بمصدر موثّق."/>}
+      </div>
+    </section>
+<p className="note">اشترك في القناة وألغِ الاشتراك متى شئت — تصلك إشعارات المحاضرات والامتحانات والتبليغات الجديدة دون تكرارها هنا.</p>
+  </>;
+}
