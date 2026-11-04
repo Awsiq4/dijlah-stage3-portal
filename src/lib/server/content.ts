@@ -1,6 +1,6 @@
 import {defaultQueryer, type Queryer} from "./db.ts";
 import {dbConfigured} from "./flags.ts";
-import {SEED} from "@/lib/seed";
+import {SEED} from "../seed.ts";
 import {SCHEMAS, sanitizeRow, buildUpsert, TELEGRAM_KINDS, type ContentType, type WritableContentType} from "./content-schema.ts";
 
 export {sanitizeRow, buildUpsert, TELEGRAM_KINDS, SCHEMAS};
@@ -48,8 +48,18 @@ export async function upsertTelegram(kind: string, key: string, url: string, db:
   );
 }
 
+// Required audit: errors PROPAGATE so that, inside withTx(), the content change
+// and its audit record commit or roll back together.
 export async function audit(actor: string, action: string, detail: unknown, db: Queryer = defaultQueryer): Promise<void> {
+  await db.q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [actor, action, JSON.stringify(detail ?? null)]);
+}
+
+// Best-effort audit for authentication attempts only (documented policy):
+// a login must never fail, and no error details may leak, because of audit logging.
+export async function auditBestEffort(actor: string, action: string, detail: unknown, db: Queryer = defaultQueryer): Promise<void> {
   try {
     await db.q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [actor, action, JSON.stringify(detail ?? null)]);
-  } catch { /* audit must never break the operation */ }
+  } catch (err) {
+    console.warn("audit (best-effort) failed:", err instanceof Error ? err.message : err);
+  }
 }

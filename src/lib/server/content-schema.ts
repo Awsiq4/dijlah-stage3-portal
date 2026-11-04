@@ -123,7 +123,9 @@ export function sanitizeRow(type: Exclude<ContentType, "telegram">, row: Record<
 }
 
 // Pure SQL builder — identifiers come only from SCHEMAS, values are always $n placeholders.
-export function buildUpsert(type: Exclude<ContentType, "telegram">, rawRow: Record<string, unknown>): {sql: string; params: unknown[]} {
+// mode "update" (default, for admin edits) refreshes an existing row;
+// mode "nothing" (seed migration default) NEVER overwrites existing rows — preserves admin edits.
+export function buildUpsert(type: Exclude<ContentType, "telegram">, rawRow: Record<string, unknown>, mode: "update" | "nothing" = "update"): {sql: string; params: unknown[]} {
   const schema = SCHEMAS[type];
   const row = sanitizeRow(type, rawRow);
   const cols = Object.keys(row);
@@ -131,8 +133,10 @@ export function buildUpsert(type: Exclude<ContentType, "telegram">, rawRow: Reco
   const q = (c: string) => `"${c}"`; // always quote identifiers (reserved words like "end" included)
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
   const sets = cols.filter(c => c !== "id").map(c => `${q(c)}=EXCLUDED.${q(c)}`).join(",");
-  const sql = `INSERT INTO ${schema.table} (${cols.map(q).join(",")}) VALUES (${placeholders})`
-    + (sets ? ` ON CONFLICT (id) DO UPDATE SET ${sets}` : ` ON CONFLICT (id) DO NOTHING`);
+  let sql = `INSERT INTO ${schema.table} (${cols.map(q).join(",")}) VALUES (${placeholders})`;
+  if (mode === "nothing") sql += " ON CONFLICT (id) DO NOTHING";
+  else sql += sets ? ` ON CONFLICT (id) DO UPDATE SET ${sets}` : " ON CONFLICT (id) DO NOTHING";
+  if (mode === "nothing") sql += " RETURNING id"; // lets callers count actually-inserted rows
   const params = cols.map(c => (typeof row[c] === "object" && row[c] !== null ? JSON.stringify(row[c]) : row[c]));
   return {sql, params};
 }

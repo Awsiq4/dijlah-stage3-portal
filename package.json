@@ -10,7 +10,8 @@
     "verify": "node scripts/verify-structure.mjs",
     "verify:schedule": "node --experimental-strip-types scripts/verify-schedule.mjs",
     "gen:schedule-csv": "node --experimental-strip-types scripts/gen-schedule-csv.mjs",
-    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs src/lib/server/content-schema.test.mjs",
+    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/public-map.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs src/lib/server/content-schema.test.mjs src/lib/server/db.test.mjs src/lib/server/public.test.mjs",
+    "test:e2e": "node --experimental-strip-types scripts/e2e-publish-test.mjs",
     "create:super-admin": "node --experimental-strip-types scripts/create-super-admin.mjs",
     "migrate:seed": "node --experimental-strip-types scripts/migrate-seed-to-db.mjs",
     "verify:schedule:json": "node --experimental-strip-types scripts/verify-schedule-json.mjs"
@@ -28,6 +29,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "pg-mem": "^3.0.14",
     "typescript": "^5.7.0"
   }
 }

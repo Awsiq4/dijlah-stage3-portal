@@ -18,7 +18,7 @@ if (!DATABASE_URL) { console.error('ERROR: DATABASE_URL is required (Postgres co
 if (!EMAIL || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(EMAIL)) { console.error('ERROR: SUPER_ADMIN_EMAIL must be a valid email.'); process.exit(1); }
 if (PASSWORD.length < 12) { console.error('ERROR: SUPER_ADMIN_PASSWORD must be at least 12 characters.'); process.exit(1); }
 
-const pool = new Pool({connectionString: DATABASE_URL, ssl: {rejectUnauthorized: false}});
+const pool = new Pool({connectionString: DATABASE_URL, ssl: {rejectUnauthorized: true}  // TLS certificate verification is mandatory (Neon uses trusted CAs)});
 try {
   await pool.query(readFileSync(path.join(root, 'database/portal-schema.sql'), 'utf8'));
   const res = await pool.query(

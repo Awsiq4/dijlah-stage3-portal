@@ -75,4 +75,9 @@ export async function withTx<T>(fn: (db: Queryer) => Promise<T>): Promise<T> {
   }
 }
 
+// Test hook: inject a pg-compatible pool (e.g. pg-mem) without touching env/config.
+export function setPoolForTests(p: Pool | null): void {
+  pool = p;
+}
+
 export {defaultQueryer};

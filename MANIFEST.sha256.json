@@ -58,8 +58,8 @@
     },
     {
       "path": "database/portal-schema.sql",
-      "bytes": 4941,
-      "sha256": "25459261bbe3b694ac06f81550b5327517c02e4d85d6deb7c8463b1eca14955e"
+      "bytes": 4992,
+      "sha256": "b73fa0a1fd5d2527a4785450e18b623c464a26419204462fd13616cca3e9323b"
     },
     {
       "path": "database/telegram-notifications.sql",
@@ -78,8 +78,8 @@
     },
     {
       "path": "docs/PHASE1_SECURE_BACKEND.md",
-      "bytes": 8807,
-      "sha256": "ea44e0a8f6e855a4eaa9c32ed4d8cd1da5849b6d10b00d6d042d804b0179ab66"
+      "bytes": 10610,
+      "sha256": "20859fea77f4da18f05f7c8c0dcbbcbeaadeead832290e33e644d526c7e3fb71"
     },
     {
       "path": "docs/TELEGRAM_BOT_SETUP.md",
@@ -103,13 +103,13 @@
     },
     {
       "path": "package-lock.json",
-      "bytes": 32597,
-      "sha256": "9843dca26e6bedb58093da719df0414b3ea9e69c99307f45e828f444f519f338"
+      "bytes": 49697,
+      "sha256": "63351d1918803537d880ed7114bf6586eb14b9c3ec2d11d7240630096e46d473"
     },
     {
       "path": "package.json",
-      "bytes": 1260,
-      "sha256": "ee1e670526d407e3cd4a2d4b85b3c7733671924aada0f028ba6b918f320922ce"
+      "bytes": 1451,
+      "sha256": "d10d1a763c96d3f4048513eaa0c1a450aa14207af0d7eeff32c2b213c766f955"
     },
     {
       "path": "public/images/department-logo.png",
@@ -198,8 +198,13 @@
     },
     {
       "path": "scripts/create-super-admin.mjs",
-      "bytes": 1957,
-      "sha256": "c24900bb53bdcb4954ccb60750200d7b384be1fd125b25ff0b001341f7237a2b"
+      "bytes": 2026,
+      "sha256": "ba55cf97a9b5dcbb52635751bc3358c1715cffa34cd30f1b24a376c81d23b9fa"
+    },
+    {
+      "path": "scripts/e2e-publish-test.mjs",
+      "bytes": 5950,
+      "sha256": "cb2253fdb27e4bef9892f6e4e575658adc8fc6fd99afe7f46b05de33a02a17cb"
     },
     {
       "path": "scripts/gen-schedule-csv.mjs",
@@ -208,8 +213,8 @@
     },
     {
       "path": "scripts/migrate-seed-to-db.mjs",
-      "bytes": 3884,
-      "sha256": "2d44cd4c35d5431778f522b4a4075f9d3285562cb95622fb8c587d33377cb2cf"
+      "bytes": 4003,
+      "sha256": "d6d4681cd51dbb855d4dba86dd2707acf590d668f3eb0a8234460f0a426f460a"
     },
     {
       "path": "scripts/setup-telegram-env.sh",
@@ -228,8 +233,8 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 1665,
-      "sha256": "881e9151016740189231d33fe757b3b3be893ef93121401c855841fd5a9dffdf"
+      "bytes": 2176,
+      "sha256": "c61a95d4ff756dbfad52173560863008303ec7f4ef2d82a525634be678329e54"
     },
     {
       "path": "src/app/admin-legacy/page.tsx",
@@ -258,8 +263,8 @@
     },
     {
       "path": "src/app/api/admin/login/route.ts",
-      "bytes": 2201,
-      "sha256": "a037381d163756b88689fc84197245a2e88790de0772a53eab27daed48640e67"
+      "bytes": 2338,
+      "sha256": "5c284a6c9e1bf694d21bf48964519c2291ec214f4bf5b036f4e628ef218ef43b"
     },
     {
       "path": "src/app/api/admin/logout/route.ts",
@@ -280,6 +285,11 @@
       "path": "src/app/api/health/route.ts",
       "bytes": 626,
       "sha256": "a23c361366f13d387f3b1eb40784115cd7da2b88a841994f656b64db77874576"
+    },
+    {
+      "path": "src/app/api/public/content/route.ts",
+      "bytes": 1009,
+      "sha256": "a0ff3c2db7dba8de675c904af3f1d26c64bfc92a8dff97077f37a554d3a7a3b5"
     },
     {
       "path": "src/app/api/telegram/admin/route.ts",
@@ -412,6 +422,16 @@
       "sha256": "b1cd32d84ac53b37ebc37ffbf2bfa0abe7c8cfb05a887c2403ee5a4e317947f8"
     },
     {
+      "path": "src/lib/public-map.test.mjs",
+      "bytes": 2313,
+      "sha256": "d19ed9e18a92208545e301cb6f37ea006d82aa8f6e8632e211f1e949b691dbac"
+    },
+    {
+      "path": "src/lib/public-map.ts",
+      "bytes": 4514,
+      "sha256": "1d6e0166e5fee917ada8fa03240137ff2e31f4330a31a76ad40c2991015b4c74"
+    },
+    {
       "path": "src/lib/schedule-2026-10-17.ts",
       "bytes": 9820,
       "sha256": "58bd0d03187d706eedeb108866593b40ae3b4bb566efff78334253fc37b27b9b"
@@ -443,18 +463,23 @@
     },
     {
       "path": "src/lib/server/content-schema.ts",
-      "bytes": 6679,
-      "sha256": "763923400ee9ed132934c75012bf6d58c65525bab09c6907f797556d4d08d598"
+      "bytes": 7055,
+      "sha256": "e2704f2b08807a0391ae6111564ed099551b149c46fb1ebe397d389366c69366"
     },
     {
       "path": "src/lib/server/content.ts",
-      "bytes": 2784,
-      "sha256": "43256e8f06a7ad38e3436d187aeee6702394fbe62983bd0d3629e75e7e304dde"
+      "bytes": 3404,
+      "sha256": "434a16c7e892b0336ee7f697570e6fd317cc3dc5e56445b0839c426178acb4b5"
+    },
+    {
+      "path": "src/lib/server/db.test.mjs",
+      "bytes": 5584,
+      "sha256": "d0cf4d5d8651a82caa37281d5e1d603f0e50bb9f510c864208b753ff95d11099"
     },
     {
       "path": "src/lib/server/db.ts",
-      "bytes": 2545,
-      "sha256": "dd5934badf13a5bd9cbe22b5d1cc324e833b77b9858bc433033a88e53be7015d"
+      "bytes": 2701,
+      "sha256": "eb89718daa691dded97c6492f94d560be9a666ef22dd6aa9c8936fc55319c681"
     },
     {
       "path": "src/lib/server/flags.ts",
@@ -465,6 +490,21 @@
       "path": "src/lib/server/notify.ts",
       "bytes": 5156,
       "sha256": "a32027851063b8118e13fae6d955477bc3c3d540cd6655d8169c3f1819acdd74"
+    },
+    {
+      "path": "src/lib/server/public-filters.ts",
+      "bytes": 1567,
+      "sha256": "803401745220c1f6cc631d5c362b31780e23d73419c63b40629feefe2184338e"
+    },
+    {
+      "path": "src/lib/server/public.test.mjs",
+      "bytes": 4343,
+      "sha256": "7634f797221a8d63c4f9d34d68a9846f8012f55f566499a65e1c60edabf5573b"
+    },
+    {
+      "path": "src/lib/server/public.ts",
+      "bytes": 3751,
+      "sha256": "3914ee14d0fc392d1b090be729ad3ab892745ea97955fe19bdcfb4e2c72a29e3"
     },
     {
       "path": "src/lib/server/server.test.mjs",
@@ -493,8 +533,8 @@
     },
     {
       "path": "src/lib/storage.tsx",
-      "bytes": 3658,
-      "sha256": "5163378843d7655901c639b3dfaa610981f584f654089170380aed63bc1d83b8"
+      "bytes": 4564,
+      "sha256": "1d1c9d9bff25d64ca0cee17cce0cc0599d79b968159598d67e400905db38de3d"
     },
     {
       "path": "src/lib/types.ts",

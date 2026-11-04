@@ -1,7 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import {qOne} from "@/lib/server/db";
 import {checkLoginRateLimit, hashPassword, verifyPassword, createSession, SESSION_COOKIE, SESSION_TTL_SECONDS} from "@/lib/server/auth";
-import {audit} from "@/lib/server/content";
+import {auditBestEffort} from "@/lib/server/content";
 import {dbConfigured} from "@/lib/server/flags";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
       `SELECT id, email, role, is_active, password_hash FROM portal_admins WHERE email=$1`, [email]
     );
     const valid = admin && admin.is_active && verifyPassword(password, admin.password_hash);
-    await audit(valid ? email : `unknown:${email}`, valid ? "admin.login.success" : "admin.login.failed", {ip});
+    // Login-attempt logging is best-effort by documented policy: it must never block a login or leak error details.
+    await auditBestEffort(valid ? email : `unknown:${email}`, valid ? "admin.login.success" : "admin.login.failed", {ip});
     if (!valid) return NextResponse.json({error: "Invalid credentials"}, {status: 401});
 
     await qOne(`UPDATE portal_admins SET last_login_at=now() WHERE id=$1`, [admin.id]);

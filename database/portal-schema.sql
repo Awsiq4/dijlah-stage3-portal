@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS portal_schedule (
   section TEXT NOT NULL CHECK (section IN ('A','B','C','F')),
   day INT NOT NULL CHECK (day BETWEEN 0 AND 6),
   start TEXT NOT NULL,
-  end TEXT NOT NULL,
+  "end" TEXT NOT NULL,  -- quoted: END is a reserved word in PostgreSQL
   subject_id TEXT NOT NULL DEFAULT '',
   teacher TEXT NOT NULL DEFAULT '',
   room TEXT NOT NULL DEFAULT '',

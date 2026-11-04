@@ -98,3 +98,11 @@
 6. **Audit + transactions**: كل تعديل محتوى + سجل التدقيق داخل معاملة واحدة (`withTx`).
 7. **واجهة**: نماذج عربية كاملة في `/admin` (إضافة/تعديل/حذف) — لا حاجة لـAPI يدوي.
 8. **اختبارات**: `content-schema.test.mjs` (حقن SQL، validation، enums) +توسيع (CSRF، RBAC، rate limit) — `npm test` الآن 28 اختبارًا.
+
+## 11. Phase 1.1 — Corrections after second review (PR #13)
+
+1. **TLS everywhere**: `scripts/create-super-admin.mjs` and `scripts/migrate-seed-to-db.mjs` now use `rejectUnauthorized: true`; `verify-structure.mjs` fails CI if any file disables certificate verification.
+2. **Reliable audit**: `audit()` no longer swallows errors — inside `withTx()` a failed audit rolls back the content change (tested). `auditBestEffort()` is reserved for login attempts only (documented policy: login must never fail or leak because of logging).
+3. **Safe seed migration**: default is now `ON CONFLICT DO NOTHING` (existing/admin-edited rows are preserved, re-runs are safe); explicit `--update` flag for controlled refreshes. Tested against pg-mem. Also fixed a real schema bug found by pg-mem: unquoted reserved column `end` in `portal_schedule` DDL.
+4. **Public read-only data layer**: `/api/public/content?type=all&section=A` (no login) serves ONLY published content from PostgreSQL when `DATABASE_URL` is set (`src/lib/server/public.ts` + pure filters in `public-filters.ts`); drafts, admins, sessions, audit and subscriber tables are never queried. When the DB is not configured it falls back to the static seed (`fromDatabase:false`) and the client keeps using localStorage exactly as before (`storage.tsx` only overrides display data when `fromDatabase:true`, and never writes server data back to localStorage).
+5. **E2E publishing test**: `npm run test:e2e` (`scripts/e2e-publish-test.mjs`) runs the full scenario (sign-in → create → public visibility → section targeting → edit → audit → delete → bot disabled) against a REAL database. Without `DATABASE_URL` it prints SKIP and exits 0 — it never claims success without a real connection. **Status: awaiting DATABASE_URL configuration.**

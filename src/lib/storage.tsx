@@ -2,6 +2,7 @@
 import React, {createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from "react";
 import {SEED,SECTIONS} from "./seed";
 import {mergeById} from "./merge";
+import {mapPublicContent} from "./public-map";
 import type {PortalData,Section} from "./types";
 
 type State = { data:PortalData; setData:(updater:(current:PortalData)=>PortalData)=>void; section:Section; setSection:(value:Section)=>void; dark:boolean; toggleDark:()=>void; reset:()=>void; hydrated:boolean };
@@ -18,6 +19,9 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   const [dark,setDark]=useState(false);
   const [hydrated,setHydrated]=useState(false);
   const themeCleanup=useRef<(()=>void)|null>(null);
+  // When the public read-only API reports fromDatabase:true, server-published content
+  // becomes authoritative and is NOT written back into the localStorage prototype store.
+  const fromServer=useRef(false);
   useEffect(()=>{
     try {
       const stored=localStorage.getItem(STORE_KEY);
@@ -36,7 +40,22 @@ export function PortalProvider({children}:{children:React.ReactNode}){
     setHydrated(true);
   },[]);
   useEffect(()=>()=>{themeCleanup.current?.();},[]);
-  useEffect(()=>{if(hydrated)localStorage.setItem(STORE_KEY,JSON.stringify(data));},[data,hydrated]);
+  // Public read-only server layer: if a database is configured, published content from
+  // PostgreSQL overrides the prototype data for display; localStorage stays untouched.
+  useEffect(()=>{
+    if(!hydrated)return;
+    let cancelled=false;
+    fetch(`/api/public/content?type=all&section=${section}`,{cache:"no-store"})
+      .then(r=>r.json())
+      .then(j=>{
+        if(cancelled||!j||j.fromDatabase!==true||!j.content)return;
+        fromServer.current=true;
+        updateData(prev=>({...prev,...mapPublicContent(j.content)}));
+      })
+      .catch(()=>{});
+    return ()=>{cancelled=true;};
+  },[hydrated,section]);
+  useEffect(()=>{if(hydrated&&!fromServer.current)localStorage.setItem(STORE_KEY,JSON.stringify(data));},[data,hydrated]);
   useEffect(()=>{if(hydrated)localStorage.setItem(SECTION_KEY,section);},[section,hydrated]);
   useEffect(()=>{document.documentElement.dataset.theme=dark?"dark":"light";},[dark]);
   const setData=useCallback((updater:(current:PortalData)=>PortalData)=>updateData(prev=>updater(prev)),[]);

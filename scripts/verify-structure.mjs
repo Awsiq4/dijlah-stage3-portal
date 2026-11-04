@@ -1,7 +1,7 @@
 import {existsSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 const root=process.cwd();
-const required=['src/app/page.tsx','src/app/subjects/page.tsx','src/app/subjects/[id]/page.tsx','src/app/lectures/[id]/page.tsx','src/app/schedule/page.tsx','src/app/announcements/page.tsx','src/app/exams/page.tsx','src/app/assignments/page.tsx','src/app/notifications/page.tsx','src/app/admin/page.tsx','src/app/admin/login/page.tsx','src/app/admin-legacy/page.tsx','src/app/more/page.tsx','src/lib/types.ts','src/lib/seed.ts','src/middleware.ts','src/lib/server/auth.ts','src/lib/server/content.ts','database/cloudflare-d1-schema.sql','database/portal-schema.sql','docs/HANDOFF_TO_OTHER_AI.md'];
+const required=['src/app/page.tsx','src/app/subjects/page.tsx','src/app/subjects/[id]/page.tsx','src/app/lectures/[id]/page.tsx','src/app/schedule/page.tsx','src/app/announcements/page.tsx','src/app/exams/page.tsx','src/app/assignments/page.tsx','src/app/notifications/page.tsx','src/app/admin/page.tsx','src/app/admin/login/page.tsx','src/app/admin-legacy/page.tsx','src/app/more/page.tsx','src/lib/types.ts','src/lib/seed.ts','src/middleware.ts','src/lib/server/auth.ts','src/lib/server/content.ts','database/cloudflare-d1-schema.sql','database/portal-schema.sql','docs/HANDOFF_TO_OTHER_AI.md','src/app/api/public/content/route.ts','src/lib/server/public.ts','src/lib/server/public-filters.ts','src/lib/public-map.ts','scripts/e2e-publish-test.mjs','scripts/migrate-seed-to-db.mjs','scripts/create-super-admin.mjs'];
 let failed=false;
 for(const file of required){if(!existsSync(path.join(root,file))){console.error('MISSING:',file);failed=true;}}
 const shell=readFileSync(path.join(root,'src/components/AppShell.tsx'),'utf8');
@@ -10,5 +10,7 @@ const mw=readFileSync(path.join(root,'src/middleware.ts'),'utf8');
 for(const need of ['/admin-legacy/:path*','/api/admin/:path*','/admin/:path*','admin-legacy'])if(!mw.includes(need)){console.error('MISSING MIDDLEWARE GATE:',need);failed=true;}
 const db=readFileSync(path.join(root,'src/lib/server/db.ts'),'utf8');
 if(db.includes('rejectUnauthorized: false')){console.error('INSECURE TLS: db.ts disables certificate verification');failed=true;}
+import {readdirSync} from 'node:fs';
+for(const f of readdirSync(path.join(root,'scripts'))){if(f==='verify-structure.mjs')continue;const t=readFileSync(path.join(root,'scripts',f),'utf8');if(t.includes('rejectUnauthorized: false')){console.error('INSECURE TLS in script:',f);failed=true;}}
 if(failed)process.exit(1);
 console.log('Structure and key navigation checks OK. This is not an integration, auth, DB or production test.');
