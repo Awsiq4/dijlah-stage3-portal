@@ -3,8 +3,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 268,
-      "sha256": "a9b991d00848b9d74bd3324c9561ece457b89484f11adc4363db1ab56a67c094"
+      "bytes": 1342,
+      "sha256": "986101c0ed20c80d27baa7664de8675d127078541682717a4cc2ce764e072f52"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -57,6 +57,11 @@
       "sha256": "0204478f86d7809e35f399d4d4f8696cc8e120736f524a5eafd413c153a6484e"
     },
     {
+      "path": "database/telegram-notifications.sql",
+      "bytes": 2062,
+      "sha256": "a8389259ebe19374696117e767142e5612063ef41616bc688b36db569acf7425"
+    },
+    {
       "path": "docs/HANDOFF_TO_OTHER_AI.md",
       "bytes": 13369,
       "sha256": "816265b28f127d41fb3bf6bdc665f26745aa0d1873c2f4895ba2b1af103f9878"
@@ -65,6 +70,11 @@
       "path": "docs/IMPLEMENTATION_STATUS.md",
       "bytes": 3953,
       "sha256": "b219cc5dcc5f4113361c01b062b5241703c60651a73725fe10f46cda6395ec85"
+    },
+    {
+      "path": "docs/TELEGRAM_BOT_SETUP.md",
+      "bytes": 4790,
+      "sha256": "d9f726579663b2ad55e30581c7ebecd9fee35156f52689959ca88aaf81af5521"
     },
     {
       "path": "integrations/ai-rag-implementation.md",
@@ -83,13 +93,13 @@
     },
     {
       "path": "package-lock.json",
-      "bytes": 26731,
-      "sha256": "70e7b98eca1d38b5969460592d51204f6f1c9fdbbca767ca87fc25ff8959dff6"
+      "bytes": 32597,
+      "sha256": "9843dca26e6bedb58093da719df0414b3ea9e69c99307f45e828f444f519f338"
     },
     {
       "path": "package.json",
-      "bytes": 934,
-      "sha256": "0586ec5880507994b216ef3d3fbd38b9578dd871320420ab0452e1aa82b8dccb"
+      "bytes": 1014,
+      "sha256": "b333dc7e56dacf328a4cb8e71c97e938d0b19a00217ee9e4ce4c1ff5d9ec9fb4"
     },
     {
       "path": "public/images/department-logo.png",
@@ -198,8 +208,8 @@
     },
     {
       "path": "src/app/admin/page.tsx",
-      "bytes": 12773,
-      "sha256": "92e5bffdc6ca873633d7a806378a474ea33bc05f02b174839f8b6ef16c0747e2"
+      "bytes": 12932,
+      "sha256": "ff877d046b37931b91cfb8a84cd4694b55b9baf30ee51a150757247bd5ea3352"
     },
     {
       "path": "src/app/announcements/page.tsx",
@@ -210,6 +220,31 @@
       "path": "src/app/api/health/route.ts",
       "bytes": 238,
       "sha256": "b2702a23a38a6b040283f8b8f9bdb1f0c4be9392efda489845eb325def52a39a"
+    },
+    {
+      "path": "src/app/api/telegram/admin/route.ts",
+      "bytes": 2617,
+      "sha256": "dcfb04e36507dfe173edad026f6d518e5a5e5c105741d3fb5683f72a549e353e"
+    },
+    {
+      "path": "src/app/api/telegram/health/route.ts",
+      "bytes": 559,
+      "sha256": "4ca2922a07954d226ca49f0d78ed9c4f6f655d867ff5ba3382f0c361b00ecc1a"
+    },
+    {
+      "path": "src/app/api/telegram/subscribe/route.ts",
+      "bytes": 1267,
+      "sha256": "f44d0ad221823f4339725cef42697e12a79a9dfa4110d496cdd11da823785fde"
+    },
+    {
+      "path": "src/app/api/telegram/webhook/route.ts",
+      "bytes": 7522,
+      "sha256": "a1f84c36426a3ad8f0f8b7a266053791696390be70af1490dcd4f337144e394b"
+    },
+    {
+      "path": "src/app/api/telegram/worker/route.ts",
+      "bytes": 732,
+      "sha256": "f1c37c1382f256635f9d210f2acaf03512560a0dbec8016c5137634e685a10ae"
     },
     {
       "path": "src/app/assignments/page.tsx",
@@ -223,8 +258,8 @@
     },
     {
       "path": "src/app/globals.css",
-      "bytes": 29050,
-      "sha256": "6c716d26913035dd91a7986845c5ff3dc2e4d1fe01b74c87a858229689cdafc8"
+      "bytes": 29449,
+      "sha256": "c8d15d09d843bc25abb5d0b90f406436b6cc5e546f90d63c914305882efdc290"
     },
     {
       "path": "src/app/icon.png",
@@ -243,18 +278,18 @@
     },
     {
       "path": "src/app/more/page.tsx",
-      "bytes": 1234,
-      "sha256": "128227e4411bf10a50cf0abd9be7b5ce1e8865f0f763082faf3e25ae17272e60"
+      "bytes": 1272,
+      "sha256": "c7935d8acbfb3ef647708bbf7d59248496f8e8bc81d04466586c928aceb1a462"
     },
     {
       "path": "src/app/notifications/page.tsx",
-      "bytes": 3336,
-      "sha256": "8978109b2377fc73197f4bfd1a4e68f137eb74fa9a78c99138d4463b80b78199"
+      "bytes": 4091,
+      "sha256": "af60ae438d0dc3b69ce3306b8bd4d900381b2854b91ca5e6a2e059bd586c3504"
     },
     {
       "path": "src/app/page.tsx",
-      "bytes": 5626,
-      "sha256": "f853099ca5a46a2fff7fbe38eb15059e76a87e53108725748f6107e0895a006d"
+      "bytes": 5695,
+      "sha256": "80f9eb4f83fa9212b850a46b4d49fe9ec8337081a7bb5d5285f0415b0231acf9"
     },
     {
       "path": "src/app/schedule/page.tsx",
@@ -292,6 +327,16 @@
       "sha256": "1edf4a368433373a487c82d92ba5f822bafab0200065ac062a9a7377e345f16c"
     },
     {
+      "path": "src/components/TelegramAdmin.tsx",
+      "bytes": 5322,
+      "sha256": "30dbc62f6d2881a23b0bffc89059c6c927eb0f29f6bb9d76f3e952535c9b3567"
+    },
+    {
+      "path": "src/components/TelegramCard.tsx",
+      "bytes": 2603,
+      "sha256": "341a26d65b36f707af1c70afc1f4eb403f3c465cf175068bde9918be561d7c29"
+    },
+    {
       "path": "src/components/UI.tsx",
       "bytes": 1688,
       "sha256": "e6d683bb5b00070171f98cd44a5b943a398f678c63286fee71f2cccc5ac36d4a"
@@ -315,6 +360,51 @@
       "path": "src/lib/seed.ts",
       "bytes": 4832,
       "sha256": "522e501e9e57c7732d933fe971208f4ce4a385a5d0384460cf7c4fea674c3070"
+    },
+    {
+      "path": "src/lib/server/backoff.ts",
+      "bytes": 1157,
+      "sha256": "b0845e1d96f553d709df0d68bb696e08dbd8f9723339c8c113cbcabf679ea751"
+    },
+    {
+      "path": "src/lib/server/db.ts",
+      "bytes": 821,
+      "sha256": "ca11078adf20309cb112b7650b1146a7e8544f727c399a447b671c9f2c1e9703"
+    },
+    {
+      "path": "src/lib/server/flags.ts",
+      "bytes": 1295,
+      "sha256": "0d0a77aca88d2f5f2c4d117f7ceab8eaa452fe31922c9e9c2eacb3545aaf3fa7"
+    },
+    {
+      "path": "src/lib/server/notify.ts",
+      "bytes": 5156,
+      "sha256": "a32027851063b8118e13fae6d955477bc3c3d540cd6655d8169c3f1819acdd74"
+    },
+    {
+      "path": "src/lib/server/server.test.mjs",
+      "bytes": 3231,
+      "sha256": "58f46cde60c7e60f355dc439542eb0840c31874532118f5bd1dfeabe98499549"
+    },
+    {
+      "path": "src/lib/server/targeting.ts",
+      "bytes": 1311,
+      "sha256": "ce44596c3f8dbfe80d0d1ac70fce246a5273e31d4c59eab35e0b39cbba04a20e"
+    },
+    {
+      "path": "src/lib/server/telegram.ts",
+      "bytes": 1931,
+      "sha256": "b9dedeab309c49671da9ad70105812fb8b1d65c504ef81e3ae361224a4b2788d"
+    },
+    {
+      "path": "src/lib/server/templates.ts",
+      "bytes": 1924,
+      "sha256": "170bb5f7fba42d51b622bd3168b6ab0c5c83f7140af60008b244f0ec2e39f5a7"
+    },
+    {
+      "path": "src/lib/server/tokens.ts",
+      "bytes": 1548,
+      "sha256": "7ed9ce5fad01c54f828f595c79af1d7a18e780b9c0a80c7af5972619c9d5aaeb"
     },
     {
       "path": "src/lib/storage.tsx",

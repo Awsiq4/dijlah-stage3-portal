@@ -1,8 +1,9 @@
 "use client";
-import {Send} from "lucide-react";
+import {BellRing,Send} from "lucide-react";
 import {usePortal} from "@/lib/storage";
 import {SECTIONS} from "@/lib/seed";
 import {Badge,Empty,ExternalLink,PageHeading} from "@/components/UI";
+import TelegramCard from "@/components/TelegramCard";
 
 const REP_CHANNEL={name:"قناة مندوب المرحلة — إعلانات عامة",link:"https://t.me/laserandopto1"};
 
@@ -13,6 +14,14 @@ export default function Notifications(){
   const subjectChannels=data.subjects.filter(s=>data.telegram.subjects[s.id]);
   return <>
     <PageHeading title="قنوات التليجرام" description="القنوات الرسمية للمرحلة والشعب والمواد — انضم لتصلك إشعارات التحديثات أولًا بأول"/>
+    <section className="panel">
+      <div className="panel-heading"><h2><BellRing size={19}/> الإشعارات التلقائية</h2></div>
+      <div className="panel-body">
+        <TelegramCard/>
+        <p className="subtle small">اشتراك طوعي عبر بوت التليجرام الرسمي — بدون حساب. تستلم إشعارات حسب شعبتك ({section}) وتفضيلاتك. يمكنك الإيقاف في أي وقت من البوت (/stop).</p>
+        <p className="subtle small">الحالات: مفعّلة ✅ / غير مفعّلة بعد (الـflag) / غير متوفرة (قاعدة البيانات غير مهيأة).</p>
+      </div>
+    </section>
     <section className="panel">
       <div className="panel-heading"><h2><Send size={19}/> قنوات عامة</h2></div>
       <div className="panel-body"><div className="stack">
