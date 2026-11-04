@@ -23,7 +23,7 @@ export const SEED: PortalData = {
     { id:"lec-nonlinear-optics-3",subjectId:"nonlinear-optics",number:3,title:"Nonlinear Optics — Lecture 3: Second Harmonic Generation (SHG)",description:"المحاضرة 3 — توليد التوافق الثاني (SHG) — مادة البصريات اللاخطية (م.م. سجود باسم).",fileUrl:"/lectures/nonlinear-optics-lecture-3.pdf",fileName:"Nonlinear Optics 3.pdf",status:"published",updatedAt:"2026-11-04" },
     { id:"lec-nonlinear-optics-4-5",subjectId:"nonlinear-optics",number:4,title:"Nonlinear Optics — Lectures 4 & 5",description:"المحاضرتان 4 و5 من مادة البصريات اللاخطية (م.م. سجود باسم).",fileUrl:"/lectures/nonlinear-optics-lectures-4-5.pdf",fileName:"Nonlinear Optics 4&5.pdf",status:"published",updatedAt:"2026-11-04" }
   ], schedule: SCHEDULE_2026_10_17, exams: [], announcements: [], assignments: [],
-  telegram: {general:"",sections:{A:"",B:"",C:"",F:""},subjects:{}}
+  telegram: {general:"https://t.me/+W7I8HKWXeN41MGEy",sections:{A:"https://t.me/LASER_2026",B:"https://t.me/laserreng",C:"https://t.me/CHANNEL_C_NOTICEC",F:""},subjects:{"nonlinear-optics":"https://t.me/Nonlinearoptics","numerical-analysis":"https://t.me/+7dKag52ZhPQ1OGJi"}}
 };
 export const getSubject = (data: PortalData, id: string) => data.subjects.find(s => s.id === id);
 export const formatDate = (input: string) => {

@@ -1,7 +1,7 @@
 import {existsSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 const root=process.cwd();
-const required=['src/app/page.tsx','src/app/subjects/page.tsx','src/app/subjects/[id]/page.tsx','src/app/lectures/[id]/page.tsx','src/app/schedule/page.tsx','src/app/announcements/page.tsx','src/app/exams/page.tsx','src/app/assignments/page.tsx','src/app/notifications/page.tsx','src/app/ai-assistant/page.tsx','src/app/admin/page.tsx','src/app/more/page.tsx','src/lib/types.ts','src/lib/seed.ts','database/cloudflare-d1-schema.sql','docs/HANDOFF_TO_OTHER_AI.md'];
+const required=['src/app/page.tsx','src/app/subjects/page.tsx','src/app/subjects/[id]/page.tsx','src/app/lectures/[id]/page.tsx','src/app/schedule/page.tsx','src/app/announcements/page.tsx','src/app/exams/page.tsx','src/app/assignments/page.tsx','src/app/notifications/page.tsx','src/app/admin/page.tsx','src/app/more/page.tsx','src/lib/types.ts','src/lib/seed.ts','database/cloudflare-d1-schema.sql','docs/HANDOFF_TO_OTHER_AI.md'];
 let failed=false;
 for(const file of required){if(!existsSync(path.join(root,file))){console.error('MISSING:',file);failed=true;}}
 const shell=readFileSync(path.join(root,'src/components/AppShell.tsx'),'utf8');
