@@ -98,8 +98,8 @@
     },
     {
       "path": "public/images/university-mark.png",
-      "bytes": 14660,
-      "sha256": "9fc055cc49dfb89295a97b114ca87812bcf2b43b10585618b4b1c8b4f213f728"
+      "bytes": 11347,
+      "sha256": "b623bf64227eafd4d21b94cd8c09de4d1ab09ddf55085de8dface464bae65e4f"
     },
     {
       "path": "references/logos/9QIVJMkv-شعار جامعة دجلة .pdf",
@@ -168,13 +168,13 @@
     },
     {
       "path": "src/app/globals.css",
-      "bytes": 25099,
-      "sha256": "a1173f388bf107ae664e110f99014e1685a35ce5e85dacc969fa07384e88e7a7"
+      "bytes": 26114,
+      "sha256": "f3cbb260ef2d16ef0f2fb3ba6b17131993598183bf17ab17e397ca250122c9e3"
     },
     {
       "path": "src/app/icon.png",
-      "bytes": 10497,
-      "sha256": "965e4909646bd9fd045f96704b4af5dd9f9a92c131c388fc1039bd99168d229c"
+      "bytes": 24720,
+      "sha256": "8239b9aa4084c81ab1c8246f1b5e114ce59de716861f9ccfc9804f9d474e73f9"
     },
     {
       "path": "src/app/layout.tsx",
@@ -198,8 +198,8 @@
     },
     {
       "path": "src/app/page.tsx",
-      "bytes": 5609,
-      "sha256": "d8fce7a878611399ec26e0a6975be18525b46e28d4b159653241a51e16c1588a"
+      "bytes": 5663,
+      "sha256": "74880630596153531f597c0daf30d15fcdad716ad4f226deba34ce408f82f343"
     },
     {
       "path": "src/app/schedule/page.tsx",
@@ -218,8 +218,13 @@
     },
     {
       "path": "src/components/AppShell.tsx",
-      "bytes": 3195,
-      "sha256": "cf99bdc1281b147c5c33c09d838b75cfca59c259a166b887e821efab994b9a6a"
+      "bytes": 3072,
+      "sha256": "a46c72e47bd82eb399be0fbd78d72edb7640a3b647bc147269b1265453ccca23"
+    },
+    {
+      "path": "src/components/HeroArt.tsx",
+      "bytes": 2960,
+      "sha256": "aeb14b95596e914fd1a629f06209e42d57c8b436e347804a23a3892b3f59e19a"
     },
     {
       "path": "src/components/UI.tsx",
