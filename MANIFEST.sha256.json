@@ -73,8 +73,8 @@
     },
     {
       "path": "docs/TELEGRAM_BOT_SETUP.md",
-      "bytes": 4790,
-      "sha256": "d9f726579663b2ad55e30581c7ebecd9fee35156f52689959ca88aaf81af5521"
+      "bytes": 4969,
+      "sha256": "8d765468d52c5ec515e2edd3d9973c5820acefe28c263accf466aaa8d4e31902"
     },
     {
       "path": "integrations/ai-rag-implementation.md",
@@ -190,6 +190,11 @@
       "path": "scripts/gen-schedule-csv.mjs",
       "bytes": 923,
       "sha256": "2d4476dc112c497a0c716dd522ab80b19166a0d62412ff2a146bc0d21becc9ca"
+    },
+    {
+      "path": "scripts/setup-telegram-env.sh",
+      "bytes": 2184,
+      "sha256": "c7d94952024c76dffcfe49992829165aa024bc686f89cd6fcfe9d6bb3cff6eae"
     },
     {
       "path": "scripts/verify-schedule-json.mjs",

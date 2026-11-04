@@ -4,6 +4,12 @@ The portal ships with a complete, secure, server-side Telegram notification serv
 It is **disabled by default** (`TELEGRAM_BOT_ENABLED=false`) and only activates when all
 required secrets + database are configured in Vercel Environment Variables.
 
+## 0. Quick local setup (safe)
+```bash
+bash scripts/setup-telegram-env.sh   # writes a local gitignored .env, never prints secrets
+```
+Then continue with the manual steps below.
+
 ## 1. Create the bot (BotFather)
 1. Open Telegram → @BotFather → `/newbot` → choose name + username (ends with `bot`).
 2. Copy the **HTTP API token** (secret — never commit it).
