@@ -88,5 +88,14 @@ const badRoom=slots.filter(s=>!ROOM.test(s.room));
 check('9. room format is empty or letter+3 digits (e.g. A508)',badRoom.length===0,
   badRoom.map(s=>`${s.id}:${s.room}`).join(', ')||'none');
 
+
+const totalPeriods=slots.reduce((a,s)=>a+(s.periods||[]).length,0);
+check('10. all 76 original 45-min periods present', totalPeriods===76, `periods=${totalPeriods}`);
+const badPeriods=slots.filter(s=>(s.periods||[]).some(p=>{const m=/^(\d+):(\d+)-(\d+):(\d+)$/.exec(p);if(!m)return true;const t=x=>+x[0]*60+ +x[1];const [a,b,c,d]=m.slice(1);return t([a,b])<t([s.start.split(":")[0],s.start.split(":")[1]])||t([c,d])>t([s.end.split(":")[0],s.end.split(":")[1]]);}));
+check('11. every period fits inside its slot start/end', badPeriods.length===0, badPeriods.map(s=>s.id).join(',')||'none');
+
+const sunA=slots.filter(s=>s.section==='A'&&s.day===0);
+check('12. Sunday 3A: 2 blocks over 3 periods (blocks vs periods distinguished)', sunA.length===2&&sunA.reduce((a,s)=>a+(s.periods||[]).length,0)===3, `blocks=${sunA.length} periods=${sunA.reduce((a,s)=>a+(s.periods||[]).length,0)}`);
+
 if(failures.length){console.error(`\n${failures.length} schedule check(s) FAILED.`);process.exit(1);}
-console.log('\nAll 9 schedule checks passed for SCHEDULE_2026_10_17.');
+console.log('\nAll schedule checks passed for SCHEDULE_2026_10_17.');
