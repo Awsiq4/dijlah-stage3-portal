@@ -187,8 +187,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .pt{fill:#cfeeff;transform-box:fill-box;animation:ptFloat 8s ease-in-out infinite}
 .pt.p2{animation-delay:1.1s}.pt.p3{animation-delay:2.2s}.pt.p4{animation-delay:3s}.pt.p5{animation-delay:4.1s}.pt.p6{animation-delay:5s}.pt.p7{animation-delay:2.8s}.pt.p8{animation-delay:6.2s}
 @keyframes ptFloat{0%,100%{transform:translateY(0);opacity:.12}50%{transform:translateY(-24px);opacity:.55}}
-.hero h1{font-size:1.62rem;line-height:1.6;margin:16px 0 8px;max-width:520px;font-weight:900}
-.hero p{color:#d9e9f5;font-size:.85rem;max-width:480px;margin-bottom:0}
+.hero h1{font-size:1.62rem;line-height:1.6;margin:16px 0 8px;max-width:520px;font-weight:900;overflow-wrap:break-word}
+.hero p{color:#d9e9f5;font-size:.85rem;max-width:480px;margin-bottom:0;overflow-wrap:break-word}
 .hero-button,.action-button{
   display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:11px;
   padding:10px 16px;background:var(--primary);color:var(--on-primary);
