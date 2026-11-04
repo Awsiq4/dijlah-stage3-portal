@@ -3,8 +3,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 2443,
-      "sha256": "ce3021111df4ba4e04c81097c4bbfe8edf96148467e2dfa192dd91073a15ff35"
+      "bytes": 3199,
+      "sha256": "a113fed324b070c6055bd0c0ec43d85fd34af189325daa65fa6aade041a3993c"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -77,6 +77,11 @@
       "sha256": "b219cc5dcc5f4113361c01b062b5241703c60651a73725fe10f46cda6395ec85"
     },
     {
+      "path": "docs/PHASE1_2_AUTOMATION.md",
+      "bytes": 5425,
+      "sha256": "bfc0ab3c8a994c974a2e2339d06665e2ec72f45fddc10b873891fb06bf28bf21"
+    },
+    {
       "path": "docs/PHASE1_SECURE_BACKEND.md",
       "bytes": 10610,
       "sha256": "20859fea77f4da18f05f7c8c0dcbbcbeaadeead832290e33e644d526c7e3fb71"
@@ -108,8 +113,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 1451,
-      "sha256": "d10d1a763c96d3f4048513eaa0c1a450aa14207af0d7eeff32c2b213c766f955"
+      "bytes": 1657,
+      "sha256": "7fb926a7847c883719c392afa11c6edda884755ca61af8f5b112d8afe7ce95fa"
     },
     {
       "path": "public/images/department-logo.png",
@@ -197,6 +202,16 @@
       "sha256": "b0bee7c20e21997d8acaad878b55218ade73616700b3a092aa0e419f569fcd14"
     },
     {
+      "path": "scripts/apply-portal-schema.mjs",
+      "bytes": 1341,
+      "sha256": "a4a2882506f282db836a9370cbd8d2587dfcc98953ea51591869e97075e18fc7"
+    },
+    {
+      "path": "scripts/bootstrap-neon-phase1.sh",
+      "bytes": 1815,
+      "sha256": "39d8987987c3be0c696b8ccdefefd8fd5243a555ab34db49114a9907d656b153"
+    },
+    {
       "path": "scripts/create-super-admin.mjs",
       "bytes": 2026,
       "sha256": "ba55cf97a9b5dcbb52635751bc3358c1715cffa34cd30f1b24a376c81d23b9fa"
@@ -222,6 +237,11 @@
       "sha256": "c7d94952024c76dffcfe49992829165aa024bc686f89cd6fcfe9d6bb3cff6eae"
     },
     {
+      "path": "scripts/vercel-set-env.mjs",
+      "bytes": 5371,
+      "sha256": "032dcc15b1f9373ecc50de0549e4f676a91802d939fa9635a1a39311e285d5ad"
+    },
+    {
       "path": "scripts/verify-schedule-json.mjs",
       "bytes": 5923,
       "sha256": "a270512cea22ba4dcd37700fef0895d32937579293dec9d86c751dfeae65a9c8"
@@ -233,8 +253,8 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 2176,
-      "sha256": "c61a95d4ff756dbfad52173560863008303ec7f4ef2d82a525634be678329e54"
+      "bytes": 2304,
+      "sha256": "111be67d064bfb5b802e0f3950ee3a9886fa50762450cd631fd425c878df74a1"
     },
     {
       "path": "src/app/admin-legacy/page.tsx",
