@@ -8,8 +8,8 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "bytes": 573,
-      "sha256": "5a8896242e385493b42a68be16167ed492492f3a19a2fe72f76042c6f490608f"
+      "bytes": 632,
+      "sha256": "de5fa17dc04b74cc83e55e7e3ff09771d1b18b0abdcbd2b85926da3605b7ec00"
     },
     {
       "path": ".gitignore",
@@ -83,8 +83,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 731,
-      "sha256": "4b2bd44a95b3c8eca757c1fffde4821164a344033779dad3139dd41020029f12"
+      "bytes": 808,
+      "sha256": "af82ab5dc94d76eec9c7ca46fe9a33caebc7bcda88b5173377ee3babef2c3853"
     },
     {
       "path": "public/images/department-logo.png",
@@ -272,6 +272,16 @@
       "sha256": "e6d683bb5b00070171f98cd44a5b943a398f678c63286fee71f2cccc5ac36d4a"
     },
     {
+      "path": "src/lib/merge.test.mjs",
+      "bytes": 1525,
+      "sha256": "4e6ab8aecff2da37cf1e405736a2140a3d76974a4ccfed5c989f5a725d5b3b6f"
+    },
+    {
+      "path": "src/lib/merge.ts",
+      "bytes": 213,
+      "sha256": "b1cd32d84ac53b37ebc37ffbf2bfa0abe7c8cfb05a887c2403ee5a4e317947f8"
+    },
+    {
       "path": "src/lib/schedule-2026-10-17.ts",
       "bytes": 9780,
       "sha256": "72bb972b21a1c8eb9e7a40dacce4fbba55cdb52a143952cc0532d36e1bdde6af"
@@ -283,8 +293,8 @@
     },
     {
       "path": "src/lib/storage.tsx",
-      "bytes": 3434,
-      "sha256": "f91c1ca7ba9091d0e1de43b7733b94507585bc15866f92b277b6bd26c835ffb5"
+      "bytes": 3278,
+      "sha256": "769eceaae74818970eacc87b6e5b8733094eff6d447d724fdc0ff2c80051a2ad"
     },
     {
       "path": "src/lib/types.ts",
