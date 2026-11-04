@@ -87,6 +87,16 @@
       "sha256": "4b2bd44a95b3c8eca757c1fffde4821164a344033779dad3139dd41020029f12"
     },
     {
+      "path": "public/images/department-logo.png",
+      "bytes": 75727,
+      "sha256": "28451745b4536b7497f32f1ae673f3040a759ed630ea3adf20a51124c8530ef5"
+    },
+    {
+      "path": "public/images/university-logo.png",
+      "bytes": 14542,
+      "sha256": "28da372a96b735c21ebda8706cb6ef73db6bebb10f40d8f984e049f54014aa61"
+    },
+    {
       "path": "references/schedule-2026-10-17-extracted.txt",
       "bytes": 16419,
       "sha256": "69922f5ffcae059760710c58d0c6228332a3fd6a85520f212cbcb20af51f2ed9"
@@ -138,8 +148,8 @@
     },
     {
       "path": "src/app/globals.css",
-      "bytes": 24666,
-      "sha256": "908bfbe3a1c8c97bec1dd02c1a8696d11acd8913c3f358da779d019a3dde2f20"
+      "bytes": 24864,
+      "sha256": "daa8ae0074f068cae6479d33a0378d6139bdd24073a1654ab364f3c1ea2432c7"
     },
     {
       "path": "src/app/layout.tsx",
@@ -183,8 +193,8 @@
     },
     {
       "path": "src/components/AppShell.tsx",
-      "bytes": 2596,
-      "sha256": "b020986370ddb3dd8a9295838a0fa03b4eb53471e542510cd749b4dc16617db9"
+      "bytes": 2910,
+      "sha256": "d3f5b6b4b815683a91f9ac98e4d750567f9c669a636f15b4cf7d285ab2610231"
     },
     {
       "path": "src/components/UI.tsx",
