@@ -1,0 +1,195 @@
+{
+  "purpose": "RECONSTRUCTION NOT ORIGINAL SOURCE",
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 268,
+      "sha256": "a9b991d00848b9d74bd3324c9561ece457b89484f11adc4363db1ab56a67c094"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 82,
+      "sha256": "df36144b1bf73bf9f5f170ec0b8e5526bf1ce6612beb6df1e43104a863ecaba1"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5392,
+      "sha256": "4e4f1c50c327c59cbb17f1ec5ed81fe009977de1380ad07fb754300a3895dbd7"
+    },
+    {
+      "path": "START_HERE.txt",
+      "bytes": 1311,
+      "sha256": "1fcbe41889ed8de3c650dbdcba6e941b973c023ec2c31a883d099ad59f73a72e"
+    },
+    {
+      "path": "data/NO_ORIGINAL_DATA.txt",
+      "bytes": 589,
+      "sha256": "4eebf36ab5c03fcc4a7111421ced65b73659ff7e103e9c56895b7679629c8ece"
+    },
+    {
+      "path": "data/schedule-template.csv",
+      "bytes": 105,
+      "sha256": "3d5adeade8b3110cbafbdd7c8fa52c6403ad99c9e8d4757eec10a22169be7f02"
+    },
+    {
+      "path": "data/teachers-template.csv",
+      "bytes": 1022,
+      "sha256": "66ab75a3d88cdad36cfce536dedea5d9b8d03faa7263320d203dfc8058c2a8a5"
+    },
+    {
+      "path": "data/telegram-links-template.csv",
+      "bytes": 167,
+      "sha256": "abc063b61e987956302c06f3b516ec317602a6a8faef02eca8088fc2cc7396f1"
+    },
+    {
+      "path": "database/cloudflare-d1-schema.sql",
+      "bytes": 6339,
+      "sha256": "0204478f86d7809e35f399d4d4f8696cc8e120736f524a5eafd413c153a6484e"
+    },
+    {
+      "path": "docs/HANDOFF_TO_OTHER_AI.md",
+      "bytes": 13478,
+      "sha256": "78682202161dc6ed49dee6130ec807c586720a5bafdb4fa4edb9ad8e7eda3ca9"
+    },
+    {
+      "path": "docs/IMPLEMENTATION_STATUS.md",
+      "bytes": 3817,
+      "sha256": "9dd41c7e9a42f85df0595e50d0f07f5a9795b2ddc5947593ed89afc1a243b5a9"
+    },
+    {
+      "path": "integrations/ai-rag-implementation.md",
+      "bytes": 830,
+      "sha256": "5194919d02950b7a84fd5cbe5a0201110ffd603dba8260078f6726518fa0ad5b"
+    },
+    {
+      "path": "integrations/telegram-implementation.md",
+      "bytes": 829,
+      "sha256": "47e01af15da98891444af5a8d3764462064a67fb032f01eeac17fd657574a478"
+    },
+    {
+      "path": "next-env.d.ts",
+      "bytes": 118,
+      "sha256": "5ef7048c25e24cbfd82a4dfd9b0f61c1b08ec04030aef8b5c3b8a1f5e99f4ea8"
+    },
+    {
+      "path": "package.json",
+      "bytes": 557,
+      "sha256": "d5214e5e8479d96e02c103a6ddb434d43814316a70fdeac7967d6cbde343a5d5"
+    },
+    {
+      "path": "references/schedule-2026-10-17-extracted.txt",
+      "bytes": 16419,
+      "sha256": "69922f5ffcae059760710c58d0c6228332a3fd6a85520f212cbcb20af51f2ed9"
+    },
+    {
+      "path": "scripts/verify-structure.mjs",
+      "bytes": 1087,
+      "sha256": "16f0cf36d5c038a5e7ff274a17cac81ff1aaa8e23b36d80fe95bc45f8656cb2b"
+    },
+    {
+      "path": "src/app/admin/page.tsx",
+      "bytes": 12787,
+      "sha256": "5211a4c49fdc7ad5d0598e89869fd03c04b1bab0978feae1d1d8c5924fa45269"
+    },
+    {
+      "path": "src/app/ai-assistant/page.tsx",
+      "bytes": 1242,
+      "sha256": "47dfa585b44d4b257a84200274043e032c1801123161aade6bb329636d3c67b4"
+    },
+    {
+      "path": "src/app/announcements/page.tsx",
+      "bytes": 1924,
+      "sha256": "620ff84d032e2b8014f4ca12f21044962de7abbe98b0ac307e94bd07f86b8cec"
+    },
+    {
+      "path": "src/app/api/health/route.ts",
+      "bytes": 238,
+      "sha256": "b2702a23a38a6b040283f8b8f9bdb1f0c4be9392efda489845eb325def52a39a"
+    },
+    {
+      "path": "src/app/assignments/page.tsx",
+      "bytes": 1342,
+      "sha256": "a61fbdb02ca905a76b30c891047053f69c1c702fc3ded5a12bfd151f1197011d"
+    },
+    {
+      "path": "src/app/exams/page.tsx",
+      "bytes": 1440,
+      "sha256": "c6a1d721956ab72ebbe31826cd89a911408f4706546dbd176e56839e8b411731"
+    },
+    {
+      "path": "src/app/globals.css",
+      "bytes": 15958,
+      "sha256": "9654ebff05133fcb1271ab7b71daeba217d9d55eaeb9d473c4a2eb2e00cba968"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "bytes": 795,
+      "sha256": "de5143d309201d59db0e4f29746e4df3338c8e8c9d0af3d161046e3b3e471c2a"
+    },
+    {
+      "path": "src/app/lectures/[id]/page.tsx",
+      "bytes": 1951,
+      "sha256": "db7de12436b6b26947d01bc5d38ea3044c4b4b553d3893ad1ab82279df7c9451"
+    },
+    {
+      "path": "src/app/more/page.tsx",
+      "bytes": 1373,
+      "sha256": "0dfda4b03c081957e1b86f165738db48ada0abef2da605a45a1d2da4819ccb71"
+    },
+    {
+      "path": "src/app/notifications/page.tsx",
+      "bytes": 1688,
+      "sha256": "2acb01b3f1d8f40b72c226baee9f64ddab3daf3f92ebf4dcb5ef7ee515104c74"
+    },
+    {
+      "path": "src/app/page.tsx",
+      "bytes": 5465,
+      "sha256": "faaba72c29c01b9fcd065327ec31285c17728075c87b65299471394bf03944a5"
+    },
+    {
+      "path": "src/app/schedule/page.tsx",
+      "bytes": 2579,
+      "sha256": "190bb3c03e079fc0d12f5f14cf216c0a626d5a2807dd1f347b1573684fe477b1"
+    },
+    {
+      "path": "src/app/subjects/[id]/page.tsx",
+      "bytes": 3336,
+      "sha256": "eb0e8a1cc1ce46a18015ee155d1f25eff4c92ef71cb007e45f43f6a1ec05e4b3"
+    },
+    {
+      "path": "src/app/subjects/page.tsx",
+      "bytes": 1315,
+      "sha256": "977ae159b347cdc9bbe7ab4e7acd6251b769b18f78f98e36369b728e84a14aa1"
+    },
+    {
+      "path": "src/components/AppShell.tsx",
+      "bytes": 2562,
+      "sha256": "eb72ec4b8908762d0e5fd770591506097b3bea352279613a143c7ae09cd9962c"
+    },
+    {
+      "path": "src/components/UI.tsx",
+      "bytes": 1688,
+      "sha256": "e6d683bb5b00070171f98cd44a5b943a398f678c63286fee71f2cccc5ac36d4a"
+    },
+    {
+      "path": "src/lib/seed.ts",
+      "bytes": 2965,
+      "sha256": "511b73038067520fafb42f69c5dca55a8d9a789036d82c4241b55de408a285fc"
+    },
+    {
+      "path": "src/lib/storage.tsx",
+      "bytes": 2336,
+      "sha256": "7b4016991282a47d574f69be06c517e0686e0b58550bfe81e3858c8864fe16b4"
+    },
+    {
+      "path": "src/lib/types.ts",
+      "bytes": 2030,
+      "sha256": "eaa0897b3f2cde9fa31fd350ed8b9e6e9160eff5644d80130974134951b82d60"
+    },
+    {
+      "path": "tsconfig.json",
+      "bytes": 525,
+      "sha256": "042263f2cda1fbabf69bcc321d71cf57659fe65888d229cb22f5d6be46198d0b"
+    }
+  ]
+}

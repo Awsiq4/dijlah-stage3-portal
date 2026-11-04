@@ -1,0 +1,4 @@
+The original deployed website source code, Cloudflare D1 export and R2 objects are NOT in this archive.
+A previously supplied PDF timetable dated 2026-10-17 was found in indexed library content: its extracted plain text is at references/schedule-2026-10-17-extracted.txt (not the original PDF).
+The PDF text provided names of teaching staff. The full 36 timetable cell entries and a later Sunday 3rd lecture change are not imported because the PDF layout requires validation.
+The latest staff image, university logo assets, Telegram configuration and actual lecture PDFs are not included.
