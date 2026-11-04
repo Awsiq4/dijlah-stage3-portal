@@ -17,6 +17,8 @@ jobs:
         run: npm run verify
       - name: Schedule checks (36 slots)
         run: npm run verify:schedule
+      - name: Unit tests (mergeById)
+        run: npm test
       - name: TypeScript typecheck
         run: npm run typecheck
       - name: Production build

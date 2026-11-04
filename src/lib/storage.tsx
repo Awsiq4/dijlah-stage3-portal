@@ -1,6 +1,7 @@
 "use client";
 import React, {createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from "react";
 import {SEED,SECTIONS} from "./seed";
+import {mergeById} from "./merge";
 import type {PortalData,Section} from "./types";
 
 type State = { data:PortalData; setData:(updater:(current:PortalData)=>PortalData)=>void; section:Section; setSection:(value:Section)=>void; dark:boolean; toggleDark:()=>void; reset:()=>void; hydrated:boolean };
@@ -18,7 +19,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   useEffect(()=>{
     try {
       const stored=localStorage.getItem(STORE_KEY);
-      if(stored){const parsed=JSON.parse(stored) as Partial<PortalData>; const mergeById=<T extends {id:string},>(base:T[],over?:T[])=>{const m=new Map(base.map(x=>[x.id,x]));for(const x of over??[])m.set(x.id,{...m.get(x.id),...x} as T);return [...m.values()];}; updateData({...SEED,...parsed,lectures:mergeById(SEED.lectures,parsed.lectures),schedule:mergeById(SEED.schedule,parsed.schedule),exams:mergeById(SEED.exams,parsed.exams),announcements:mergeById(SEED.announcements,parsed.announcements),assignments:mergeById(SEED.assignments,parsed.assignments),telegram:{...SEED.telegram,...parsed.telegram,sections:{...SEED.telegram.sections,...parsed.telegram?.sections}}});}
+      if(stored){const parsed=JSON.parse(stored) as Partial<PortalData>; updateData({...SEED,...parsed,lectures:mergeById(SEED.lectures,parsed.lectures),schedule:mergeById(SEED.schedule,parsed.schedule),exams:mergeById(SEED.exams,parsed.exams),announcements:mergeById(SEED.announcements,parsed.announcements),assignments:mergeById(SEED.assignments,parsed.assignments),telegram:{...SEED.telegram,...parsed.telegram,sections:{...SEED.telegram.sections,...parsed.telegram?.sections}}});}
       const sel=localStorage.getItem(SECTION_KEY);
       if(SECTIONS.includes(sel as Section))updateSection(sel as Section);
       const pref=localStorage.getItem(THEME_KEY);
