@@ -1,5 +1,5 @@
 "use client";
-import React, {createContext,useCallback,useContext,useEffect,useMemo,useState} from "react";
+import React, {createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from "react";
 import {SEED,SECTIONS} from "./seed";
 import type {PortalData,Section} from "./types";
 
@@ -14,22 +14,31 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   const [section,updateSection]=useState<Section>("A");
   const [dark,setDark]=useState(false);
   const [hydrated,setHydrated]=useState(false);
+  const themeCleanup=useRef<(()=>void)|null>(null);
   useEffect(()=>{
     try {
       const stored=localStorage.getItem(STORE_KEY);
       if(stored){const parsed=JSON.parse(stored) as Partial<PortalData>; updateData({...SEED,...parsed,telegram:{...SEED.telegram,...parsed.telegram,sections:{...SEED.telegram.sections,...parsed.telegram?.sections}}});}
       const sel=localStorage.getItem(SECTION_KEY);
       if(SECTIONS.includes(sel as Section))updateSection(sel as Section);
-      setDark(localStorage.getItem(THEME_KEY)==="dark");
+      const pref=localStorage.getItem(THEME_KEY);
+      const mq=window.matchMedia("(prefers-color-scheme: dark)");
+      const applyTheme=(useDark:boolean)=>{setDark(useDark);document.documentElement.dataset.theme=useDark?"dark":"light";};
+      applyTheme(pref?pref==="dark":mq.matches);
+      const onSystem=(e:MediaQueryListEvent)=>{if(!localStorage.getItem(THEME_KEY))applyTheme(e.matches);};
+      mq.addEventListener("change",onSystem);
+      themeCleanup.current=()=>mq.removeEventListener("change",onSystem);
     }catch(err){console.warn("Stored prototype content was not usable",err);}
     setHydrated(true);
   },[]);
+  useEffect(()=>()=>{themeCleanup.current?.();},[]);
   useEffect(()=>{if(hydrated)localStorage.setItem(STORE_KEY,JSON.stringify(data));},[data,hydrated]);
   useEffect(()=>{if(hydrated)localStorage.setItem(SECTION_KEY,section);},[section,hydrated]);
-  useEffect(()=>{if(hydrated)localStorage.setItem(THEME_KEY,dark?"dark":"light");document.documentElement.dataset.theme=dark?"dark":"light";},[dark,hydrated]);
+  useEffect(()=>{document.documentElement.dataset.theme=dark?"dark":"light";},[dark]);
   const setData=useCallback((updater:(current:PortalData)=>PortalData)=>updateData(prev=>updater(prev)),[]);
   const reset=useCallback(()=>{updateData(SEED);},[]);
-  const value=useMemo(()=>({data,setData,section,setSection:updateSection,dark,toggleDark:()=>setDark(v=>!v),reset,hydrated}),[data,setData,section,dark,reset,hydrated]);
+  const toggleDark=useCallback(()=>setDark(v=>{const next=!v;try{localStorage.setItem(THEME_KEY,next?"dark":"light");}catch(err){}return next;}),[]);
+  const value=useMemo(()=>({data,setData,section,setSection:updateSection,dark,toggleDark,reset,hydrated}),[data,setData,section,dark,toggleDark,reset,hydrated]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function usePortal(){const ctx=useContext(Context);if(!ctx)throw new Error("PortalProvider missing");return ctx;}
