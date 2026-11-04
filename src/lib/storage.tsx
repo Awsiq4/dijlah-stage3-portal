@@ -8,6 +8,8 @@ type State = { data:PortalData; setData:(updater:(current:PortalData)=>PortalDat
 const Context=createContext<State|null>(null);
 const STORE_KEY="dijlah-stage3-prototype-data-v3";
 const SECTION_KEY="dijlah-stage3-section";
+const SCHED_HASH_KEY="dijlah-stage3-schedule-hash";
+const hashStr=(v:string)=>{let h=5381;for(let i=0;i<v.length;i++)h=(h*33^v.charCodeAt(i))>>>0;return h.toString(36);};
 const THEME_KEY="dijlah-stage3-theme";
 
 export function PortalProvider({children}:{children:React.ReactNode}){
@@ -19,7 +21,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   useEffect(()=>{
     try {
       const stored=localStorage.getItem(STORE_KEY);
-      if(stored){const parsed=JSON.parse(stored) as Partial<PortalData>; updateData({...SEED,...parsed,lectures:mergeById(SEED.lectures,parsed.lectures),schedule:mergeById(SEED.schedule,parsed.schedule),exams:mergeById(SEED.exams,parsed.exams),announcements:mergeById(SEED.announcements,parsed.announcements),assignments:mergeById(SEED.assignments,parsed.assignments),telegram:{...SEED.telegram,...parsed.telegram,sections:{...SEED.telegram.sections,...parsed.telegram?.sections}}});}
+      if(stored){const parsed=JSON.parse(stored) as Partial<PortalData>; updateData({...SEED,...parsed,lectures:mergeById(SEED.lectures,parsed.lectures),schedule:(parsed.schedule&&localStorage.getItem(SCHED_HASH_KEY)===hashStr(JSON.stringify(SEED.schedule)))?mergeById(SEED.schedule,parsed.schedule):SEED.schedule,exams:mergeById(SEED.exams,parsed.exams),announcements:mergeById(SEED.announcements,parsed.announcements),assignments:mergeById(SEED.assignments,parsed.assignments),telegram:{...SEED.telegram,...parsed.telegram,sections:{...SEED.telegram.sections,...parsed.telegram?.sections}}});}
       const sel=localStorage.getItem(SECTION_KEY);
       if(SECTIONS.includes(sel as Section))updateSection(sel as Section);
       const pref=localStorage.getItem(THEME_KEY);
@@ -30,6 +32,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
       mq.addEventListener("change",onSystem);
       themeCleanup.current=()=>mq.removeEventListener("change",onSystem);
     }catch(err){console.warn("Stored prototype content was not usable",err);}
+    try{localStorage.setItem(SCHED_HASH_KEY,hashStr(JSON.stringify(SEED.schedule)));}catch(err){}
     setHydrated(true);
   },[]);
   useEffect(()=>()=>{themeCleanup.current?.();},[]);

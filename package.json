@@ -10,7 +10,8 @@
     "verify": "node scripts/verify-structure.mjs",
     "verify:schedule": "node --experimental-strip-types scripts/verify-schedule.mjs",
     "gen:schedule-csv": "node --experimental-strip-types scripts/gen-schedule-csv.mjs",
-    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs"
+    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs",
+    "verify:schedule:json": "node --experimental-strip-types scripts/verify-schedule-json.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

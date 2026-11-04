@@ -8,8 +8,8 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "bytes": 632,
-      "sha256": "de5fa17dc04b74cc83e55e7e3ff09771d1b18b0abdcbd2b85926da3605b7ec00"
+      "bytes": 740,
+      "sha256": "871d25dc994a340907f0396e9db5c68d8c8b0c4013e169de07a163538b3bcea7"
     },
     {
       "path": ".gitignore",
@@ -63,8 +63,8 @@
     },
     {
       "path": "docs/IMPLEMENTATION_STATUS.md",
-      "bytes": 3986,
-      "sha256": "9d0db3bbc0adfadbed61bc88afca918867b7f2b8fa796b3fa42e0a874d1caf31"
+      "bytes": 3953,
+      "sha256": "b219cc5dcc5f4113361c01b062b5241703c60651a73725fe10f46cda6395ec85"
     },
     {
       "path": "integrations/ai-rag-implementation.md",
@@ -88,8 +88,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 838,
-      "sha256": "284c3afed0ce5526f9bb58164aa0dd3b19e16a528f5a9cec08373ae1d97a84e3"
+      "bytes": 934,
+      "sha256": "0586ec5880507994b216ef3d3fbd38b9578dd871320420ab0452e1aa82b8dccb"
     },
     {
       "path": "public/images/department-logo.png",
@@ -182,9 +182,14 @@
       "sha256": "2d4476dc112c497a0c716dd522ab80b19166a0d62412ff2a146bc0d21becc9ca"
     },
     {
+      "path": "scripts/verify-schedule-json.mjs",
+      "bytes": 5411,
+      "sha256": "35e91bd8238f243d41c86f4d7ac70896829ee00466bb1e4cc5f75ecfaff42fe9"
+    },
+    {
       "path": "scripts/verify-schedule.mjs",
-      "bytes": 4100,
-      "sha256": "4ddbbeaa9dad4ac77f1255d0c97d13e3e6ece17aa4180f8d9974d8c68167655e"
+      "bytes": 4982,
+      "sha256": "f057a3f144ad5cb23caf3bc425e9351d372e6a33c51c230d680d5752580d6b38"
     },
     {
       "path": "scripts/verify-structure.mjs",
@@ -218,8 +223,8 @@
     },
     {
       "path": "src/app/globals.css",
-      "bytes": 27226,
-      "sha256": "5bf5c5c400f61137c4927315198177d0ab25a6cbd035137f510aaa74d61d977d"
+      "bytes": 29180,
+      "sha256": "989af4029ff48aa1a5b04e4a2ad10bc27122573105346492a406ceec714409b8"
     },
     {
       "path": "src/app/icon.png",
@@ -253,8 +258,8 @@
     },
     {
       "path": "src/app/schedule/page.tsx",
-      "bytes": 2837,
-      "sha256": "34450b9594fddb377ce2ab34f9efe4747380ca9fac50b7802cb79906bb486b89"
+      "bytes": 5814,
+      "sha256": "c180ec868c456dda66e5a4324b83d152ac2ee49b56ee5a9effde588bef956a8a"
     },
     {
       "path": "src/app/subjects/[id]/page.tsx",
@@ -303,8 +308,8 @@
     },
     {
       "path": "src/lib/schedule-2026-10-17.ts",
-      "bytes": 8396,
-      "sha256": "694b9260b33843a5be1e9cbf83b9ab74672fba695cbacdec191331bdcc520c11"
+      "bytes": 9956,
+      "sha256": "7bfb0e9c9d52be848299fa7ea5619d715df55dab285bf25a4d2f7420833ce959"
     },
     {
       "path": "src/lib/seed.ts",
@@ -313,13 +318,13 @@
     },
     {
       "path": "src/lib/storage.tsx",
-      "bytes": 3278,
-      "sha256": "769eceaae74818970eacc87b6e5b8733094eff6d447d724fdc0ff2c80051a2ad"
+      "bytes": 3658,
+      "sha256": "5163378843d7655901c639b3dfaa610981f584f654089170380aed63bc1d83b8"
     },
     {
       "path": "src/lib/types.ts",
-      "bytes": 2030,
-      "sha256": "eaa0897b3f2cde9fa31fd350ed8b9e6e9160eff5644d80130974134951b82d60"
+      "bytes": 2149,
+      "sha256": "855447cce05189f3857e1001d6524b0b47f36398c746948fed7a045f0a59456c"
     },
     {
       "path": "tsconfig.json",

@@ -433,6 +433,27 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .onboard-opt small{display:block;font-size:.64rem;font-weight:700;color:var(--muted);margin-top:3px}
 .onboard-cta{width:100%;min-height:46px;font-size:.85rem}
 
+
+/* ---------- Schedule views ---------- */
+.view-toggle{display:inline-flex;gap:6px;margin-bottom:14px}
+.view-toggle button{border:1px solid var(--border);background:var(--surface);color:var(--muted);padding:8px 16px;border-radius:10px;font-size:.75rem;font-weight:800;transition:var(--trans)}
+.view-toggle button.selected{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.rest-tag{display:block;font-size:.56rem;font-weight:700;color:var(--st-warning-text)}
+.day-picker button .rest-tag{color:inherit;opacity:.8}
+.sched-periods{margin-top:4px;font-size:.68rem;color:var(--muted);background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:4px 8px;display:inline-block}
+.room-badge{display:inline-block;background:var(--primary-soft);color:var(--primary-strong);border-radius:6px;padding:1px 7px;font-weight:800;font-size:.68rem}
+.room-badge.empty-room{background:var(--st-warning-bg);color:var(--st-warning-text)}
+.teacher-name{font-weight:700}
+.week-body{overflow-x:auto}
+.week-grid{display:grid;grid-template-columns:64px repeat(5,minmax(150px,1fr));gap:6px;min-width:820px}
+.week-head{font-size:.72rem;font-weight:800;color:var(--muted);padding:8px 6px;text-align:center;border-bottom:2px solid var(--day-color,var(--border));border-radius:6px}
+.week-sec{display:grid;place-items:center;font-weight:900;font-size:1rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px}
+.week-cell{border:1px solid var(--border);border-inline-start:3px solid var(--day-color);border-radius:10px;padding:8px;background:var(--surface2);display:flex;flex-direction:column;gap:7px;min-height:56px}
+.week-slot{display:flex;flex-direction:column;gap:1px}
+.week-slot strong{font-size:.72rem;line-height:1.5}
+.week-time{font-size:.66rem;font-weight:800;color:var(--primary-strong);font-variant-numeric:tabular-nums}
+@media(max-width:1080px){.view-toggle{display:none}.week-grid{display:none}}
+
 /* ---------- Responsive ---------- */
 @media(max-width:1080px){
   .page-shell{grid-template-columns:190px minmax(0,1fr);gap:18px}

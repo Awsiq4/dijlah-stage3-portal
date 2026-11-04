@@ -36,6 +36,7 @@ export interface ScheduleSlot {
   kind: "theory" | "practical";
   status: "normal" | "moved" | "cancelled" | "extra";
   note: string;
+  periods?: string[]; // الفترات الدراسية الأصلية (45 دقيقة) من المصدر الرقمي
 }
 export interface Exam {
   id: string;
