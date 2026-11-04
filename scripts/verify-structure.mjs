@@ -6,5 +6,9 @@ let failed=false;
 for(const file of required){if(!existsSync(path.join(root,file))){console.error('MISSING:',file);failed=true;}}
 const shell=readFileSync(path.join(root,'src/components/AppShell.tsx'),'utf8');
 for(const need of ['href:"/announcements"','href:"/more"','Aws Faris','toggleDark'])if(!shell.includes(need)){console.error('MISSING NAV FEATURE:',need);failed=true;}
+const mw=readFileSync(path.join(root,'src/middleware.ts'),'utf8');
+for(const need of ['/admin-legacy/:path*','/api/admin/:path*','/admin/:path*','admin-legacy'])if(!mw.includes(need)){console.error('MISSING MIDDLEWARE GATE:',need);failed=true;}
+const db=readFileSync(path.join(root,'src/lib/server/db.ts'),'utf8');
+if(db.includes('rejectUnauthorized: false')){console.error('INSECURE TLS: db.ts disables certificate verification');failed=true;}
 if(failed)process.exit(1);
 console.log('Structure and key navigation checks OK. This is not an integration, auth, DB or production test.');

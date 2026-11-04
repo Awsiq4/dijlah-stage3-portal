@@ -115,6 +115,13 @@ CREATE TABLE IF NOT EXISTS portal_telegram (
   PRIMARY KEY (kind, key)
 );
 
+-- ---------- Login rate limiting (DB-backed so it works across serverless instances) ----------
+CREATE TABLE IF NOT EXISTS portal_login_attempts (
+  key TEXT PRIMARY KEY,
+  count INT NOT NULL DEFAULT 1,
+  reset_at TIMESTAMPTZ NOT NULL
+);
+
 -- ---------- Audit ----------
 CREATE TABLE IF NOT EXISTS portal_audit (
   id BIGSERIAL PRIMARY KEY,

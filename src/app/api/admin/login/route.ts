@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({error: "DATABASE_URL is not configured — admin auth is disabled"}, {status: 503});
     }
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    if (!checkLoginRateLimit(`login:${ip}`)) {
+    if (!(await checkLoginRateLimit(`login:${ip}`))) {
       return NextResponse.json({error: "Too many attempts. Try again later."}, {status: 429});
     }
     const body = await req.json().catch(() => ({}));

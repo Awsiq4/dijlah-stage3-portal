@@ -1,17 +1,10 @@
-import {q, qOne} from "./db";
-import {dbConfigured} from "./flags";
+import {defaultQueryer, type Queryer} from "./db.ts";
+import {dbConfigured} from "./flags.ts";
 import {SEED} from "@/lib/seed";
+import {SCHEMAS, sanitizeRow, buildUpsert, TELEGRAM_KINDS, type ContentType, type WritableContentType} from "./content-schema.ts";
 
-export type ContentType = "subjects" | "lectures" | "announcements" | "exams" | "assignments" | "schedule" | "telegram";
-
-const TABLES: Record<Exclude<ContentType, "telegram">, string> = {
-  subjects: "portal_subjects",
-  lectures: "portal_lectures",
-  announcements: "portal_announcements",
-  exams: "portal_exams",
-  assignments: "portal_assignments",
-  schedule: "portal_schedule",
-};
+export {sanitizeRow, buildUpsert, TELEGRAM_KINDS, SCHEMAS};
+export type {ContentType, WritableContentType};
 
 export function contentFromSeed(type: ContentType) {
   if (type === "telegram") {
@@ -24,39 +17,39 @@ export function contentFromSeed(type: ContentType) {
   return [...(SEED[type] as unknown as Record<string, unknown>[])];
 }
 
-export async function listContent(type: ContentType): Promise<Record<string, unknown>[]> {
+export async function listContent(type: ContentType, db: Queryer = defaultQueryer): Promise<Record<string, unknown>[]> {
   if (type === "telegram") {
     if (!dbConfigured()) return contentFromSeed("telegram");
-    return q(`SELECT kind, key, url FROM portal_telegram ORDER BY kind, key`);
+    return db.q(`SELECT kind, key, url FROM portal_telegram ORDER BY kind, key`);
   }
   if (!dbConfigured()) return contentFromSeed(type);
-  return q(`SELECT * FROM ${TABLES[type]} ORDER BY 1`);
+  const table = SCHEMAS[type].table;
+  return db.q(`SELECT * FROM ${table} ORDER BY 1`);
 }
 
-export async function createContent(type: Exclude<ContentType, "telegram">, row: Record<string, unknown>): Promise<void> {
-  const table = TABLES[type];
-  const cols = Object.keys(row);
-  const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
-  await q(
-    `INSERT INTO ${table} (${cols.join(",")}) VALUES (${placeholders})
-     ON CONFLICT (id) DO UPDATE SET ${cols.filter(c => c !== "id").map(c => `${c}=EXCLUDED.${c}`).join(",")}`,
-    cols.map(c => (row[c] !== undefined && typeof row[c] === "object" ? JSON.stringify(row[c]) : row[c]))
-  );
+export async function createContent(type: Exclude<ContentType, "telegram">, row: Record<string, unknown>, db: Queryer = defaultQueryer): Promise<void> {
+  const {sql, params} = buildUpsert(type, row);
+  await db.q(sql, params);
 }
 
-export async function deleteContent(type: Exclude<ContentType, "telegram">, id: string): Promise<void> {
-  await q(`DELETE FROM ${TABLES[type]} WHERE id=$1`, [id]);
+export async function deleteContent(type: Exclude<ContentType, "telegram">, id: string, db: Queryer = defaultQueryer): Promise<void> {
+  const table = SCHEMAS[type].table;
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error("معرّف غير صالح");
+  await db.q(`DELETE FROM ${table} WHERE id=$1`, [id]);
 }
 
-export async function upsertTelegram(kind: "general" | "section" | "subject", key: string, url: string): Promise<void> {
-  await q(
+export async function upsertTelegram(kind: string, key: string, url: string, db: Queryer = defaultQueryer): Promise<void> {
+  if (!(TELEGRAM_KINDS as readonly string[]).includes(kind)) throw new Error("نوع قناة غير صالح");
+  if (!/^[A-Za-z0-9_-]+$/.test(key)) throw new Error("مفتاح قناة غير صالح");
+  if (url && !/^https:\/\/(t\.me|telegram\.me)\//.test(url)) throw new Error("الرابط يجب أن يكون رابط تليجرام https صالحًا");
+  await db.q(
     `INSERT INTO portal_telegram (kind, key, url) VALUES ($1,$2,$3) ON CONFLICT (kind,key) DO UPDATE SET url=EXCLUDED.url`,
     [kind, key, url]
   );
 }
 
-export async function audit(actor: string, action: string, detail: unknown): Promise<void> {
+export async function audit(actor: string, action: string, detail: unknown, db: Queryer = defaultQueryer): Promise<void> {
   try {
-    await q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [actor, action, JSON.stringify(detail ?? null)]);
+    await db.q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [actor, action, JSON.stringify(detail ?? null)]);
   } catch { /* audit must never break the operation */ }
 }

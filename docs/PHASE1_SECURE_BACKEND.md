@@ -85,3 +85,16 @@
 ## 9. الفحوصات
 
 `npm test` (اختبارات merge + telegram server + auth)، `npm run typecheck`، `npm run build`، `npm run verify`، `verify:schedule`، `verify:schedule:json` — كلها يجب أن تنجح قبل النشر.
+
+## 10. جولة مراجعة أمنية (Security review round — PR #13 update)
+
+تم إصلاحها في نفس الفرع:
+
+1. **`/admin-legacy`**: الآن محمي بنفس بوابة الـmiddleware (إعادة توجيه إلى `/admin/login` بدون جلسة) — لا واجهة إدارة عامة متبقية.
+2. **SQL injection**: `src/lib/server/content-schema.ts` — allowlist أعمدة ثابتة لكل جدول، كل الـidentifiers بين علامتي تنصيص، كل القيم $n parameters. أعمدة غير معروفة من الطلب تُحذف. مختبر باختبارات حقن.
+3. **صلاحيات**: `canModify(role)` — super_admin وeditor فقط للكتابة؛ viewer قراءة فقط. الـroute يعيد 403 للأدوار غير المخوّلة.
+4. **Rate limit**: جدول `portal_login_attempts` مع upsert atomic — يعمل عبر جميع instances الـserverless؛ in-memory فقط كـfallback محلي.
+5. **جلسة وCSRF وTLS**: كتابة (POST/DELETE) عبر cookie تتطلب Origin مطابقًا أو header مخصص `x-portal-admin` (لا يمكن إرساله cross-site بدون CORS)؛ cookie httpOnly+secure+sameSite=lax؛ **TLS certificate verification إجباري** (`rejectUnauthorized: true`).
+6. **Audit + transactions**: كل تعديل محتوى + سجل التدقيق داخل معاملة واحدة (`withTx`).
+7. **واجهة**: نماذج عربية كاملة في `/admin` (إضافة/تعديل/حذف) — لا حاجة لـAPI يدوي.
+8. **اختبارات**: `content-schema.test.mjs` (حقن SQL، validation، enums) +توسيع (CSRF، RBAC، rate limit) — `npm test` الآن 28 اختبارًا.

@@ -1,6 +1,11 @@
 import {NextResponse} from "next/server";
 import type {NextRequest} from "next/server";
 
+export function isAdminPage(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/")
+      || pathname === "/admin-legacy" || pathname.startsWith("/admin-legacy/");
+}
+
 export function middleware(req: NextRequest) {
   const {pathname} = req.nextUrl;
   const hasSession = Boolean(req.cookies.get("portal_session")?.value);
@@ -11,7 +16,7 @@ export function middleware(req: NextRequest) {
     }
     return NextResponse.next();
   }
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+  if (isAdminPage(pathname)) {
     if (pathname === "/admin/login") return NextResponse.next();
     if (!hasSession) {
       const url = req.nextUrl.clone();
@@ -24,5 +29,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*", "/admin-legacy/:path*", "/api/admin/:path*"],
 };

@@ -3,8 +3,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 2261,
-      "sha256": "1da813c41bf759a82445f0295638c2b912566f0a26ff57ab413f512d3ea1d364"
+      "bytes": 2443,
+      "sha256": "ce3021111df4ba4e04c81097c4bbfe8edf96148467e2dfa192dd91073a15ff35"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -58,8 +58,8 @@
     },
     {
       "path": "database/portal-schema.sql",
-      "bytes": 4701,
-      "sha256": "1ac43311b144f60e85c05e177f873355d8b34c3146bd699b00127bf599976ec0"
+      "bytes": 4941,
+      "sha256": "25459261bbe3b694ac06f81550b5327517c02e4d85d6deb7c8463b1eca14955e"
     },
     {
       "path": "database/telegram-notifications.sql",
@@ -78,8 +78,8 @@
     },
     {
       "path": "docs/PHASE1_SECURE_BACKEND.md",
-      "bytes": 7099,
-      "sha256": "ba7f8dd5ef83bd9cdb25de0c00227cb450207c7a088dcaf8990181e66d7bb0a7"
+      "bytes": 8807,
+      "sha256": "ea44e0a8f6e855a4eaa9c32ed4d8cd1da5849b6d10b00d6d042d804b0179ab66"
     },
     {
       "path": "docs/TELEGRAM_BOT_SETUP.md",
@@ -108,8 +108,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 1221,
-      "sha256": "61585601c50b2ced3beaf14256949a98aeb1d63ca16e9451d84039d162305f54"
+      "bytes": 1260,
+      "sha256": "ee1e670526d407e3cd4a2d4b85b3c7733671924aada0f028ba6b918f320922ce"
     },
     {
       "path": "public/images/department-logo.png",
@@ -228,8 +228,8 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 1220,
-      "sha256": "cc8d630ebbb5d50b67af4539a40b2f41bf7aecf74b5a938b635e257138921b45"
+      "bytes": 1665,
+      "sha256": "881e9151016740189231d33fe757b3b3be893ef93121401c855841fd5a9dffdf"
     },
     {
       "path": "src/app/admin-legacy/page.tsx",
@@ -243,8 +243,8 @@
     },
     {
       "path": "src/app/admin/page.tsx",
-      "bytes": 6143,
-      "sha256": "1e543d3ebae0480c93c6695e734c1103c3750afe297497cadcbd8c62753b809f"
+      "bytes": 16118,
+      "sha256": "97e72f46d91832cdc74a33935ee8d08512a2cead56ac4d24f152e42e974e2533"
     },
     {
       "path": "src/app/announcements/page.tsx",
@@ -253,18 +253,18 @@
     },
     {
       "path": "src/app/api/admin/content/route.ts",
-      "bytes": 2564,
-      "sha256": "6c35621b91643c2920693e9c11c6c0a2c56f5e9a43d2085c50acf06411348cd6"
+      "bytes": 3609,
+      "sha256": "efa1fed918265a152402851443a7225ccd825f95f5abb731f348dbe63fd65836"
     },
     {
       "path": "src/app/api/admin/login/route.ts",
-      "bytes": 2193,
-      "sha256": "600bb9c8ec309dae2416ff6868c567436748c57ef7deca34e3d4211e9853b5ef"
+      "bytes": 2201,
+      "sha256": "a037381d163756b88689fc84197245a2e88790de0772a53eab27daed48640e67"
     },
     {
       "path": "src/app/api/admin/logout/route.ts",
-      "bytes": 571,
-      "sha256": "890557d8f61eecdb6a6b802fb6264ede06949429e6ca12eedbfef902d2a9d2b2"
+      "bytes": 657,
+      "sha256": "f5f74ceae02d6e915de1f40615da27c7df7a679eb14cd1c76db608de8299d858"
     },
     {
       "path": "src/app/api/admin/me/route.ts",
@@ -423,13 +423,13 @@
     },
     {
       "path": "src/lib/server/auth.test.mjs",
-      "bytes": 3124,
-      "sha256": "b5d33daa4b225496e600b8b56cdbf57f26d432e53534ffcfba8fc70b2fea10a2"
+      "bytes": 4328,
+      "sha256": "a6a6268f4fdfe323db28ab12b77bc30795c8e64fb90b8a0ec9e54c3f98598f68"
     },
     {
       "path": "src/lib/server/auth.ts",
-      "bytes": 4713,
-      "sha256": "4f081ca2c1a30094bf2550baba438505587a2524dec7e33ea4433adfcff58f06"
+      "bytes": 6908,
+      "sha256": "71ae82e305f1bd3fc0f35f9f5503e4075d0cc98f6ad64650ee1eec4f4f93e138"
     },
     {
       "path": "src/lib/server/backoff.ts",
@@ -437,14 +437,24 @@
       "sha256": "b0845e1d96f553d709df0d68bb696e08dbd8f9723339c8c113cbcabf679ea751"
     },
     {
+      "path": "src/lib/server/content-schema.test.mjs",
+      "bytes": 3146,
+      "sha256": "970a3ac76b3a698cd6d65c75d67b5874d4aa5bf9b89ae5fa2dc0297d171fe622"
+    },
+    {
+      "path": "src/lib/server/content-schema.ts",
+      "bytes": 6679,
+      "sha256": "763923400ee9ed132934c75012bf6d58c65525bab09c6907f797556d4d08d598"
+    },
+    {
       "path": "src/lib/server/content.ts",
-      "bytes": 2619,
-      "sha256": "3f145da56a32ba57a6e917d6c878348d997e61225d439c18f773bf06db379dff"
+      "bytes": 2784,
+      "sha256": "43256e8f06a7ad38e3436d187aeee6702394fbe62983bd0d3629e75e7e304dde"
     },
     {
       "path": "src/lib/server/db.ts",
-      "bytes": 824,
-      "sha256": "51aa4b930933ab367e24f24efd2458abec9b7d8a4af3367901540e5bf4670eb8"
+      "bytes": 2545,
+      "sha256": "dd5934badf13a5bd9cbe22b5d1cc324e833b77b9858bc433033a88e53be7015d"
     },
     {
       "path": "src/lib/server/flags.ts",
@@ -493,8 +503,8 @@
     },
     {
       "path": "src/middleware.ts",
-      "bytes": 1003,
-      "sha256": "e362b3a5a71e38831c86a76607e420685d32f50c20666b720b32e114ad6cfaae"
+      "bytes": 1198,
+      "sha256": "59ed7a267183158f0635958b8e57ae339a46fe49b86bede12d5d00bf05567361"
     },
     {
       "path": "tsconfig.json",
