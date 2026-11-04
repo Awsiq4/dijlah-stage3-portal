@@ -1,5 +1,5 @@
 import {Pool} from "pg";
-import {DATABASE_URL, dbConfigured} from "./flags";
+import {DATABASE_URL, dbConfigured} from "./flags.ts";
 
 let pool: Pool | null = null;
 

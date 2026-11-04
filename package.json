@@ -10,7 +10,9 @@
     "verify": "node scripts/verify-structure.mjs",
     "verify:schedule": "node --experimental-strip-types scripts/verify-schedule.mjs",
     "gen:schedule-csv": "node --experimental-strip-types scripts/gen-schedule-csv.mjs",
-    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/server/server.test.mjs",
+    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs",
+    "create:super-admin": "node --experimental-strip-types scripts/create-super-admin.mjs",
+    "migrate:seed": "node --experimental-strip-types scripts/migrate-seed-to-db.mjs",
     "verify:schedule:json": "node --experimental-strip-types scripts/verify-schedule-json.mjs"
   },
   "dependencies": {
