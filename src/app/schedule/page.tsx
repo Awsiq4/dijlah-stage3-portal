@@ -37,13 +37,11 @@ export default function Schedule(){
      <div className="schedule-time"><strong>{slot.start}</strong><small>{slot.end}</small></div>
      <div className="grow">
       <strong>{displayName(slot)}</strong>
-      {slot.note.includes("(T)")&&<Status tone="info"> (T) </Status>}
       <div className="subtle small">
        <span className="teacher-name">{slot.teacher||getSubject(data,slot.subjectId)?.teacher||"اسم التدريسي غير متوفر"}</span>
        {slot.room?<> · <span className="room-badge">{slot.room}</span></>:<> · <span className="room-badge empty-room">قاعة غير محددة</span></>}
        · <Status tone={slot.kind==="practical"?"warning":"muted"}>{slot.kind==="practical"?"عملي":"نظري"}</Status>
       </div>
-      {slot.periods&&slot.periods.length>0&&<div className="sched-periods" dir="ltr">{slot.periods.join(" · ")}</div>}
       {slot.note&&!slot.note.includes("(T)")&&!slot.note.includes("[قاعة]")&&<p className="subtle small">{slot.note}</p>}
       {slot.note.includes("[قاعة]")&&<p className="subtle small">[قاعة] في الأصل — القاعة غير محددة</p>}
      </div>
@@ -61,7 +59,7 @@ export default function Schedule(){
       return <div key={n} className={`week-cell day-accent-${n}`}>
        {n===1?<span className="subtle small">استراحة</span>:list.length?list.map(s=><div className="week-slot" key={s.id}>
         <span className="week-time" dir="ltr">{s.start}–{s.end}</span>
-        <strong>{displayName(s)}{s.note.includes("(T)")&&" (T)"}</strong>
+        <strong>{displayName(s)}</strong>
         <span className="subtle small">{s.teacher}{s.room?` · ${s.room}`:""}</span>
        </div>):<span className="subtle small">—</span>}
       </div>;
@@ -69,6 +67,5 @@ export default function Schedule(){
     </>)}
    </div>
   </div></div>}
-  <p className="note">توضيح: المواعيد الـ36 منقولة من جدول 2026-2027 الرقمي المصحّح (references/schedule-2026-2027.json) — 9 محاضرات لكل شعبة (A/B/C/F). كل محاضرة تتكون من فترات دراسية أصلية مدتها 45 دقيقة، وتُعرض تفاصيلها داخل كل محاضرة. الرمز (T) و[قاعة] كما في المصدر.</p>
  </>;
 }
