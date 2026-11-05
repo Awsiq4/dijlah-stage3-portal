@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {
   ROLES, isActive, canManageUsers, canManageAllContent, canPublishAnnouncement,
   canPublishSubjectContent, canModifyContent, canUseTelegramPublishing, teacherSections,
-  newToken, hashToken, tokenMatches, tokenUsable, signLinkPayload, verifyLinkPayload,
+  newToken, hashToken, tokenMatches, tokenUsable, newLinkToken, linkStartParam, linkStartParamLength,
+  canWriteContentRecord,
 } from "./rbac.ts";
 
 const superAdmin = {id: 1, email: "root@x", role: "super_admin", status: "active", is_active: true};
@@ -53,26 +54,45 @@ test("S5: invitation/link tokens: single-use, expiring, hash-matched", () => {
   assert.equal(tokenUsable({expires_at: new Date(Date.now() + 60_000).toISOString(), used_at: new Date().toISOString()}), false); // used
 });
 
-test("S6: forged Telegram link payloads are rejected (wrong secret / tampered / expired)", () => {
-  const secret = "link-secret";
-  const fixedHash = hashToken("fixed-invitation-token");
-  const payload = signLinkPayload(7, fixedHash, secret, 600, 1_000_000_000);
-  const v = verifyLinkPayload(payload, secret, 1_000_000_000);
-  assert.equal(v?.adminId, 7);
-  assert.equal(v?.tokenHash, fixedHash);
-  assert.equal(verifyLinkPayload(payload, "other-secret", 1_000_000_000), null);       // wrong secret
-  assert.equal(verifyLinkPayload(payload, secret, 1_000_000_000 + 601_000), null);      // expired
-  // tamper: flip a signature character in the middle (deterministic, always changes decoded bytes)
-  const sigStart = payload.lastIndexOf(".") + 1;
-  const mid = sigStart + 8;
-  const flipped = payload.slice(0, mid) + (payload[mid] === "A" ? "B" : "A") + payload.slice(mid + 1);
-  assert.notEqual(flipped, payload);
-  assert.equal(verifyLinkPayload(flipped, secret, 1_000_000_000), null);                // tampered sig
-  // tamper: change the adminId inside the signed body
-  const bodyTampered = payload.replace("link.7.", "link.8.");
-  assert.equal(verifyLinkPayload(bodyTampered, secret, 1_000_000_000), null);
-  assert.equal(verifyLinkPayload("garbage", secret, 1_000_000_000), null);
-  assert.equal(verifyLinkPayload("", secret, 1_000_000_000), null);
+test("S6: Telegram link uses a SHORT single-use token; deep link fits Telegram's 64-char /start limit", () => {
+  for (let i = 0; i < 20; i++) {
+    const t = newLinkToken();
+    assert.ok(t.length <= 22, "token is short");
+    const deepLink = `https://t.me/mybot?start=${linkStartParam(t)}`;
+    assert.ok(deepLink.length <= 64, `deep link ${deepLink.length} chars <= 64`);
+  }
+  // stored hashed only; lookup by hash
+  const t = newLinkToken();
+  assert.equal(tokenMatches(t, hashToken(t)), true);
+  assert.equal(tokenMatches(newLinkToken(), hashToken(t)), false);
+});
+
+test("webhook auth: disabled flag ignores traffic; enabled requires secret; missing secret rejects all", async () => {
+  const {webhookAuthorized} = await import("./flags.ts");
+  assert.equal(webhookAuthorized("anything", {botEnabled: false, webhookSecret: "s"}), "disabled");
+  assert.equal(webhookAuthorized(null, {botEnabled: true, webhookSecret: ""}), "unauthorized"); // enabled but no secret
+  assert.equal(webhookAuthorized("wrong", {botEnabled: true, webhookSecret: "s"}), "unauthorized");
+  assert.equal(webhookAuthorized(null, {botEnabled: true, webhookSecret: "s"}), "unauthorized");
+  assert.equal(webhookAuthorized("s", {botEnabled: true, webhookSecret: "s"}), "ok");
+});
+
+test("content write gate: reps/teachers allowed only within their scope (the RoleWorkspace bug)", () => {
+  // section rep CAN publish own-section announcement through the content API gate
+  assert.equal(canWriteContentRecord(repA, "announcements", {scope: "section", section: "A"}), true);
+  assert.equal(canWriteContentRecord(repA, "announcements", {scope: "section", section: "B"}), false);
+  assert.equal(canWriteContentRecord(repA, "announcements", {scope: "general", section: "all"}), false);
+  // teacher CAN publish to assigned subject
+  assert.equal(canWriteContentRecord(teacher, "lectures", {subject_id: "nonlinear-optics", sections: ["A"]}), true);
+  assert.equal(canWriteContentRecord(teacher, "lectures", {subject_id: "quantum-mechanics", sections: ["A"]}), false);
+  assert.equal(canWriteContentRecord(teacher, "lectures", {subject_id: "nonlinear-optics", sections: ["C"]}), false);
+  // schedule only for privileged roles
+  assert.equal(canWriteContentRecord(repA, "schedule", {section: "A"}), false);
+  assert.equal(canWriteContentRecord(superAdmin, "schedule", {section: "A"}), true);
+  // telegram links management: privileged only
+  assert.equal(canWriteContentRecord(repA, "telegram"), false);
+  assert.equal(canWriteContentRecord(superAdmin, "telegram"), true);
+  // suspended role: nothing
+  assert.equal(canWriteContentRecord(suspendedRep, "announcements", {scope: "section", section: "A"}), false);
 });
 
 test("S7: duplicate publications are impossible (idempotent keys + DO NOTHING inserts)", async () => {

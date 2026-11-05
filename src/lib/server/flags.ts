@@ -26,3 +26,12 @@ export function timingSafeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+
+// Webhook auth policy (pure, testable): when the bot is enabled, the secret is MANDATORY.
+export type WebhookAuth = "disabled" | "ok" | "unauthorized";
+export function webhookAuthorized(headerSecret: string | null, opts: {botEnabled: boolean; webhookSecret: string}): WebhookAuth {
+  if (!opts.botEnabled) return "disabled";
+  if (!opts.webhookSecret) return "unauthorized"; // enabled but no secret configured -> reject everything
+  if (!headerSecret || !timingSafeEqual(headerSecret, opts.webhookSecret)) return "unauthorized";
+  return "ok";
+}

@@ -17,6 +17,7 @@ export function RoleWorkspace({me}: {me: Me}) {
   const [subjectId, setSubjectId] = useState("");
   const [number, setNumber] = useState("1");
   const [fileUrl, setFileUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -30,9 +31,19 @@ export function RoleWorkspace({me}: {me: Me}) {
     e.preventDefault();
     setBusy(true); setNotice("");
     try {
+      let url = fileUrl;
+      if (isTeacher && file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const up = await fetch("/api/admin/upload", {method: "POST", headers: {"x-portal-admin": "1"}, body: fd});
+        const uj = await up.json().catch(() => ({}));
+        if (!up.ok) { setNotice(uj.error || "فشل رفع الملف"); setBusy(false); return; }
+        url = uj.url;
+      }
+      if (isTeacher && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); setBusy(false); return; }
       const row = isRep
         ? {id: `web-${Date.now()}`, title, body, scope: me.role === "section_representative" ? "section" : "general", section: me.role === "section_representative" ? me.assigned_section : "all", priority: "normal", published_at: new Date().toISOString(), pinned: "false"}
-        : {id: `web-${Date.now()}`, subject_id: subjectId, number: Number(number) || 1, title, description: body, file_url: fileUrl, file_name: fileUrl.split("/").pop() || "", status: "published", updated_at: new Date().toISOString().slice(0, 10)};
+        : {id: `web-${Date.now()}`, subject_id: subjectId, number: Number(number) || 1, title, description: body, file_url: url, file_name: (file?.name || url.split("/").pop() || ""), status: "published", updated_at: new Date().toISOString().slice(0, 10)};
       const res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
       const j = await res.json().catch(() => ({}));
       if (!res.ok) { setNotice(j.error || "فشل النشر"); return; }
@@ -63,7 +74,10 @@ export function RoleWorkspace({me}: {me: Me}) {
         </>}
         <label className="form-field wide"><span>العنوان *</span><input value={title} onChange={e => setTitle(e.target.value)} required/></label>
         <label className="form-field wide"><span>{isRep ? "نص التبليغ" : "الوصف"}</span><textarea rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
-        {isTeacher && <label className="form-field wide"><span>رابط ملف PDF *</span><input dir="ltr" placeholder="/lectures/…pdf" value={fileUrl} onChange={e => setFileUrl(e.target.value)} required/></label>}
+        {isTeacher && <>
+          <label className="form-field wide"><span>ملف PDF (رفع من الجهاز)</span><input type="file" accept="application/pdf,.pdf" onChange={e => { setFile(e.target.files?.[0] || null); setFileUrl(""); }}/></label>
+          <label className="form-field wide"><span>…أو رابط ملف محفوظ</span><input dir="ltr" placeholder="https://…pdf" value={fileUrl} onChange={e => { setFileUrl(e.target.value); setFile(null); }}/></label>
+        </>}
         <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}} disabled={busy}><Send size={15}/> {busy ? "جارٍ النشر…" : "نشر الآن"}</button>
       </form>
     </div></div>
@@ -79,6 +93,8 @@ export function RoleWorkspace({me}: {me: Me}) {
 // ---------- super admin: إدارة الحسابات والصلاحيات ----------
 export function UsersTab() {
   const [users, setUsers] = useState<Row[] | null>(null);
+  const [subjects, setSubjects] = useState<Row[]>([]);
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [invitations, setInvitations] = useState<Row[] | null>(null);
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState({email: "", name: "", role: "section_representative", assigned_section: "A", assigned_subjects: ""});
@@ -88,6 +104,9 @@ export function UsersTab() {
     fetch("/api/admin/users", {cache: "no-store"}).then(r => r.json()).then(j => { setUsers(j.users || []); setInvitations(j.invitations || []); }).catch(() => setUsers([]));
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetch("/api/public/content?type=subjects", {cache: "no-store"}).then(r => r.json()).then(j => setSubjects(j.content?.subjects || [])).catch(() => setSubjects([]));
+  }, []);
 
   const invite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +114,7 @@ export function UsersTab() {
     const res = await fetch("/api/admin/users", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({
       email: form.email, name: form.name, role: form.role,
       assigned_section: form.role === "section_representative" ? form.assigned_section : null,
-      assigned_subjects: form.role === "teacher" ? form.assigned_subjects.split(",").map(s => s.trim()).filter(Boolean) : [],
+      assigned_subjects: form.role === "teacher" ? selectedSubjects : [],
     })});
     const j = await res.json().catch(() => ({}));
     setBusy(false);
@@ -128,7 +147,13 @@ export function UsersTab() {
           <select value={form.assigned_section} onChange={e => setForm(f => ({...f, assigned_section: e.target.value}))}>
             {["A", "B", "C", "F"].map(s => <option key={s} value={s}>شعبة {s}</option>)}
           </select></label>}
-        {form.role === "teacher" && <label className="form-field wide"><span>المواد (معرّفات مفصولة بفواصل)</span><input dir="ltr" placeholder="nonlinear-optics, optoelectronics" value={form.assigned_subjects} onChange={e => setForm(f => ({...f, assigned_subjects: e.target.value}))}/></label>}
+        {form.role === "teacher" && <div className="form-field wide"><span>المواد المسندة (من قاعدة البيانات)</span>
+          <div style={{display: "flex", flexWrap: "wrap", gap: 8}}>
+            {subjects.map(sub => <label key={String(sub.id)} style={{display: "flex", gap: 6, alignItems: "center", border: "1px solid var(--border)", borderRadius: 10, padding: "6px 10px"}}>
+              <input type="checkbox" checked={selectedSubjects.includes(String(sub.id))} onChange={e => setSelectedSubjects(prev => e.target.checked ? [...prev, String(sub.id)] : prev.filter(x => x !== String(sub.id)))}/>
+              <span>{String(sub.name)}</span>
+            </label>)}
+          </div></div>}
         <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}} disabled={busy}>إنشاء دعوة</button>
       </form>
     </div></div>

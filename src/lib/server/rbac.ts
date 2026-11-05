@@ -1,5 +1,5 @@
 // Pure RBAC + token helpers (no DB imports — unit-testable under node).
-import {createHash, createHmac, randomBytes, timingSafeEqual} from "node:crypto";
+import {createHash, randomBytes, timingSafeEqual} from "node:crypto";
 
 export const ROLES = ["super_admin", "editor", "viewer", "general_representative", "section_representative", "teacher"] as const;
 export type Role = (typeof ROLES)[number];
@@ -63,6 +63,21 @@ export function canPublishSubjectContent(a: AdminInfo, subjectId: string, target
   return targetSections.every(s => allowed.includes(s as Section));
 }
 
+// Unified write gate for the admin content API: privileged roles write anything;
+// reps/teachers are limited by scope/subject rules. Used by /api/admin/content.
+export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<string, unknown>): boolean {
+  if (!isActive(a)) return false;
+  if (type === "telegram") return canManageAllContent(a.role);
+  if (canManageAllContent(a.role)) return true;
+  if (!row) return false;
+  if (type === "announcements") return canPublishAnnouncement(a, String(row.scope || "general"), String(row.section || "all"));
+  if (type === "lectures" || type === "exams" || type === "assignments") {
+    const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
+    return canPublishSubjectContent(a, String(row.subject_id || ""), sections);
+  }
+  return false; // schedule etc.: privileged roles only
+}
+
 // Ownership: non-privileged roles may only modify content they created.
 export function canModifyContent(a: AdminInfo, row: {created_by?: number | null}): boolean {
   if (!isActive(a)) return false;
@@ -92,24 +107,15 @@ export function tokenUsable(opts: {expires_at: string; used_at: string | null}, 
   return !opts.used_at && new Date(opts.expires_at).getTime() > now;
 }
 
-// HMAC-signed short-lived link token payload (deep link), e.g. link_<hmac>.<exp>
-export function signLinkPayload(adminId: number, tokenHash: string, secret: string, ttlSeconds: number, now = Date.now()): string {
-  const exp = Math.floor(now / 1000) + ttlSeconds;
-  const body = `link.${adminId}.${tokenHash}.${exp}`;
-  const sig = createHmac("sha256", secret).update(body).digest("base64url");
-  return `${body}.${sig}`;
+// Telegram deep-link start parameter must stay <= 64 chars total, so the link
+// carries ONLY a short random token:  /start link_<token>   (token = 16 base64url chars)
+export function newLinkToken(): string {
+  return randomBytes(12).toString("base64url"); // 16 chars
 }
-export function verifyLinkPayload(payload: string, secret: string, now = Date.now()): {adminId: number; tokenHash: string} | null {
-  if (!secret) return null;
-  const parts = payload.split(".");
-  if (parts.length !== 5 || parts[0] !== "link") return null;
-  const [, adminIdStr, tokenHash, expStr, sig] = parts;
-  const exp = Number(expStr);
-  if (!Number.isFinite(exp) || Math.floor(now / 1000) > exp) return null;
-  const body = `link.${adminIdStr}.${tokenHash}.${expStr}`;
-  const expected = createHmac("sha256", secret).update(body).digest();
-  let given: Buffer;
-  try { given = Buffer.from(sig, "base64url"); } catch { return null; }
-  if (given.length !== expected.length || !timingSafeEqual(expected, given)) return null;
-  return {adminId: Number(adminIdStr), tokenHash};
+export function linkStartParam(token: string): string {
+  return `link_${token}`;
 }
+export function linkStartParamLength(token: string): number {
+  return linkStartParam(token).length;
+}
+

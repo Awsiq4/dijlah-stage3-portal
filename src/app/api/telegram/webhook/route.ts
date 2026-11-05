@@ -1,5 +1,5 @@
 import {NextRequest, NextResponse} from "next/server";
-import {WEBHOOK_SECRET, telegramServiceEnabled, timingSafeEqual, SUBSCRIPTION_SECRET, botConfigured} from "@/lib/server/flags";
+import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTION_SECRET, botConfigured, webhookAuthorized} from "@/lib/server/flags";
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
 import {sendMessage} from "@/lib/server/telegram";
@@ -107,11 +107,12 @@ async function handleCallback(chatId: number, data: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    if (WEBHOOK_SECRET) {
-      const header = req.headers.get("x-telegram-bot-api-secret-token") || "";
-      if (!timingSafeEqual(header, WEBHOOK_SECRET)) return new NextResponse("unauthorized", {status: 401});
-    }
-    if (!telegramServiceEnabled() && !botConfigured()) return NextResponse.json({ok: true, disabled: true});
+    // TELEGRAM_BOT_ENABLED is authoritative: disabled -> ignore everything.
+    // When enabled, the webhook secret header is MANDATORY (no secret configured -> reject all).
+    const auth = webhookAuthorized(req.headers.get("x-telegram-bot-api-secret-token"), {botEnabled: TELEGRAM_BOT_ENABLED && botConfigured(), webhookSecret: WEBHOOK_SECRET});
+    if (auth === "disabled") return NextResponse.json({ok: true, disabled: true});
+    if (auth === "unauthorized") return new NextResponse("unauthorized", {status: 401});
+    if (!telegramServiceEnabled()) return NextResponse.json({ok: true, disabled: true}); // enabled+configured but DB missing -> inert
     const update = await req.json().catch(() => null);
     if (!update || typeof update !== "object") return NextResponse.json({ok: true});
     const message = update.message;
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
       } else {
         // non-command message from a linked admin account -> publishing flow state machine
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
-        if (admin) await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, Boolean(message.document));
+        if (admin) await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
       }
     } else if (callback?.message?.chat?.id && callback.data) {
       const data = String(callback.data);

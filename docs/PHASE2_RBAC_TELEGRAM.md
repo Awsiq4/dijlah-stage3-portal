@@ -47,3 +47,13 @@ S1 rep A لا ينشر لـB · S2 teacher بدون مادة/شعبة غير م�
 - رفع PDF عبر البوت غير مدعوم (Telegram file limits) → بديل آمن: رفع من اللوحة وإرسال الرابط.
 - الإشعارات معطّلة افتراضيًا (`TELEGRAM_BOT_ENABLED=false`)؛ لا يوجد مرسلون حتى — اختبار controlled first.
 - لم يُتحقق E2E على Neon من هنا (أدوات Neon/Vercel غير قابلة للاستدعاء من هذه الجلسة) — يُشغَّل `npm run test:e2e` بعد تطبيق الهجرة.
+
+## 10. إصلاحات جولة المراجعة (Review fixes)
+
+1. **gate الكتابة الموحد**: `/api/admin/content` يستخدم الآن `canWriteContentRecord` (من rbac.ts) — الممثل/التدريسي ينشر ضمن نطاقه فقط؛ لم يعد يعتمد على canModify الذي كان يحصر الكتابة على super_admin/editor.
+2. **رابط Telegram قصير**: `/start link_<16-char token>` —apt cantidad ≤64 حرفًا؛ الـtoken عشوائي قصير، مؤقت (10 دقائق)، одноразовий، مخزن hash فقط (SHA-256) ويُبحث به مباشرة.
+3. **رفع PDF حقيقي**: `/api/admin/upload` (من الهاتف/الويب) + تدفق `document` في البوت — تحقق magic bytes `%PDF-` وحد 20MB → رفع إلى Vercel Blob (`BLOB_READ_WRITE_TOKEN`) → url محفوظ في سجل المحاضرة.
+4. **فحص الملكية داخل المعاملة**: تحديث أي محتوى موجود يمر عبر `assertUpdateAllowed` داخل `withTx` (SELECT created_by → canModifyContent → 403)، والحذف بنفس الفحص.
+5. **Webhook مشدد**: `webhookAuthorized()` — `TELEGRAM_BOT_ENABLED=false` → تجاهل كل التحديثات؛ عند التفعيل مفتاح `X-Telegram-Bot-Api-Secret-Token` إلزامي (غيابه = رفض 401 لكل شيء).
+6. **قائمة مواد عربية**: nmnconst من `/api/public/content?type=subjects` checkboxes بأسماء المواد من قاعدة البيانات.
+7. **اختبارات نشر حقيقية (pg-mem)**: publish.test.mjs — ممثل A ينشر لشعبته فقط (B مرفوض وغير محفوظ)، Ustadh ضمن مادته وشعبه فقط، معلّق مرفوض، الملكية، audit trail. rbac.test.mjs — gate الكتابة + webhook + link token length. **53/53 pass**.
