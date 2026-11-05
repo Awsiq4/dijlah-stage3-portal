@@ -55,15 +55,24 @@ test("S5: invitation/link tokens: single-use, expiring, hash-matched", () => {
 
 test("S6: forged Telegram link payloads are rejected (wrong secret / tampered / expired)", () => {
   const secret = "link-secret";
-  const payload = signLinkPayload(7, hashToken(newToken()), secret, 600, 1_000_000_000);
+  const fixedHash = hashToken("fixed-invitation-token");
+  const payload = signLinkPayload(7, fixedHash, secret, 600, 1_000_000_000);
   const v = verifyLinkPayload(payload, secret, 1_000_000_000);
   assert.equal(v?.adminId, 7);
-  assert.equal(v?.tokenHash, payload.split(".")[2]);
+  assert.equal(v?.tokenHash, fixedHash);
   assert.equal(verifyLinkPayload(payload, "other-secret", 1_000_000_000), null);       // wrong secret
   assert.equal(verifyLinkPayload(payload, secret, 1_000_000_000 + 601_000), null);      // expired
-  const tampered = payload.slice(0, -2) + (payload.endsWith("aa") ? "bb" : "aa");
-  assert.equal(verifyLinkPayload(tampered, secret, 1_000_000_000), null);               // tampered sig
+  // tamper: flip a signature character in the middle (deterministic, always changes decoded bytes)
+  const sigStart = payload.lastIndexOf(".") + 1;
+  const mid = sigStart + 8;
+  const flipped = payload.slice(0, mid) + (payload[mid] === "A" ? "B" : "A") + payload.slice(mid + 1);
+  assert.notEqual(flipped, payload);
+  assert.equal(verifyLinkPayload(flipped, secret, 1_000_000_000), null);                // tampered sig
+  // tamper: change the adminId inside the signed body
+  const bodyTampered = payload.replace("link.7.", "link.8.");
+  assert.equal(verifyLinkPayload(bodyTampered, secret, 1_000_000_000), null);
   assert.equal(verifyLinkPayload("garbage", secret, 1_000_000_000), null);
+  assert.equal(verifyLinkPayload("", secret, 1_000_000_000), null);
 });
 
 test("S7: duplicate publications are impossible (idempotent keys + DO NOTHING inserts)", async () => {

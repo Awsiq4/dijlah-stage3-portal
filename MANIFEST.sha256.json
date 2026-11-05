@@ -573,8 +573,8 @@
     },
     {
       "path": "src/lib/server/rbac.test.mjs",
-      "bytes": 5610,
-      "sha256": "cdde55bdafd38008c5ecbd6b7835a138ee87b0da55516b2f28bcdced67f29f0b"
+      "bytes": 6141,
+      "sha256": "e0d2aee7c277b666f5b6bbf7f1f1f84ac21ba40b1924a9f440e5754b48d95e84"
     },
     {
       "path": "src/lib/server/rbac.ts",
