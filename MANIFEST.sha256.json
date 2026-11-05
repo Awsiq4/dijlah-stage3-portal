@@ -93,8 +93,8 @@
     },
     {
       "path": "docs/PHASE2_RBAC_TELEGRAM.md",
-      "bytes": 6580,
-      "sha256": "c731b95bd27c58e1ccdaf44a4a0e29c1d04961729b6cc9915203b5afdf5dd4cf"
+      "bytes": 7498,
+      "sha256": "70f4d70801bc67f810ee7cbf8a1a1456617faec7adbaf27f3652423daa3450af"
     },
     {
       "path": "docs/TELEGRAM_BOT_SETUP.md",
@@ -123,8 +123,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 1748,
-      "sha256": "0c048b5545a5e799621b0d8e5d8aec751fcedee310bb9916e4049bdbb298a39a"
+      "bytes": 1782,
+      "sha256": "43a9288aa7f926ce0f561e031b68286b51c69d162d4a26be5a57e1c764b83a00"
     },
     {
       "path": "public/images/department-logo.png",
@@ -248,8 +248,8 @@
     },
     {
       "path": "scripts/vercel-set-env.mjs",
-      "bytes": 5371,
-      "sha256": "032dcc15b1f9373ecc50de0549e4f676a91802d939fa9635a1a39311e285d5ad"
+      "bytes": 5870,
+      "sha256": "7e7a99d1bf2dc29d912a8db398c08acd25d2d34ca129b9435c43452eafda6eeb"
     },
     {
       "path": "scripts/verify-schedule-json.mjs",
@@ -288,8 +288,8 @@
     },
     {
       "path": "src/app/admin/workspace.tsx",
-      "bytes": 17099,
-      "sha256": "20a19b694dd111254b107b0f63954c4141215d669a5077f0696ae98b57b9219b"
+      "bytes": 17228,
+      "sha256": "8ef91b21542cdf9ca27df0905360c3eb9bbdda0f5720aace6985748b31f18952"
     },
     {
       "path": "src/app/announcements/page.tsx",
@@ -298,8 +298,8 @@
     },
     {
       "path": "src/app/api/admin/content/route.ts",
-      "bytes": 5151,
-      "sha256": "b2b5257c6b94833b3fb1e7b918f7f75c18dcebb62f274fbcee0f58a56bade126"
+      "bytes": 4459,
+      "sha256": "3e134e7923bb125566d4883f198f0b9b4f00218d355452447c0bcc81455fc118"
     },
     {
       "path": "src/app/api/admin/login/route.ts",
@@ -313,8 +313,8 @@
     },
     {
       "path": "src/app/api/admin/me/route.ts",
-      "bytes": 402,
-      "sha256": "d3ad2850ce23ce10042057bb8cf732e7a97e52286c6c120375b9114e810f4a84"
+      "bytes": 769,
+      "sha256": "0b87514a8400171da1cc80a80eed9ca85fcba16d6ec5a1afe5557c275f3c8ee8"
     },
     {
       "path": "src/app/api/admin/setup/route.ts",
@@ -328,8 +328,8 @@
     },
     {
       "path": "src/app/api/admin/upload/route.ts",
-      "bytes": 1898,
-      "sha256": "790baa56c632fbd2a548eef404bc17b065eaa6f3ea3905ba62f60e4ddc9c936f"
+      "bytes": 2630,
+      "sha256": "426851e9fe6c94f1cf7444302fe91f5d66b3cc8613502f30f63aaabe0770f448"
     },
     {
       "path": "src/app/api/admin/users/route.ts",
@@ -502,6 +502,11 @@
       "sha256": "f64fef2a026fec1d0c7a6be40011de2db3234ff089cf634469584569d22fecaa"
     },
     {
+      "path": "src/lib/server/admin-api.test.mjs",
+      "bytes": 6048,
+      "sha256": "a968694f4f7a0e3d4cce002943890475d4746f66c695e57e1ddbbb08a69a1719"
+    },
+    {
       "path": "src/lib/server/auth.test.mjs",
       "bytes": 4328,
       "sha256": "a6a6268f4fdfe323db28ab12b77bc30795c8e64fb90b8a0ec9e54c3f98598f68"
@@ -578,8 +583,8 @@
     },
     {
       "path": "src/lib/server/publish.ts",
-      "bytes": 8280,
-      "sha256": "fbd46c89c5f4289b7811eb52b00abfdb5b93d90a1c47784c8c617670e9f8a4fe"
+      "bytes": 9719,
+      "sha256": "10f7e9dad3a55a72c7c14d50458ee9d1089084a63debb145afb1771e06aa22ff"
     },
     {
       "path": "src/lib/server/rbac.test.mjs",
@@ -598,8 +603,8 @@
     },
     {
       "path": "src/lib/server/storage.ts",
-      "bytes": 1138,
-      "sha256": "0e35e79bd6fe4e345fb3a289915b9369a6896a94f2bed0f8a7baca8d4c69d610"
+      "bytes": 3112,
+      "sha256": "013b94e3a4752dd2294bc155c2c8e4500b427da4965bc9bf1292a1d5867d655c"
     },
     {
       "path": "src/lib/server/targeting.ts",

@@ -3,7 +3,7 @@
 import {withTx, defaultQueryer} from "./db.ts";
 import {buildUpsert, sanitizeRow, SCHEMAS, type WritableContentType} from "./content-schema.ts";
 import {audit} from "./content.ts";
-import {canPublishAnnouncement, canPublishSubjectContent, canModifyContent, isActive, type AdminInfo} from "./rbac.ts";
+import {canPublishAnnouncement, canPublishSubjectContent, canModifyContent, canManageAllContent, isActive, type AdminInfo} from "./rbac.ts";
 import {telegramServiceEnabled} from "./flags.ts";
 
 export type PublishOk = {ok: true; id: string; inserted: boolean};
@@ -127,6 +127,37 @@ export async function publishAssignment(admin: AdminInfo, input: Record<string, 
   const res = await insertWithOwnership("assignments", admin, row, input.source || "web", input.id ? "update" : "nothing");
   if (res.ok && res.inserted) await notifyIfEnabled({type: "assignment", refId: id, title: String(input.title || ""), url: "/assignments", scope: "general", subject_id: subjectId});
   return res;
+}
+
+// Used by /api/admin/content: validates + writes content with ownership taken
+// ONLY from the authenticated server-side identity (client-sent created_by/source
+// are stripped by the schema allowlist and then overwritten here on first insert).
+export async function applyContentUpsert(
+  tx: {q: import("./db.ts").Queryer["q"]; qOne: import("./db.ts").Queryer["qOne"]},
+  admin: AdminInfo,
+  type: WritableContentType,
+  row: Record<string, unknown>,
+  source: "web" | "telegram" = "web"
+): Promise<void> {
+  const id = String(row.id);
+  // update of an existing row requires ownership (privileged roles bypass)
+  if (!canManageAllContent(admin.role)) {
+    const table = SCHEMAS[type].table;
+    const existing = await tx.qOne<{created_by: number | null}>(`SELECT created_by FROM ${table} WHERE id=$1`, [id]);
+    if (existing && !canModifyContent(admin, existing)) {
+      const err = new Error("forbidden: not the owner") as Error & {status?: number};
+      err.status = 403;
+      throw err;
+    }
+  }
+  const {sql, params} = buildUpsert(type, row, "update");
+  await tx.q(sql, params);
+  // set ownership only when the row is new (never overwrite an existing owner)
+  await tx.q(
+    `UPDATE ${SCHEMAS[type].table} SET created_by=$2, source=$3 WHERE id=$1 AND created_by IS NULL`,
+    [id, admin.id, source]
+  );
+  await audit(admin.email || `admin#${admin.id}`, `content.upsert.${type}`, {id, source}, tx);
 }
 
 // ownership-aware update/delete for the admin content API

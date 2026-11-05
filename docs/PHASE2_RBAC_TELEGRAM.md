@@ -57,3 +57,12 @@ S1 rep A لا ينشر لـB · S2 teacher بدون مادة/شعبة غير م�
 5. **Webhook مشدد**: `webhookAuthorized()` — `TELEGRAM_BOT_ENABLED=false` → تجاهل كل التحديثات؛ عند التفعيل مفتاح `X-Telegram-Bot-Api-Secret-Token` إلزامي (غيابه = رفض 401 لكل شيء).
 6. **قائمة مواد عربية**: nmnconst من `/api/public/content?type=subjects` checkboxes بأسماء المواد من قاعدة البيانات.
 7. **اختبارات نشر حقيقية (pg-mem)**: publish.test.mjs — ممثل A ينشر لشعبته فقط (B مرفوض وغير محفوظ)، Ustadh ضمن مادته وشعبه فقط، معلّق مرفوض، الملكية، audit trail. rbac.test.mjs — gate الكتابة + webhook + link token length. **53/53 pass**.
+
+## 11. إعدادات بيئة Preview (فقط ♄لـPreview — ليس Production أبدًا)
+
+هذه المتغيرات تُضبط **فقط** في custom environment الخاص بفرع `vibe/phase1-secure-backend-fbb429` (أو عبر `npm run setup:vercel-env` الذي يستهدف هذا الـenvironment فقط):
+- `PORTAL_BASE_URL` = رابط الـPreview (يستخدم في فحص CSRF origin)
+- `PORTAL_ALLOWED_ORIGINS` = origins إضافية مفصولة بفواصل (اختياري)
+- `BLOB_READ_WRITE_TOKEN` = من Vercel → Storage → Blob (لرفع PDF المباشر؛ بدونه للرفع المباشر؛ بدونه يمكن رفع ملفات أكبر من 20MB عبر البوت فقط
+- `DATABASE_URL` / `SESSION_SECRET` / `ADMIN_API_SECRET` / `TELEGRAM_BOT_ENABLED=false`
+لا تُعيّن أيًا منها في Production. `scripts/vercel-set-env.mjs` لا ي Vita Production أبدًا.

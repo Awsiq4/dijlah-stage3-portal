@@ -2,6 +2,7 @@
 import React,{useCallback,useEffect,useState} from "react";
 import {BookOpen,ClipboardList,FileQuestion,Megaphone,Paperclip,Plus,Send,Trash2,Users,Link2,Unlink} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
+import {upload} from "@vercel/blob/client";
 
 type Me = {authenticated: boolean; email?: string; role?: string; name?: string; assigned_section?: string | null; assigned_subjects?: string[] | null};
 type Row = Record<string, unknown>;
@@ -33,12 +34,14 @@ export function RoleWorkspace({me}: {me: Me}) {
     try {
       let url = fileUrl;
       if (isTeacher && file) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const up = await fetch("/api/admin/upload", {method: "POST", headers: {"x-portal-admin": "1"}, body: fd});
-        const uj = await up.json().catch(() => ({}));
-        if (!up.ok) { setNotice(uj.error || "فشل رفع الملف"); setBusy(false); return; }
-        url = uj.url;
+        // direct-to-Blob upload: bypasses the 4.5MB function limit; the route validates role/subject/type/size
+        const blob = await upload(file.name, file, {
+          access: "public",
+          handleUploadUrl: "/api/admin/upload",
+          contentType: "application/pdf",
+          clientPayload: JSON.stringify({filename: file.name, contentType: "application/pdf", size: file.size, subjectId}),
+        });
+        url = blob.url;
       }
       if (isTeacher && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); setBusy(false); return; }
       const row = isRep

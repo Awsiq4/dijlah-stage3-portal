@@ -46,12 +46,17 @@ if (!SESSION_SECRET) { SESSION_SECRET = randomBytes(32).toString('hex'); persist
 let ADMIN_API_SECRET = get('ADMIN_API_SECRET');
 if (!ADMIN_API_SECRET) { ADMIN_API_SECRET = randomBytes(32).toString('hex'); persistLocal('ADMIN_API_SECRET', ADMIN_API_SECRET); console.log('generated ADMIN_API_SECRET -> .env.local only (value never printed)'); }
 
+// NOTE: these are written ONLY to the branch-scoped preview custom environment.
+// Never add them to Production. Values are never printed.
 const VARS = [
   {key: 'DATABASE_URL', value: DATABASE_URL},
   {key: 'SESSION_SECRET', value: SESSION_SECRET},
   {key: 'ADMIN_API_SECRET', value: ADMIN_API_SECRET},
   {key: 'TELEGRAM_BOT_ENABLED', value: 'false'}, // hard guarantee: bot stays disabled
-];
+  {key: 'PORTAL_BASE_URL', value: get('PORTAL_BASE_URL') || `https://dijlah-stage3-portal-git-${BRANCH.slice(6, 30)}-awsiq4.vercel.app`},
+  {key: 'PORTAL_ALLOWED_ORIGINS', value: get('PORTAL_ALLOWED_ORIGINS') || ''},
+  {key: 'BLOB_READ_WRITE_TOKEN', value: get('BLOB_READ_WRITE_TOKEN')}, // optional; required only for PDF uploads
+].filter(v => v.value !== '');
 
 const qs = TEAM ? `?teamId=${TEAM}` : '';
 const H = {Authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json'};

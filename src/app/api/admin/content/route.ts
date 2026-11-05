@@ -1,25 +1,16 @@
 import {NextRequest, NextResponse} from "next/server";
 import {requireAdmin} from "@/lib/server/auth";
-import {listContent, createContent, deleteContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
+import {listContent, deleteContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
 import {withTx, qOne} from "@/lib/server/db";
 import {dbConfigured} from "@/lib/server/flags";
-import {canWriteContentRecord, canModifyContent, canManageAllContent, type AdminInfo} from "@/lib/server/rbac";
+import {canWriteContentRecord, canModifyContent, canManageAllContent} from "@/lib/server/rbac";
+import {applyContentUpsert} from "@/lib/server/publish";
 
 export const dynamic = "force-dynamic";
 
 const TYPES: ContentType[] = ["subjects", "lectures", "announcements", "exams", "assignments", "schedule", "telegram"];
 
 class ForbiddenError extends Error {}
-
-// Ownership check for UPDATES, executed inside the same transaction as the write.
-async function assertUpdateAllowed(tx: {qOne: typeof qOne}, admin: AdminInfo, type: string, id: string): Promise<void> {
-  if (canManageAllContent(admin.role)) return;
-  const table = (SCHEMAS as Record<string, {table: string}>)[type]?.table;
-  if (!table) throw new ForbiddenError("forbidden");
-  const existing = await tx.qOne<{created_by: number | null}>(`SELECT created_by FROM ${table} WHERE id=$1`, [id]);
-  if (!existing) return; // insert path — handled by canWriteContentRecord
-  if (!canModifyContent(admin, existing)) throw new ForbiddenError("forbidden: not the owner");
-}
 
 export async function GET(req: NextRequest) {
   const admin = await requireAdmin(req);
@@ -49,15 +40,15 @@ export async function POST(req: NextRequest) {
         await upsertTelegram(String(body.kind || ""), String(body.key || ""), String(body.url || ""), db);
         await audit(admin.email || `admin#${admin.id}`, "content.upsert.telegram", {key: body.key}, db);
       } else {
-        await assertUpdateAllowed(db, admin, body.type, String(body.row.id));
-        await createContent(body.type, body.row, db);
-        await audit(admin.email || `admin#${admin.id}`, `content.upsert.${body.type}`, {id: body.row.id}, db);
+        // ownership + source are set server-side from the session identity only
+        await applyContentUpsert(db, admin, body.type, body.row, "web");
       }
     });
     return NextResponse.json({ok: true});
   } catch (err) {
-    if (err instanceof ForbiddenError) return NextResponse.json({error: err.message}, {status: 403});
-    const msg = err instanceof Error ? err.message : "error";
+    const e = err as Error & {status?: number};
+    if (err instanceof ForbiddenError || e.status === 403) return NextResponse.json({error: e.message}, {status: 403});
+    const msg = e.message || "error";
     const status = /مطلوب|غير صالح|JSON|قيمة غير مسموحة/.test(msg) ? 400 : 500;
     return NextResponse.json({error: msg}, {status});
   }
