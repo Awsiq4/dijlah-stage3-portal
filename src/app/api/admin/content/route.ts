@@ -1,8 +1,20 @@
 import {NextRequest, NextResponse} from "next/server";
 import {requireAdmin, canModify} from "@/lib/server/auth";
 import {listContent, createContent, deleteContent, upsertTelegram, audit, type ContentType} from "@/lib/server/content";
-import {withTx} from "@/lib/server/db";
+import {withTx, qOne} from "@/lib/server/db";
 import {dbConfigured} from "@/lib/server/flags";
+import {canPublishAnnouncement, canPublishSubjectContent, canModifyContent, canManageAllContent} from "@/lib/server/rbac";
+
+// Non-privileged roles (reps/teachers) are restricted by scope + ownership, server-side.
+function writeAllowed(admin: {role: string; id: number; assigned_section?: string | null; assigned_subjects?: string[] | null; perms?: Record<string, unknown> | null}, type: string, row?: Record<string, unknown>): boolean {
+  if (canManageAllContent(admin.role)) return true;
+  if (type === "announcements" && row) return canPublishAnnouncement(admin, String(row.scope || "general"), String(row.section || "all"));
+  if ((type === "lectures" || type === "exams" || type === "assignments") && row) {
+    const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
+    return canPublishSubjectContent(admin, String(row.subject_id || ""), sections);
+  }
+  return false; // schedule changes and other types: privileged roles only
+}
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +39,9 @@ export async function POST(req: NextRequest) {
   if (!body || !TYPES.includes(body.type)) return NextResponse.json({error: "invalid type"}, {status: 400});
   if (body.type !== "telegram" && (!body.row || typeof body.row !== "object" || !body.row.id)) {
     return NextResponse.json({error: "row.id required"}, {status: 400});
+  }
+  if (body.type !== "telegram" && !writeAllowed(admin, body.type, body.row)) {
+    return NextResponse.json({error: "forbidden: role/scope not authorized for this content"}, {status: 403});
   }
   try {
     await withTx(async db => {
@@ -55,6 +70,11 @@ export async function DELETE(req: NextRequest) {
   const type = sp.get("type") as ContentType | null;
   const id = sp.get("id") || "";
   if (!type || !TYPES.includes(type) || type === "telegram" || !id) return NextResponse.json({error: "invalid request"}, {status: 400});
+  if (!canManageAllContent(admin.role)) {
+    // ownership check: only the creator (or a privileged role) may delete
+    const row = await qOne<{created_by: number | null}>(`SELECT created_by FROM ${({subjects: "portal_subjects", lectures: "portal_lectures", announcements: "portal_announcements", exams: "portal_exams", assignments: "portal_assignments", schedule: "portal_schedule"})[type as string]} WHERE id=$1`, [id]);
+    if (!row || !canModifyContent(admin, row)) return NextResponse.json({error: "forbidden: not the owner"}, {status: 403});
+  }
   try {
     await withTx(async db => {
       await deleteContent(type, id, db);

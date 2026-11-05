@@ -1,9 +1,9 @@
-import {q, qOne} from "./db";
-import {selectRecipients, eventKey, type TgEvent, type TgSubscriber} from "./targeting";
-import {renderMessage} from "./templates";
-import {sendMessage} from "./telegram";
-import {nextDelayMs, shouldRetry, isBlockedError} from "./backoff";
-import {PORTAL_BASE_URL, QSTASH_TOKEN, QSTASH_URL, telegramServiceEnabled} from "./flags";
+import {q, qOne} from "./db.ts";
+import {selectRecipients, eventKey, type TgEvent, type TgSubscriber} from "./targeting.ts";
+import {renderMessage} from "./templates.ts";
+import {sendMessage} from "./telegram.ts";
+import {nextDelayMs, shouldRetry, isBlockedError} from "./backoff.ts";
+import {PORTAL_BASE_URL, QSTASH_TOKEN, QSTASH_URL, telegramServiceEnabled} from "./flags.ts";
 
 export type CreateEventInput = TgEvent & {
   refId: string;

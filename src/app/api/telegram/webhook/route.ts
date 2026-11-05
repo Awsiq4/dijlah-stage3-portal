@@ -3,6 +3,7 @@ import {WEBHOOK_SECRET, telegramServiceEnabled, timingSafeEqual, SUBSCRIPTION_SE
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
 import {sendMessage} from "@/lib/server/telegram";
+import {getLinkedAdmin, handleLinkStart, handleAdminMessage, handleAdminCallback} from "@/lib/server/bot";
 
 export const dynamic = "force-dynamic";
 
@@ -117,13 +118,25 @@ export async function POST(req: NextRequest) {
     const callback = update.callback_query;
     if (message?.chat?.id && message.text) {
       const text = String(message.text);
-      if (text.startsWith("/")) {
-        const arg = text.split(" ").slice(1).join(" ").trim();
+      const arg = text.split(" ").slice(1).join(" ").trim();
+      if (text.startsWith("/start") && arg.startsWith("link_")) {
+        await handleLinkStart(Number(message.chat.id), Number(message.from?.id || message.chat.id), arg);
+      } else if (text.startsWith("/")) {
         await handleCommand(Number(message.chat.id), text, arg);
+      } else {
+        // non-command message from a linked admin account -> publishing flow state machine
+        const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
+        if (admin) await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, Boolean(message.document));
       }
     } else if (callback?.message?.chat?.id && callback.data) {
-      await handleCallback(Number(callback.message.chat.id), String(callback.data));
-      await sendMessage(Number(callback.from?.id || callback.message.chat.id), "✅ تم.").catch(() => undefined);
+      const data = String(callback.data);
+      const userId = Number(callback.from?.id || callback.message.chat.id);
+      if (data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
+        await handleAdminCallback(Number(callback.message.chat.id), userId, data);
+      } else {
+        await handleCallback(Number(callback.message.chat.id), data);
+      }
+      await sendMessage(userId, "✅ تم.").catch(() => undefined);
     }
     return NextResponse.json({ok: true});
   } catch (err) {

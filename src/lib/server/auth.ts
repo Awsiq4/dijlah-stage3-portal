@@ -1,7 +1,7 @@
 import {createHmac, randomBytes, scryptSync, timingSafeEqual} from "node:crypto";
 import type {NextRequest} from "next/server";
 import {q, qOne, type Queryer, defaultQueryer} from "./db.ts";
-import {ADMIN_SECRET, PORTAL_BASE_URL, dbConfigured, timingSafeEqual as tse} from "./flags.ts";
+import {ADMIN_SECRET, PORTAL_BASE_URL, PORTAL_ALLOWED_ORIGINS, dbConfigured, timingSafeEqual as tse} from "./flags.ts";
 
 export const SESSION_COOKIE = "portal_session";
 export const SESSION_TTL_SECONDS = 7 * 24 * 3600;
@@ -66,7 +66,11 @@ export function sha256Hex(value: string): string {
   return createHmac("sha256", "portal-session").update(value).digest("hex");
 }
 
-export type AdminRow = {id: number; email: string; role: string; is_active: boolean};
+export type AdminRow = {
+  id: number; email: string; role: string; is_active: boolean;
+  status?: string; name?: string;
+  assigned_section?: string | null; assigned_subjects?: string[] | null; perms?: Record<string, unknown> | null;
+};
 
 export async function createSession(adminId: number, db: Queryer = defaultQueryer): Promise<string> {
   const token = signSessionToken(adminId);
@@ -86,7 +90,7 @@ export async function getAdminFromToken(token: string, db: Queryer = defaultQuer
   const payload = verifySessionToken(token);
   if (!payload) return null;
   const row = await db.qOne<AdminRow & {revoked: number | null; expired: number}>(
-    `SELECT a.id, a.email, a.role, a.is_active,
+    `SELECT a.*,
             (s.revoked_at IS NOT NULL)::int AS revoked,
             (s.expires_at < now())::int AS expired
      FROM portal_admins a
@@ -95,7 +99,10 @@ export async function getAdminFromToken(token: string, db: Queryer = defaultQuer
     [sha256Hex(token)]
   );
   if (!row || row.revoked || row.expired || !row.is_active) return null;
-  return {id: row.id, email: row.email, role: row.role, is_active: row.is_active};
+  // suspended accounts (and pending invitations) must never authenticate
+  if ((row.status ?? "active") !== "active") return null;
+  const {revoked, expired, password_hash, ...admin} = row as AdminRow & {revoked: unknown; expired: unknown; password_hash?: string};
+  return admin;
 }
 
 // CSRF protection for cookie-authenticated state-changing requests:
@@ -105,7 +112,11 @@ export async function getAdminFromToken(token: string, db: Queryer = defaultQuer
 export function csrfWriteOk(req: {headers: {get: (name: string) => string | null}}): boolean {
   const origin = req.headers.get("origin");
   if (origin) {
-    try { return new URL(origin).origin === new URL(PORTAL_BASE_URL).origin; } catch { return false; }
+    try {
+      const o = new URL(origin).origin;
+      const allowed = new Set([new URL(PORTAL_BASE_URL).origin, ...PORTAL_ALLOWED_ORIGINS.map(u => { try { return new URL(u).origin; } catch { return ""; } })]);
+      return allowed.has(o);
+    } catch { return false; }
   }
   return req.headers.get("x-portal-admin") === "1";
 }

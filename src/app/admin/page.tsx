@@ -1,8 +1,9 @@
 "use client";
 import React,{useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogOut,ShieldCheck,Database,Send,Pencil,Plus,Trash2,X,GraduationCap} from "lucide-react";
+import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogOut,ShieldCheck,Database,Send,Pencil,Plus,Trash2,X,GraduationCap,Users} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
+import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel} from "./workspace";
 
 type Me = {authenticated: boolean; email?: string; role?: string};
 type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentAudit?: {actor: string; action: string; created_at: string}[]};
@@ -18,8 +19,8 @@ const TABS = [
   {id: "schedule", label: "الجدول", Icon: CalendarDays},
   {id: "telegram", label: "تليجرام", Icon: Send},
 ] as const;
-type TabId = (typeof TABS)[number]["id"];
-type WritableTab = Exclude<TabId, "overview" | "telegram">;
+type TabId = (typeof TABS)[number]["id"] | "users" | "tgcenter";
+type WritableTab = "subjects" | "announcements" | "lectures" | "exams" | "assignments" | "schedule";
 
 type Field = {k: string; label: string; area?: boolean; select?: string[]; num?: boolean; json?: boolean; req?: boolean};
 const FIELDS: Record<WritableTab, Field[]> = {
@@ -110,6 +111,7 @@ export default function AdminDashboard(){
   const [busy, setBusy] = useState(false);
 
   const loadTab = useCallback((t: TabId) => {
+    if (t === "users" || t === "tgcenter") return;
     if (t === "overview") {
       fetch("/api/admin/stats", {cache: "no-store"}).then(r => r.json()).then(setStats).catch(() => setStats({databaseConfigured: false}));
     } else {
@@ -171,11 +173,16 @@ export default function AdminDashboard(){
   if (loading) return <PageHeading title="لوحة الإدارة" description="جارٍ التحقق من الجلسة…"/>;
   if (!me?.authenticated) return <PageHeading title="لوحة الإدارة" description="غير مسجّل الدخول"/>;
   const canWrite = me.role === "super_admin" || me.role === "editor";
+  // Role-specific workspaces: representatives and teachers get a focused UI, not the full admin panel
+  if (!canWrite) return <><RoleWorkspace me={me}/><div style={{marginTop:18}}><AccountPanel/></div></>;
+  const tabs = me.role === "super_admin"
+    ? [...TABS, {id: "users" as const, label: "إدارة الحسابات", Icon: Users}, {id: "tgcenter" as const, label: "مركز Telegram", Icon: Send}]
+    : TABS;
 
   return <>
     <PageHeading title="لوحة الإدارة" description={`${me.email} · ${me.role}`} action={<button className="action-button secondary" onClick={logout}><LogOut size={16}/> خروج</button>}/>
     <div className="tabs admin-tabs">
-      {TABS.map(t => <button key={t.id} className={tab === t.id ? "selected" : ""} onClick={() => { setTab(t.id); cancelEdit(); }}><t.Icon size={15}/> {t.label}</button>)}
+      {tabs.map(t => <button key={t.id} className={tab === t.id ? "selected" : ""} onClick={() => { setTab(t.id); cancelEdit(); }}><t.Icon size={15}/> {t.label}</button>)}
     </div>
 
     {notice && <p className="note" role="status">{notice}</p>}
@@ -201,7 +208,10 @@ export default function AdminDashboard(){
 
     {tab === "telegram" && <TelegramPanel onChanged={() => loadTab("telegram")} canWrite={canWrite} rows={rows}/>}
 
-    {tab !== "overview" && tab !== "telegram" && <div className="panel">
+    {tab === "users" && me.role === "super_admin" && <UsersTab/>}
+    {tab === "tgcenter" && me.role === "super_admin" && <TelegramCenterTab/>}
+
+    {tab !== "overview" && tab !== "telegram" && tab !== "users" && tab !== "tgcenter" && <div className="panel">
       <div className="panel-heading"><h2>{TABS.find(t => t.id === tab)?.label}</h2>
         <span className="subtle small">{rows ? `${rows.length} سجل` : "…"}</span>
         {canWrite && (editing === null ? <button className="action-button" onClick={startAdd}><Plus size={15}/> إضافة جديد</button> : <button className="action-button secondary" onClick={cancelEdit}><X size={15}/> إلغاء</button>)}
