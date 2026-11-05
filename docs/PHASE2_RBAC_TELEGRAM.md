@@ -51,7 +51,7 @@ S1 rep A لا ينشر لـB · S2 teacher بدون مادة/شعبة غير م�
 ## 10. إصلاحات جولة المراجعة (Review fixes)
 
 1. **gate الكتابة الموحد**: `/api/admin/content` يستخدم الآن `canWriteContentRecord` (من rbac.ts) — الممثل/التدريسي ينشر ضمن نطاقه فقط؛ لم يعد يعتمد على canModify الذي كان يحصر الكتابة على super_admin/editor.
-2. **رابط Telegram قصير**: `/start link_<16-char token>` —apt cantidad ≤64 حرفًا؛ الـtoken عشوائي قصير، مؤقت (10 دقائق)، одноразовий، مخزن hash فقط (SHA-256) ويُبحث به مباشرة.
+2. **رابط Telegram قصير**: `/start link_<16-char token>` —apt cantidad ≤64 حرفًا؛ الـtoken عشوائي قصير، مؤقت (10 دقائق)، واحد الاستخدام، مخزن hash فقط (SHA-256) ويُبحث به مباشرة.
 3. **رفع PDF حقيقي**: `/api/admin/upload` (من الهاتف/الويب) + تدفق `document` في البوت — تحقق magic bytes `%PDF-` وحد 20MB → رفع إلى Vercel Blob (`BLOB_READ_WRITE_TOKEN`) → url محفوظ في سجل المحاضرة.
 4. **فحص الملكية داخل المعاملة**: تحديث أي محتوى موجود يمر عبر `assertUpdateAllowed` داخل `withTx` (SELECT created_by → canModifyContent → 403)، والحذف بنفس الفحص.
 5. **Webhook مشدد**: `webhookAuthorized()` — `TELEGRAM_BOT_ENABLED=false` → تجاهل كل التحديثات؛ عند التفعيل مفتاح `X-Telegram-Bot-Api-Secret-Token` إلزامي (غيابه = رفض 401 لكل شيء).
