@@ -93,8 +93,13 @@
     },
     {
       "path": "docs/PHASE2_RBAC_TELEGRAM.md",
-      "bytes": 9078,
-      "sha256": "351954bb0ec8ba05498f13955ec4d71e951bdd91c4df4044f144059c4e70f8f5"
+      "bytes": 9053,
+      "sha256": "655400730ce277af8030632273c8ceebafff36d53bc9e4019cef4f0d977a6328"
+    },
+    {
+      "path": "docs/PHASE3_LIVE_VERIFICATION.md",
+      "bytes": 3788,
+      "sha256": "38e938e9548774d6730575893d59b5ff74dbdeee1a378f2de6be0102db942d73"
     },
     {
       "path": "docs/TELEGRAM_BOT_SETUP.md",
@@ -123,8 +128,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 1782,
-      "sha256": "43a9288aa7f926ce0f561e031b68286b51c69d162d4a26be5a57e1c764b83a00"
+      "bytes": 1948,
+      "sha256": "25d7c4d668bbe0c9490a516802d5ef7dee74777db7aeed214143d77a4c6e691a"
     },
     {
       "path": "public/images/department-logo.png",
@@ -212,6 +217,11 @@
       "sha256": "b0bee7c20e21997d8acaad878b55218ade73616700b3a092aa0e419f569fcd14"
     },
     {
+      "path": "scripts/apply-portal-rbac.mjs",
+      "bytes": 1459,
+      "sha256": "d8789fb5b7ded056c5d7d911a147faa7104db2b790e8b7397361db17424b1ab0"
+    },
+    {
       "path": "scripts/apply-portal-schema.mjs",
       "bytes": 1341,
       "sha256": "a4a2882506f282db836a9370cbd8d2587dfcc98953ea51591869e97075e18fc7"
@@ -252,6 +262,11 @@
       "sha256": "7e7a99d1bf2dc29d912a8db398c08acd25d2d34ca129b9435c43452eafda6eeb"
     },
     {
+      "path": "scripts/verify-preview-live.mjs",
+      "bytes": 8288,
+      "sha256": "f648eb15be0e850065f66b96aec681db98e62b44f6eafa9d4b340898925fdbcf"
+    },
+    {
       "path": "scripts/verify-schedule-json.mjs",
       "bytes": 5923,
       "sha256": "a270512cea22ba4dcd37700fef0895d32937579293dec9d86c751dfeae65a9c8"
@@ -263,8 +278,8 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 2705,
-      "sha256": "fabcf98176b8af4f8531dfee16d6c1f867f5e25717aef2c8cdd083ebc9d08b45"
+      "bytes": 2806,
+      "sha256": "2cb24557ec115ccb4ce438f2bc2eed7201e1d2a8514b202091aadc3ccac73348"
     },
     {
       "path": "src/app/admin-legacy/page.tsx",
@@ -338,8 +353,8 @@
     },
     {
       "path": "src/app/api/health/route.ts",
-      "bytes": 626,
-      "sha256": "a23c361366f13d387f3b1eb40784115cd7da2b88a841994f656b64db77874576"
+      "bytes": 1660,
+      "sha256": "9817b456de5225e31042e4130ebefa51e0a5daa9ab9bf1d6159e7a08187fc3d6"
     },
     {
       "path": "src/app/api/public/content/route.ts",
@@ -578,8 +593,8 @@
     },
     {
       "path": "src/lib/server/publish.test.mjs",
-      "bytes": 8027,
-      "sha256": "ad445abb7d7a138c6c34f2f56b58f8c5d7117009c0928e942160b8410ee7302a"
+      "bytes": 9394,
+      "sha256": "26a8421321be484252a6706caad76c020161d25364a8cd6b07d2ef52ba06abeb"
     },
     {
       "path": "src/lib/server/publish.ts",

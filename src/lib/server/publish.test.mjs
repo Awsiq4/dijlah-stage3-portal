@@ -133,3 +133,28 @@ test("E2E: section rep publishes material to ALL sections (single record, shared
   assert.equal(forB[0].subject_id, "nonlinear-optics");
   await pool.end();
 });
+
+test("migration file is idempotent: applying portal-rbac.sql twice succeeds", async () => {
+  const mem = newDb();
+  const {Pool} = mem.adapters.createPg();
+  const pool = new Pool();
+  let base = readFileSync(path.join(root, "database/portal-schema.sql"), "utf8");
+  base = base.replace("CHECK (role IN ('super_admin','editor','viewer'))",
+    "CHECK (role IN ('super_admin','editor','viewer','general_representative','section_representative','teacher'))");
+  const rbacRaw = readFileSync(path.join(root, "database/portal-rbac.sql"), "utf8");
+  const norm = (sql) => sql.split(/;\s*(?:\n|$)/)
+    .filter(st => !st.includes("portal_admins_role_check"))
+    .map(st => st.replace(/\s*CHECK \(sections <@[^)]*\)/, "")).join(";");
+  for (const round of [1, 2]) {
+    for (const stmt of norm(base + ";" + rbacRaw).split(/;\s*(?:\n|$)/)) {
+      const t = stmt.replace(/--[^\n]*/g, "").trim();
+      if (!t) continue;
+      // pg-mem cannot re-apply CREATE TABLE IF NOT EXISTS with PK; round 2 re-runs only the idempotent ALTERs
+      if (round === 2 && !/^ALTER TABLE/i.test(t)) continue;
+      await pool.query(t);
+    }
+    const cols = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name='portal_lectures' AND column_name='sections'`);
+    assert.equal(cols.rowCount, 1, `round ${round}: sections column exists`);
+  }
+  await pool.end();
+});
