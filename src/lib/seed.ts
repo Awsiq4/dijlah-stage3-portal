@@ -1,5 +1,5 @@
 import type { PortalData, Section } from "./types";
-import { SCHEDULE_2026_10_17 } from "./schedule-2026-10-17";
+import { SCHEDULE_2026_10_17 } from "./schedule-2026-10-17.ts";
 
 // The original site database/export was unavailable. These are verified subject names,
 // not a reproduction of 36 previously imported timetable entries. Teacher names below

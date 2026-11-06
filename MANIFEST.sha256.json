@@ -3,8 +3,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 1342,
-      "sha256": "986101c0ed20c80d27baa7664de8675d127078541682717a4cc2ce764e072f52"
+      "bytes": 3645,
+      "sha256": "1d3b95db6963e32333050b0699a8d07647753a203f93a6381c15f088b7f3ffea"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -57,6 +57,16 @@
       "sha256": "0204478f86d7809e35f399d4d4f8696cc8e120736f524a5eafd413c153a6484e"
     },
     {
+      "path": "database/portal-rbac.sql",
+      "bytes": 4339,
+      "sha256": "508aa569ff7bdb375458d3d3b7cfb1b83013796283956c4ea0d88a3ff5af7ae5"
+    },
+    {
+      "path": "database/portal-schema.sql",
+      "bytes": 4992,
+      "sha256": "b73fa0a1fd5d2527a4785450e18b623c464a26419204462fd13616cca3e9323b"
+    },
+    {
       "path": "database/telegram-notifications.sql",
       "bytes": 2062,
       "sha256": "a8389259ebe19374696117e767142e5612063ef41616bc688b36db569acf7425"
@@ -70,6 +80,31 @@
       "path": "docs/IMPLEMENTATION_STATUS.md",
       "bytes": 3953,
       "sha256": "b219cc5dcc5f4113361c01b062b5241703c60651a73725fe10f46cda6395ec85"
+    },
+    {
+      "path": "docs/OWNER_GUIDE.md",
+      "bytes": 5443,
+      "sha256": "df378ef103a634e04ce57e597aa0b54f35d78222997995388b048bbce5d81833"
+    },
+    {
+      "path": "docs/PHASE1_2_AUTOMATION.md",
+      "bytes": 5425,
+      "sha256": "bfc0ab3c8a994c974a2e2339d06665e2ec72f45fddc10b873891fb06bf28bf21"
+    },
+    {
+      "path": "docs/PHASE1_SECURE_BACKEND.md",
+      "bytes": 10610,
+      "sha256": "20859fea77f4da18f05f7c8c0dcbbcbeaadeead832290e33e644d526c7e3fb71"
+    },
+    {
+      "path": "docs/PHASE2_RBAC_TELEGRAM.md",
+      "bytes": 9053,
+      "sha256": "655400730ce277af8030632273c8ceebafff36d53bc9e4019cef4f0d977a6328"
+    },
+    {
+      "path": "docs/PHASE3_LIVE_VERIFICATION.md",
+      "bytes": 3788,
+      "sha256": "38e938e9548774d6730575893d59b5ff74dbdeee1a378f2de6be0102db942d73"
     },
     {
       "path": "docs/TELEGRAM_BOT_SETUP.md",
@@ -93,13 +128,13 @@
     },
     {
       "path": "package-lock.json",
-      "bytes": 32597,
-      "sha256": "9843dca26e6bedb58093da719df0414b3ea9e69c99307f45e828f444f519f338"
+      "bytes": 62334,
+      "sha256": "6d6fafd10c2b76fcc930f727dcc15136a65a2175761346ab6fb83ec5083473b8"
     },
     {
       "path": "package.json",
-      "bytes": 1014,
-      "sha256": "b333dc7e56dacf328a4cb8e71c97e938d0b19a00217ee9e4ce4c1ff5d9ec9fb4"
+      "bytes": 1979,
+      "sha256": "492f563d3b3ecf9e17da9b3b1101b278c5e081b81b034a795c3acc9f9f4b99e9"
     },
     {
       "path": "public/images/department-logo.png",
@@ -187,14 +222,54 @@
       "sha256": "b0bee7c20e21997d8acaad878b55218ade73616700b3a092aa0e419f569fcd14"
     },
     {
+      "path": "scripts/apply-portal-rbac.mjs",
+      "bytes": 1459,
+      "sha256": "d8789fb5b7ded056c5d7d911a147faa7104db2b790e8b7397361db17424b1ab0"
+    },
+    {
+      "path": "scripts/apply-portal-schema.mjs",
+      "bytes": 1341,
+      "sha256": "a4a2882506f282db836a9370cbd8d2587dfcc98953ea51591869e97075e18fc7"
+    },
+    {
+      "path": "scripts/bootstrap-neon-phase1.sh",
+      "bytes": 1815,
+      "sha256": "39d8987987c3be0c696b8ccdefefd8fd5243a555ab34db49114a9907d656b153"
+    },
+    {
+      "path": "scripts/create-super-admin.mjs",
+      "bytes": 2026,
+      "sha256": "ba55cf97a9b5dcbb52635751bc3358c1715cffa34cd30f1b24a376c81d23b9fa"
+    },
+    {
+      "path": "scripts/e2e-publish-test.mjs",
+      "bytes": 5950,
+      "sha256": "cb2253fdb27e4bef9892f6e4e575658adc8fc6fd99afe7f46b05de33a02a17cb"
+    },
+    {
       "path": "scripts/gen-schedule-csv.mjs",
       "bytes": 923,
       "sha256": "2d4476dc112c497a0c716dd522ab80b19166a0d62412ff2a146bc0d21becc9ca"
     },
     {
+      "path": "scripts/migrate-seed-to-db.mjs",
+      "bytes": 4003,
+      "sha256": "d6d4681cd51dbb855d4dba86dd2707acf590d668f3eb0a8234460f0a426f460a"
+    },
+    {
       "path": "scripts/setup-telegram-env.sh",
       "bytes": 2184,
       "sha256": "c7d94952024c76dffcfe49992829165aa024bc686f89cd6fcfe9d6bb3cff6eae"
+    },
+    {
+      "path": "scripts/vercel-set-env.mjs",
+      "bytes": 5870,
+      "sha256": "7e7a99d1bf2dc29d912a8db398c08acd25d2d34ca129b9435c43452eafda6eeb"
+    },
+    {
+      "path": "scripts/verify-preview-live.mjs",
+      "bytes": 8288,
+      "sha256": "f648eb15be0e850065f66b96aec681db98e62b44f6eafa9d4b340898925fdbcf"
     },
     {
       "path": "scripts/verify-schedule-json.mjs",
@@ -208,13 +283,33 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 1055,
-      "sha256": "0753bad749278ad5da275b098afd26a2fcd1446193dd306ca526462c4fefba0b"
+      "bytes": 2896,
+      "sha256": "7aa0f5c10b67ec668dcdfbac161291d67ab7f95483d909b02b1b88bfc74509a7"
+    },
+    {
+      "path": "src/app/admin-legacy/page.tsx",
+      "bytes": 12932,
+      "sha256": "ff877d046b37931b91cfb8a84cd4694b55b9baf30ee51a150757247bd5ea3352"
+    },
+    {
+      "path": "src/app/admin/login/page.tsx",
+      "bytes": 2834,
+      "sha256": "8e5f7574ee3fe99581364c2bae808cded1aab08adb3f437c258e289779155d2d"
     },
     {
       "path": "src/app/admin/page.tsx",
-      "bytes": 12932,
-      "sha256": "ff877d046b37931b91cfb8a84cd4694b55b9baf30ee51a150757247bd5ea3352"
+      "bytes": 17122,
+      "sha256": "e392229df15dff7cbe67cca37515ce07308624b02db6876ee8b9aaeeac67e814"
+    },
+    {
+      "path": "src/app/admin/setup/page.tsx",
+      "bytes": 2935,
+      "sha256": "84a2b23e7ee731d07e3519692446e049d33a260d89cbf9d3388c537639d9b561"
+    },
+    {
+      "path": "src/app/admin/workspace.tsx",
+      "bytes": 21227,
+      "sha256": "3700b91c6784254c9d664b89166745ad781345e0b175e6bfb67966e1b6c91ee0"
     },
     {
       "path": "src/app/announcements/page.tsx",
@@ -222,9 +317,59 @@
       "sha256": "620ff84d032e2b8014f4ca12f21044962de7abbe98b0ac307e94bd07f86b8cec"
     },
     {
+      "path": "src/app/api/admin/audit/route.ts",
+      "bytes": 1025,
+      "sha256": "4aa0393da6c9f6aea84f72d84e6f826252eebd496d757102f97c50c69746600e"
+    },
+    {
+      "path": "src/app/api/admin/content/route.ts",
+      "bytes": 4459,
+      "sha256": "3e134e7923bb125566d4883f198f0b9b4f00218d355452447c0bcc81455fc118"
+    },
+    {
+      "path": "src/app/api/admin/login/route.ts",
+      "bytes": 2338,
+      "sha256": "5c284a6c9e1bf694d21bf48964519c2291ec214f4bf5b036f4e628ef218ef43b"
+    },
+    {
+      "path": "src/app/api/admin/logout/route.ts",
+      "bytes": 657,
+      "sha256": "f5f74ceae02d6e915de1f40615da27c7df7a679eb14cd1c76db608de8299d858"
+    },
+    {
+      "path": "src/app/api/admin/me/route.ts",
+      "bytes": 769,
+      "sha256": "0b87514a8400171da1cc80a80eed9ca85fcba16d6ec5a1afe5557c275f3c8ee8"
+    },
+    {
+      "path": "src/app/api/admin/setup/route.ts",
+      "bytes": 3597,
+      "sha256": "8314322c5412038b291b677a8b285765feec710016e90f40cd953d1fd8be7964"
+    },
+    {
+      "path": "src/app/api/admin/stats/route.ts",
+      "bytes": 1027,
+      "sha256": "a09ba0000f1c5fe97940146c6629a79bee976ac539b51b0cb2fdc8d8c8010316"
+    },
+    {
+      "path": "src/app/api/admin/upload/route.ts",
+      "bytes": 2630,
+      "sha256": "426851e9fe6c94f1cf7444302fe91f5d66b3cc8613502f30f63aaabe0770f448"
+    },
+    {
+      "path": "src/app/api/admin/users/route.ts",
+      "bytes": 5854,
+      "sha256": "7fdbeca0f47c8b909425a760a3050f78216581faec1d37b2a8fe899ae44f79f2"
+    },
+    {
       "path": "src/app/api/health/route.ts",
-      "bytes": 238,
-      "sha256": "b2702a23a38a6b040283f8b8f9bdb1f0c4be9392efda489845eb325def52a39a"
+      "bytes": 1660,
+      "sha256": "9817b456de5225e31042e4130ebefa51e0a5daa9ab9bf1d6159e7a08187fc3d6"
+    },
+    {
+      "path": "src/app/api/public/content/route.ts",
+      "bytes": 1009,
+      "sha256": "a0ff3c2db7dba8de675c904af3f1d26c64bfc92a8dff97077f37a554d3a7a3b5"
     },
     {
       "path": "src/app/api/telegram/admin/route.ts",
@@ -237,14 +382,19 @@
       "sha256": "4ca2922a07954d226ca49f0d78ed9c4f6f655d867ff5ba3382f0c361b00ecc1a"
     },
     {
+      "path": "src/app/api/telegram/link/route.ts",
+      "bytes": 2977,
+      "sha256": "ad2aa0e4c758c8bbd946d5460e5bccab4546a5825b052ea5f66aafc426bed3f4"
+    },
+    {
       "path": "src/app/api/telegram/subscribe/route.ts",
       "bytes": 1267,
       "sha256": "f44d0ad221823f4339725cef42697e12a79a9dfa4110d496cdd11da823785fde"
     },
     {
       "path": "src/app/api/telegram/webhook/route.ts",
-      "bytes": 7522,
-      "sha256": "a1f84c36426a3ad8f0f8b7a266053791696390be70af1490dcd4f337144e394b"
+      "bytes": 9506,
+      "sha256": "f3595d7c3b57054bb8953acac10c63df07f703bb8c27b1d6d76a4b790308edc2"
     },
     {
       "path": "src/app/api/telegram/worker/route.ts",
@@ -357,14 +507,39 @@
       "sha256": "b1cd32d84ac53b37ebc37ffbf2bfa0abe7c8cfb05a887c2403ee5a4e317947f8"
     },
     {
+      "path": "src/lib/public-map.test.mjs",
+      "bytes": 2313,
+      "sha256": "d19ed9e18a92208545e301cb6f37ea006d82aa8f6e8632e211f1e949b691dbac"
+    },
+    {
+      "path": "src/lib/public-map.ts",
+      "bytes": 4514,
+      "sha256": "1d6e0166e5fee917ada8fa03240137ff2e31f4330a31a76ad40c2991015b4c74"
+    },
+    {
       "path": "src/lib/schedule-2026-10-17.ts",
       "bytes": 9820,
       "sha256": "58bd0d03187d706eedeb108866593b40ae3b4bb566efff78334253fc37b27b9b"
     },
     {
       "path": "src/lib/seed.ts",
-      "bytes": 4832,
-      "sha256": "522e501e9e57c7732d933fe971208f4ce4a385a5d0384460cf7c4fea674c3070"
+      "bytes": 4835,
+      "sha256": "f64fef2a026fec1d0c7a6be40011de2db3234ff089cf634469584569d22fecaa"
+    },
+    {
+      "path": "src/lib/server/admin-api.test.mjs",
+      "bytes": 7821,
+      "sha256": "28b77bf6bcbaa8c18a13340584db49abd169d2180fa88c1bd40906af86464a32"
+    },
+    {
+      "path": "src/lib/server/auth.test.mjs",
+      "bytes": 4328,
+      "sha256": "a6a6268f4fdfe323db28ab12b77bc30795c8e64fb90b8a0ec9e54c3f98598f68"
+    },
+    {
+      "path": "src/lib/server/auth.ts",
+      "bytes": 7420,
+      "sha256": "5d178ddebb7ae7d4b793cfb97d47bdc396989b6e1c6fe34ccefe51d71dfb2528"
     },
     {
       "path": "src/lib/server/backoff.ts",
@@ -372,24 +547,94 @@
       "sha256": "b0845e1d96f553d709df0d68bb696e08dbd8f9723339c8c113cbcabf679ea751"
     },
     {
+      "path": "src/lib/server/bot.ts",
+      "bytes": 15185,
+      "sha256": "bea46932f8ba91c7c888449c566a3d82aff920a9832fa0c6f9fd3bc7535671f9"
+    },
+    {
+      "path": "src/lib/server/content-schema.test.mjs",
+      "bytes": 3146,
+      "sha256": "970a3ac76b3a698cd6d65c75d67b5874d4aa5bf9b89ae5fa2dc0297d171fe622"
+    },
+    {
+      "path": "src/lib/server/content-schema.ts",
+      "bytes": 7092,
+      "sha256": "71ff4905165bbf083924715c8b4a91e2e1f06b09a005ecb244721e6ad49ea99a"
+    },
+    {
+      "path": "src/lib/server/content.ts",
+      "bytes": 3404,
+      "sha256": "434a16c7e892b0336ee7f697570e6fd317cc3dc5e56445b0839c426178acb4b5"
+    },
+    {
+      "path": "src/lib/server/db.test.mjs",
+      "bytes": 5584,
+      "sha256": "d0cf4d5d8651a82caa37281d5e1d603f0e50bb9f510c864208b753ff95d11099"
+    },
+    {
       "path": "src/lib/server/db.ts",
-      "bytes": 821,
-      "sha256": "ca11078adf20309cb112b7650b1146a7e8544f727c399a447b671c9f2c1e9703"
+      "bytes": 2701,
+      "sha256": "eb89718daa691dded97c6492f94d560be9a666ef22dd6aa9c8936fc55319c681"
     },
     {
       "path": "src/lib/server/flags.ts",
-      "bytes": 1295,
-      "sha256": "0d0a77aca88d2f5f2c4d117f7ceab8eaa452fe31922c9e9c2eacb3545aaf3fa7"
+      "bytes": 1982,
+      "sha256": "008aef004166cea40b4290dfb0a9ab68e2949a446e933568882e890da18fe3aa"
+    },
+    {
+      "path": "src/lib/server/notify.test.mjs",
+      "bytes": 4890,
+      "sha256": "d4e926aa5f22a91da42b2a384d39a94815999ffe5b447ef37bdbaf46c2212a5e"
     },
     {
       "path": "src/lib/server/notify.ts",
-      "bytes": 5156,
-      "sha256": "a32027851063b8118e13fae6d955477bc3c3d540cd6655d8169c3f1819acdd74"
+      "bytes": 5174,
+      "sha256": "bafd6a1629764f446b90662b542ad231474e39ab82a6e771e11cc069c37eac9a"
+    },
+    {
+      "path": "src/lib/server/public-filters.ts",
+      "bytes": 1906,
+      "sha256": "f5a233cc904bf5ba8aff742dd6bd40a9e7be68bce93b14b72d43cf29b84658bb"
+    },
+    {
+      "path": "src/lib/server/public.test.mjs",
+      "bytes": 4825,
+      "sha256": "8774168296747d05aaab98abf9bd7d760386d44660efe6bb69d87bbdc8f1dd25"
+    },
+    {
+      "path": "src/lib/server/public.ts",
+      "bytes": 3792,
+      "sha256": "338cecca9a4c8d42a2246b72962bf2833c5213916a1b747ce2666e6d20d60f01"
+    },
+    {
+      "path": "src/lib/server/publish.test.mjs",
+      "bytes": 9394,
+      "sha256": "26a8421321be484252a6706caad76c020161d25364a8cd6b07d2ef52ba06abeb"
+    },
+    {
+      "path": "src/lib/server/publish.ts",
+      "bytes": 9905,
+      "sha256": "149ab8876987a9d8d921ad3ae0c021f2debb3c7aeb655d05bd82f6182c0ec7f9"
+    },
+    {
+      "path": "src/lib/server/rbac.test.mjs",
+      "bytes": 9366,
+      "sha256": "29914469330ace80c7d0621b04293050ca061e8ec6678d9344170537fe2c324a"
+    },
+    {
+      "path": "src/lib/server/rbac.ts",
+      "bytes": 6846,
+      "sha256": "954fc9681bc4d473cd4c0f9c17d29d63af54d21707cb332ea91a37d5a9672f9e"
     },
     {
       "path": "src/lib/server/server.test.mjs",
       "bytes": 3231,
       "sha256": "58f46cde60c7e60f355dc439542eb0840c31874532118f5bd1dfeabe98499549"
+    },
+    {
+      "path": "src/lib/server/storage.ts",
+      "bytes": 3254,
+      "sha256": "c6fdea29a808c7eb4da1bd26a60af41037c1aae3ad93f9de258ae4a7500fa4ca"
     },
     {
       "path": "src/lib/server/targeting.ts",
@@ -398,8 +643,8 @@
     },
     {
       "path": "src/lib/server/telegram.ts",
-      "bytes": 1931,
-      "sha256": "b9dedeab309c49671da9ad70105812fb8b1d65c504ef81e3ae361224a4b2788d"
+      "bytes": 1934,
+      "sha256": "d7d2a5bfbfd610a42d8fcc9dc8910a30e1b7f7e5f8e3725865eeb709ffcb2c6c"
     },
     {
       "path": "src/lib/server/templates.ts",
@@ -413,8 +658,8 @@
     },
     {
       "path": "src/lib/storage.tsx",
-      "bytes": 3658,
-      "sha256": "5163378843d7655901c639b3dfaa610981f584f654089170380aed63bc1d83b8"
+      "bytes": 4564,
+      "sha256": "1d1c9d9bff25d64ca0cee17cce0cc0599d79b968159598d67e400905db38de3d"
     },
     {
       "path": "src/lib/types.ts",
@@ -422,9 +667,14 @@
       "sha256": "855447cce05189f3857e1001d6524b0b47f36398c746948fed7a045f0a59456c"
     },
     {
+      "path": "src/middleware.ts",
+      "bytes": 1264,
+      "sha256": "a69d2896e0d02228165328a4059eae8ab5fe1842058a7e6acadb63d86c029377"
+    },
+    {
       "path": "tsconfig.json",
-      "bytes": 525,
-      "sha256": "042263f2cda1fbabf69bcc321d71cf57659fe65888d229cb22f5d6be46198d0b"
+      "bytes": 565,
+      "sha256": "3bbf8d8ef3be2376509cd9c8672ba1a2a8f80d5883bcad47a4f2bae3ed348e26"
     }
   ]
 }
