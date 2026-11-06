@@ -20,7 +20,7 @@ PR #13 (draft) · فرع `vibe/phase1-secure-backend-fbb429` · كل الإعد�
 | `TELEGRAM_ADMIN_API_SECRET` / `TELEGRAM_WORKER_SECRET` | نفس الـenv | للإدارة والمعالجة | `openssl rand -hex 32` | `/api/telegram/admin`, `/api/telegram/worker` |
 | `QSTASH_URL` / `QSTASH_TOKEN` | نفس الـenv | للطابور (اختياري) | Upstash QStash | `/api/telegram/worker` |
 
-**Protection:** Project → Settings → Deployment Protection → "Protection Bypass for Automation" — الـsecret يُستخدم header `x-vercel-protection-bypass` للاختبارات الآلية؛ Telegram لا يرسلها → Упu either استثناء webhook أو تعطيل مؤقت للحماية على الـpreview أثناء test البوت.
+**Protection:** Project → Settings → Deployment Protection → "Protection Bypass for Automation" — الـsecret يُستخدم header `x-vercel-protection-bypass` للاختبارات الآلية؛ Telegram لا يرسلها → إما استثناء webhook أو تعطيل مؤقت للحماية على الـpreview أثناء test البوت.
 
 ## 2. إجراء إعداد بوت Preview (قابل للتكرار)
 1. أنشئ بوت اختبار في BotFather (token جديد — لا تستخدم بوت الإنتاج).
@@ -45,6 +45,6 @@ PR #13 (draft) · فرع `vibe/phase1-secure-backend-fbb429` · كل الإعد�
 - [ ] اختبار E2E: `npm run verify:live` على production URL
 - **Rollback**: إعادة نشر الـcommit السابق في Vercel (Deployments → … → Promote to Production)، أو `git revert` للـmerge؛ قاعدة البيانات لا تُمس (الهجرات additive فقط).
 
-## 5. ما Meinung에서 alcalinity؟
+## 5. ملاحظات
 الفرع `vibe/phase1-secure-backend-fbb429` يجب أن تبقى draft حتى review المالك.
 - لا توجد واجهة إدارة AI في المشروع (أُزيلت سابقًا) — من backlog إن لزم لاحقًا.
