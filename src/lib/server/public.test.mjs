@@ -35,8 +35,14 @@ test("public layer (pg-mem): only published rows, section targeting correct, dra
   const mem = newDb();
   const {Pool} = mem.adapters.createPg();
   const pool = new Pool();
-  const schema = readFileSync(path.join(root, "database/portal-schema.sql"), "utf8");
-  for (const stmt of schema.split(/;\s*(?:\n|$)/)) {
+  const norm = (sql) => sql.split(/;\s*(?:\n|$)/)
+    .filter(st => !st.includes("portal_admins_role_check"))
+    .map(st => st.replace(/\s*CHECK \(sections <@[^)]*\)/, ""))
+    .join(";");
+  let schema = readFileSync(path.join(root, "database/portal-schema.sql"), "utf8");
+  schema = schema.replace("CHECK (role IN ('super_admin','editor','viewer'))", "CHECK (role IN ('super_admin','editor','viewer','general_representative','section_representative','teacher'))");
+  const rbac = readFileSync(path.join(root, "database/portal-rbac.sql"), "utf8");
+  for (const stmt of norm(schema + ";" + rbac).split(/;\s*(?:\n|$)/)) {
     const t = stmt.replace(/--[^\n]*/g, "").trim();
     if (t) await pool.query(t);
   }

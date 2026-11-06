@@ -25,6 +25,7 @@ export const SCHEMAS: Record<WritableContentType, {table: string; fields: FieldD
     {col: "description", kind: "text"},
     {col: "file_url", kind: "text"},
     {col: "file_name", kind: "text"},
+    {col: "sections", kind: "json"},
     {col: "status", kind: "text", oneOf: ["published", "draft"]},
     {col: "updated_at", kind: "text"},
   ]},

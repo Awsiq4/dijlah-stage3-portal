@@ -12,6 +12,8 @@ const {newDb} = await import("pg-mem");
 const {setPoolForTests, q, qOne} = await import("./db.ts");
 const {publishAnnouncement, publishLecture} = await import("./publish.ts");
 const {canModifyContent} = await import("./rbac.ts");
+const {lecturesForSection} = await import("./public-filters.ts");
+const asArr = (v) => typeof v === "string" ? (v.trim().startsWith("[") ? JSON.parse(v) : v.split(",").filter(Boolean)) : v;
 
 const repA = {id: 2, email: "repA@x", role: "section_representative", status: "active", is_active: true, assigned_section: "A"};
 const repB = {id: 3, email: "repB@x", role: "section_representative", status: "active", is_active: true, assigned_section: "B"};
@@ -28,7 +30,7 @@ async function makeDb() {
   base = base.replace("CHECK (role IN ('super_admin','editor','viewer'))",
     "CHECK (role IN ('super_admin','editor','viewer','general_representative','section_representative','teacher'))");
   const rbac = readFileSync(path.join(root, "database/portal-rbac.sql"), "utf8")
-    .split(/;\s*(?:\n|$)/).filter(st => !st.includes("portal_admins_role_check"));
+    .split(/;\s*(?:\n|$)/).map(st => st.replace(/\s*CHECK \(sections <@[^)]*\)/, "")).filter(st => !st.includes("portal_admins_role_check"));
   for (const sql of [base, rbac.join(";")]) {
     for (const stmt of sql.split(/;\s*(?:\n|$)/)) {
       const t = stmt.replace(/--[^\n]*/g, "").trim();
@@ -100,5 +102,34 @@ test("audit trail records every publication with actor+source", async () => {
   assert.equal(rows[0].actor, "repA@x");
   const detail = typeof rows[0].detail === "string" ? JSON.parse(rows[0].detail) : rows[0].detail;
   assert.equal(detail.source, "telegram");
+  await pool.end();
+});
+
+test("E2E: section rep publishes material to ALL sections (single record, shared audience) and to own section; visibility per section", async () => {
+  const pool = await makeDb();
+  const ALL = ["A", "B", "C", "F"];
+  const r1 = await publishLecture(repA, {subjectId: "nonlinear-optics", number: 1, title: "ملزمة week1", fileUrl: "/lectures/book1.pdf", sections: ALL, source: "web"});
+  assert.equal(r1.ok, true);
+  const r2 = await publishLecture(repA, {subjectId: "quantum-mechanics", number: 1, title: "محاضرة A only", fileUrl: "/lectures/lecA.pdf", sections: ["A"], source: "telegram"});
+  assert.equal(r2.ok, true);
+  // denied: rep A targeting section B only
+  const denied = await publishLecture(repA, {subjectId: "nonlinear-optics", number: 2, title: "x", fileUrl: "/l.pdf", sections: ["B"]});
+  assert.equal(denied.ok, false);
+
+  const rows = await q(`SELECT id, subject_id, sections, source, created_by FROM portal_lectures ORDER BY id`);
+  assert.equal(rows.length, 2);
+  const allRow = rows.find(r => r.subject_id === "nonlinear-optics");
+  assert.deepEqual(asArr(allRow.sections), ALL);
+  assert.equal(allRow.created_by, repA.id);
+  const ownRow = rows.find(r => r.subject_id === "quantum-mechanics");
+  assert.deepEqual(asArr(ownRow.sections), ["A"]);
+  assert.equal(ownRow.source, "telegram");
+
+  // student visibility: section A sees both; B/C/F see only the all-sections one
+  const forA = lecturesForSection(rows.map(r => ({...r, status: "published", sections: asArr(r.sections)})), "A");
+  const forB = lecturesForSection(rows.map(r => ({...r, status: "published", sections: asArr(r.sections)})), "B");
+  assert.equal(forA.length, 2);
+  assert.equal(forB.length, 1);
+  assert.equal(forB[0].subject_id, "nonlinear-optics");
   await pool.end();
 });

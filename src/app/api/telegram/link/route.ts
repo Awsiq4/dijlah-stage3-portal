@@ -32,6 +32,8 @@ export async function DELETE(req: NextRequest) {
   if (!admin) return NextResponse.json({error: "unauthorized"}, {status: 401});
   if (!dbConfigured()) return NextResponse.json({error: "DATABASE_URL is not configured"}, {status: 503});
   await q(`UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL`, [admin.id]);
+  // invalidate any pending (unused) link codes for this account
+  await q(`UPDATE portal_link_tokens SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL AND expires_at > now()`, [admin.id]);
   await audit(admin.email || `admin#${admin.id}`, "telegram.link.revoked_self", {});
   return NextResponse.json({ok: true});
 }

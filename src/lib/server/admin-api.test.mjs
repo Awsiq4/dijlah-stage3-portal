@@ -25,7 +25,7 @@ async function makeDb() {
   base = base.replace("CHECK (role IN ('super_admin','editor','viewer'))",
     "CHECK (role IN ('super_admin','editor','viewer','general_representative','section_representative','teacher'))");
   const rbac = readFileSync(path.join(root, "database/portal-rbac.sql"), "utf8")
-    .split(/;\s*(?:\n|$)/).filter(st => !st.includes("portal_admins_role_check"));
+    .split(/;\s*(?:\n|$)/).map(st => st.replace(/\s*CHECK \(sections <@[^)]*\)/, "")).filter(st => !st.includes("portal_admins_role_check"));
   for (const sql of [base, rbac.join(";")]) {
     for (const stmt of sql.split(/;\s*(?:\n|$)/)) {
       const t = stmt.replace(/--[^\n]*/g, "").trim();

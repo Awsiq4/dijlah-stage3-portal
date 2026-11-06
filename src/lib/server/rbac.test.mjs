@@ -2,7 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {
   ROLES, isActive, canManageUsers, canManageAllContent, canPublishAnnouncement,
-  canPublishSubjectContent, canModifyContent, canUseTelegramPublishing, teacherSections,
+  canPublishSubjectContent, canPublishMaterial, canModifyContent, canUseTelegramPublishing, teacherSections,
   newToken, hashToken, tokenMatches, tokenUsable, newLinkToken, linkStartParam, linkStartParamLength,
   canWriteContentRecord,
 } from "./rbac.ts";
@@ -116,4 +116,33 @@ test("S8: super_admin retains full control (regression)", () => {
 
 test("roles list is exactly the supported set", () => {
   assert.deepEqual([...ROLES], ["super_admin", "editor", "viewer", "general_representative", "section_representative", "teacher"]);
+});
+
+test("M1: materials audience matrix (section rep: own or ALL only; general rep: any; teacher: assigned+permitted)", () => {
+  const ALL = ["A", "B", "C", "F"];
+  // section rep A: any subject, own section or all sections
+  assert.equal(canPublishMaterial(repA, "any-subject", ["A"]), true);
+  assert.equal(canPublishMaterial(repA, "any-subject", ALL), true);
+  assert.equal(canPublishMaterial(repA, "any-subject", ["B"]), false);      // other single section
+  assert.equal(canPublishMaterial(repA, "any-subject", ["A", "B"]), false);  // mixed
+  // general rep: any subject, all or single section
+  assert.equal(canPublishMaterial(repGen, "any-subject", ALL), true);
+  assert.equal(canPublishMaterial(repGen, "any-subject", ["C"]), true);
+  // teacher: assigned subject + permitted sections only
+  assert.equal(canPublishMaterial(teacher, "nonlinear-optics", ["A"]), true);
+  assert.equal(canPublishMaterial(teacher, "nonlinear-optics", ["C"]), false);
+  assert.equal(canPublishMaterial(teacher, "quantum-mechanics", ALL), false);
+  // super admin: anything
+  assert.equal(canPublishMaterial(superAdmin, "x", ["B"]), true);
+  // suspended: nothing
+  assert.equal(canPublishMaterial(suspendedRep, "any", ALL), false);
+  // invalid section rejected
+  assert.equal(canPublishMaterial(repGen, "x", ["Z"]), false);
+});
+
+test("M2: write gate — rep can publish lectures (materials) but not exams/assignments/schedule", () => {
+  assert.equal(canWriteContentRecord(repA, "lectures", {subject_id: "x", sections: ["A", "B", "C", "F"]}), true);
+  assert.equal(canWriteContentRecord(repA, "lectures", {subject_id: "x", sections: ["B"]}), false);
+  assert.equal(canWriteContentRecord(repA, "exams", {subject_id: "x", sections: ["A"]}), false);
+  assert.equal(canWriteContentRecord(repA, "assignments", {subject_id: "x", sections: ["A"]}), false);
 });

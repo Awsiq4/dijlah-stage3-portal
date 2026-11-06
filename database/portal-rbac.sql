@@ -70,3 +70,8 @@ CREATE TABLE IF NOT EXISTS portal_bot_state (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT now() + interval '30 minutes'
 );
+
+-- ---------- lecture materials audience (booklets/PDFs) ----------
+-- single record, shared audience, one canonical URL; legacy rows default to all sections
+ALTER TABLE portal_lectures ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '["A","B","C","F"]'::jsonb
+  CHECK (sections <@ '["A","B","C","F"]'::jsonb);

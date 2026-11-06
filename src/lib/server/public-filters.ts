@@ -15,6 +15,11 @@ export function publishedLectures<T extends {status?: unknown}>(rows: T[]): T[] 
   return rows.filter(r => r.status === "published");
 }
 
+// lectures: only published; audience = sections array (missing => all sections, for legacy rows)
+export function lecturesForSection<T extends {status?: unknown; sections?: unknown}>(rows: T[], section: Section): T[] {
+  return rows.filter(r => r.status === "published" && (!Array.isArray(r.sections) || r.sections.includes(section)));
+}
+
 // announcements: general for everyone; section/teacher only for matching (or "all") section
 export function announcementsForSection<T extends {scope?: unknown; section?: unknown}>(rows: T[], section: Section): T[] {
   return rows.filter(a => a.scope === "general" || a.section === "all" || a.section === section);

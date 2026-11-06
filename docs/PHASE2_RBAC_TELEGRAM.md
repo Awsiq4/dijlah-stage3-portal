@@ -66,3 +66,12 @@ S1 rep A لا ينشر لـB · S2 teacher بدون مادة/شعبة غير م�
 - `BLOB_READ_WRITE_TOKEN` = من Vercel → Storage → Blob (لرفع PDF المباشر؛ بدونه للرفع المباشر؛ بدونه يمكن رفع ملفات أكبر من 20MB عبر البوت فقط
 - `DATABASE_URL` / `SESSION_SECRET` / `ADMIN_API_SECRET` / `TELEGRAM_BOT_ENABLED=false`
 لا تُعيّن أيًا منها في Production. `scripts/vercel-set-env.mjs` لا ي Vita Production أبدًا.
+
+## 12. جمهور المواد/الملازم (Audience) — التحديث الأحدث
+
+- الصلاحية الجديدة `canPublishMaterial` في `rbac.ts`: ممثل الشعبةSri ينشر مادة/ملزمة لأي مادة белum (شعبته أو جميع الشعب فقط — الافتراضي «شعبتي»)، الممثل العام لأي مادة (جميع الشعب أو شعبة واحدة)، Ustadh للمواد المسندة فقط، السوبر admin للكل.
+- Ø¨Ø§ÙØ¥Ø¶Ø§ÙØ©: عمود `sections JSONB` جديد في `portal_lectures` (الهجرة أضيفت في `database/portal-rbac.sql` — default جميع الشعب للسطور القديمة).
+- Publika: `/api/public/content` يرشّح المحاضرات حسب `sections` (عبر `lecturesForSection`) — Ø§ÙØ·ÙØ§Ø¨ A,B,C,F يرون «جميع الشعب»، وشعبتهم فقط للمادة للمادة واحدة فقط.
+- البوت: خطوة «الجمهور» بعد المادة (شعبتي/جميع الشعب)، الـpreview يعرض الجمهور بالضبط، التأكيد يعيد فحص (link + status + role + subject + audience) — idempotent، والرابط Canonical `${PORTAL_BASE_URL}/subjects/<id>`.
+- ربط Telegram: refuse لتعارض (telegram_user_id مربوط بحساب آخر) + إلغاء يبطل الرموز المعلّقة.
+- اختبارات: M1/M2 (مصفوفة الصلاحيات) + E2E pg-mem (نشر لجميع الشعب vs شعبتي، الرفض، الظهور حسب الشعبة) — **60/60 pass**.

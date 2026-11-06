@@ -3,7 +3,7 @@
 import {withTx, defaultQueryer} from "./db.ts";
 import {buildUpsert, sanitizeRow, SCHEMAS, type WritableContentType} from "./content-schema.ts";
 import {audit} from "./content.ts";
-import {canPublishAnnouncement, canPublishSubjectContent, canModifyContent, canManageAllContent, isActive, type AdminInfo} from "./rbac.ts";
+import {canPublishAnnouncement, canPublishSubjectContent, canPublishMaterial, canModifyContent, canManageAllContent, isActive, type AdminInfo} from "./rbac.ts";
 import {telegramServiceEnabled} from "./flags.ts";
 
 export type PublishOk = {ok: true; id: string; inserted: boolean};
@@ -82,8 +82,9 @@ export async function publishLecture(
   input: {id?: string; subjectId: string; number: number; title: string; description?: string; fileUrl: string; fileName?: string; sections?: string[]; source?: "web" | "telegram"}
 ): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
-  const sections = input.sections && input.sections.length ? input.sections : ["A", "B", "C", "F"];
-  if (!canPublishSubjectContent(admin, input.subjectId, sections)) return fail("forbidden: subject or sections not authorized");
+  const ALL = ["A", "B", "C", "F"];
+  const sections = input.sections && input.sections.length ? input.sections.map(String) : ALL;
+  if (!canPublishMaterial(admin, input.subjectId, sections)) return fail("forbidden: subject or audience not authorized");
   if (!/^\/[A-Za-z0-9_\-./]+$/.test(input.fileUrl) && !/^https:\/\//.test(input.fileUrl)) return fail("invalid file url");
   const id = input.id || `lec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let row: Record<string, unknown>;
@@ -91,12 +92,13 @@ export async function publishLecture(
     row = sanitizeRow("lectures", {
       id, subject_id: input.subjectId, number: input.number, title: input.title,
       description: input.description || "", file_url: input.fileUrl, file_name: input.fileName || input.fileUrl.split("/").pop() || "",
-      status: "published", updated_at: new Date().toISOString().slice(0, 10),
+      sections, status: "published", updated_at: new Date().toISOString().slice(0, 10),
     });
   } catch (e) { return fail(e instanceof Error ? e.message : "invalid input"); }
   const res = await insertWithOwnership("lectures", admin, row, input.source || "web", input.id ? "update" : "nothing");
   if (res.ok && res.inserted) {
-    await notifyIfEnabled({type: "lecture", refId: id, title: input.title, body: input.description, url: `/lectures/${id}`, scope: "general", subject_id: input.subjectId});
+    const isAll = ALL.every(x => sections.includes(x));
+    await notifyIfEnabled({type: "lecture", refId: id, title: input.title, body: input.description, url: `/subjects/${input.subjectId}`, scope: isAll ? "general" : "section", section: isAll ? undefined : sections[0], subject_id: input.subjectId});
   }
   return res;
 }

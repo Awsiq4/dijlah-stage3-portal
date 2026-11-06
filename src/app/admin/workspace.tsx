@@ -19,10 +19,16 @@ export function RoleWorkspace({me}: {me: Me}) {
   const [number, setNumber] = useState("1");
   const [fileUrl, setFileUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [subjects, setSubjects] = useState<Row[]>([]);
+  const [audience, setAudience] = useState<"own" | "all">("own");
+  useEffect(() => {
+    fetch("/api/public/content?type=subjects", {cache: "no-store"}).then(r => r.json()).then(j => setSubjects(j.content?.subjects || [])).catch(() => setSubjects([]));
+  }, []);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [kind, setKind] = useState<"ann" | "mat">(isRep ? "ann" : "mat");
 
-  const type = isRep ? "announcements" : "lectures";
+  const type = kind === "ann" ? "announcements" : "lectures";
   const load = useCallback(() => {
     fetch(`/api/admin/content?type=${type}`, {cache: "no-store"}).then(r => r.json()).then(j => setRows(j.rows || [])).catch(() => setRows([]));
   }, [type]);
@@ -33,7 +39,7 @@ export function RoleWorkspace({me}: {me: Me}) {
     setBusy(true); setNotice("");
     try {
       let url = fileUrl;
-      if (isTeacher && file) {
+      if (kind === "mat" && file) {
         // direct-to-Blob upload: bypasses the 4.5MB function limit; the route validates role/subject/type/size
         const blob = await upload(file.name, file, {
           access: "public",
@@ -43,10 +49,11 @@ export function RoleWorkspace({me}: {me: Me}) {
         });
         url = blob.url;
       }
-      if (isTeacher && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); setBusy(false); return; }
-      const row = isRep
+      if (kind === "mat" && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); setBusy(false); return; }
+      const sections = audience === "all" ? ["A", "B", "C", "F"] : [me.assigned_section || "A"];
+      const row = isRep && kind === "ann"
         ? {id: `web-${Date.now()}`, title, body, scope: me.role === "section_representative" ? "section" : "general", section: me.role === "section_representative" ? me.assigned_section : "all", priority: "normal", published_at: new Date().toISOString(), pinned: "false"}
-        : {id: `web-${Date.now()}`, subject_id: subjectId, number: Number(number) || 1, title, description: body, file_url: url, file_name: (file?.name || url.split("/").pop() || ""), status: "published", updated_at: new Date().toISOString().slice(0, 10)};
+        : {id: `web-${Date.now()}`, subject_id: subjectId, number: Number(number) || 1, title, description: body, file_url: url, file_name: (file?.name || url.split("/").pop() || ""), sections, status: "published", updated_at: new Date().toISOString().slice(0, 10)};
       const res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
       const j = await res.json().catch(() => ({}));
       if (!res.ok) { setNotice(j.error || "فشل النشر"); return; }
@@ -63,28 +70,37 @@ export function RoleWorkspace({me}: {me: Me}) {
   };
 
   return <>
-    <PageHeading title={isRep ? "نشر تبليغ" : "إضافة محاضرة"} description={`${me.name || me.email} · ${me.role}${me.assigned_section ? ` · الشعبة ${me.assigned_section}` : ""}${me.assigned_subjects?.length ? ` · المواد: ${me.assigned_subjects.join("، ")}` : ""}`}/>
+    <PageHeading title={kind === "ann" ? "نشر تبليغ" : "نشر محاضرة / ملزمة"} description={`${me.name || me.email} · ${me.role}${me.assigned_section ? ` · الشعبة ${me.assigned_section}` : ""}${me.assigned_subjects?.length ? ` · المواد: ${me.assigned_subjects.join("، ")}` : ""}`}/>
     {notice && <p className="note" role="status">{notice}</p>}
+    {isRep && <div className="tabs admin-tabs" style={{marginBottom: 14}}>
+      <button className={kind === "ann" ? "selected" : ""} onClick={() => setKind("ann")}>📢 تبليغ</button>
+      <button className={kind === "mat" ? "selected" : ""} onClick={() => setKind("mat")}>📚 محاضرة / ملزمة</button>
+    </div>}
     <div className="panel"><div className="panel-body">
       <form className="admin-form" onSubmit={publish}>
-        {isTeacher && <>
+        {kind === "mat" && <>
           <label className="form-field"><span>المادة *</span>
             <select value={subjectId} onChange={e => setSubjectId(e.target.value)} required>
-              <option value="">— اختر مادة مسندة —</option>
-              {(me.assigned_subjects || []).map(s => <option key={s} value={s}>{s}</option>)}
+              <option value="">— اختر المادة —</option>
+              {(isTeacher ? (me.assigned_subjects || []).map(s => ({id: s, name: s})) : subjects.map(s => ({id: String(s.id), name: String(s.name)}))).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select></label>
-          <label className="form-field"><span>رقم المحاضرة</span><input type="number" min={1} value={number} onChange={e => setNumber(e.target.value)}/></label>
+          <label className="form-field"><span>رقم المحاضرة/الملزمة</span><input type="number" min={1} value={number} onChange={e => setNumber(e.target.value)}/></label>
+          {isRep && <label className="form-field"><span>الجمهور *</span>
+            <select value={audience} onChange={e => setAudience(e.target.value as "own" | "all")}>
+              <option value="own">📌 شعبتي ({me.assigned_section})</option>
+              <option value="all">🌐 جميع الشعب (A, B, C, F)</option>
+            </select></label>}
         </>}
         <label className="form-field wide"><span>العنوان *</span><input value={title} onChange={e => setTitle(e.target.value)} required/></label>
         <label className="form-field wide"><span>{isRep ? "نص التبليغ" : "الوصف"}</span><textarea rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
-        {isTeacher && <>
+        {kind === "mat" && <>
           <label className="form-field wide"><span>ملف PDF (رفع من الجهاز)</span><input type="file" accept="application/pdf,.pdf" onChange={e => { setFile(e.target.files?.[0] || null); setFileUrl(""); }}/></label>
           <label className="form-field wide"><span>…أو رابط ملف محفوظ</span><input dir="ltr" placeholder="https://…pdf" value={fileUrl} onChange={e => { setFileUrl(e.target.value); setFile(null); }}/></label>
         </>}
         <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}} disabled={busy}><Send size={15}/> {busy ? "جارٍ النشر…" : "نشر الآن"}</button>
       </form>
     </div></div>
-    <div className="panel"><div className="panel-heading"><h2>{isRep ? "تبليغاتي" : "محاضراتي"}</h2></div><div className="panel-body">
+    <div className="panel"><div className="panel-heading"><h2>{kind === "ann" ? "تبليغاتي" : "موادي المنشورة"}</h2></div><div className="panel-body">
       {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map((r, i) => <div className="list-row" key={String(r.id || i)}>
         <div className="grow"><strong>{String(r.title || r.id)}</strong><p className="subtle small">{String(r.section || r.subject_id || "")}</p></div>
         <button className="action-button secondary" title="حذف" onClick={() => remove(String(r.id))}><Trash2 size={14}/></button>

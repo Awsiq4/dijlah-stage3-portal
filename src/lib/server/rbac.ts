@@ -63,6 +63,28 @@ export function canPublishSubjectContent(a: AdminInfo, subjectId: string, target
   return targetSections.every(s => allowed.includes(s as Section));
 }
 
+const ALL_SECTIONS = ["A", "B", "C", "F"];
+
+// Lecture materials & booklets (portal_lectures) audience rules:
+//  - super_admin/editor: any subject, any audience
+//  - general_representative: any subject; all sections or one section
+//  - section_representative: any subject; audience must be exactly [own section] OR all sections
+//  - teacher: assigned subjects only; sections limited by teacher_sections mapping
+export function canPublishMaterial(a: AdminInfo, subjectId: string, targetSections: string[]): boolean {
+  if (!isActive(a)) return false;
+  if (canManageAllContent(a.role)) return true;
+  const secs = targetSections.length ? targetSections.map(String) : ALL_SECTIONS;
+  if (!secs.every(s => ALL_SECTIONS.includes(s))) return false;
+  if (a.role === "general_representative") return true; // any subject, all or single section
+  if (a.role === "section_representative") {
+    const isOwn = secs.length === 1 && secs[0] === a.assigned_section;
+    const isAll = ALL_SECTIONS.every(s => secs.includes(s));
+    return isOwn || isAll;
+  }
+  if (a.role === "teacher") return canPublishSubjectContent(a, subjectId, secs);
+  return false;
+}
+
 // Unified write gate for the admin content API: privileged roles write anything;
 // reps/teachers are limited by scope/subject rules. Used by /api/admin/content.
 export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<string, unknown>): boolean {
@@ -71,7 +93,11 @@ export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<s
   if (canManageAllContent(a.role)) return true;
   if (!row) return false;
   if (type === "announcements") return canPublishAnnouncement(a, String(row.scope || "general"), String(row.section || "all"));
-  if (type === "lectures" || type === "exams" || type === "assignments") {
+  if (type === "lectures") {
+    const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
+    return canPublishMaterial(a, String(row.subject_id || ""), sections);
+  }
+  if (type === "exams" || type === "assignments") {
     const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
     return canPublishSubjectContent(a, String(row.subject_id || ""), sections);
   }
