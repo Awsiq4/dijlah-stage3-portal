@@ -82,6 +82,11 @@
       "sha256": "b219cc5dcc5f4113361c01b062b5241703c60651a73725fe10f46cda6395ec85"
     },
     {
+      "path": "docs/OWNER_GUIDE.md",
+      "bytes": 5443,
+      "sha256": "df378ef103a634e04ce57e597aa0b54f35d78222997995388b048bbce5d81833"
+    },
+    {
       "path": "docs/PHASE1_2_AUTOMATION.md",
       "bytes": 5425,
       "sha256": "bfc0ab3c8a994c974a2e2339d06665e2ec72f45fddc10b873891fb06bf28bf21"
@@ -128,8 +133,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 1948,
-      "sha256": "25d7c4d668bbe0c9490a516802d5ef7dee74777db7aeed214143d77a4c6e691a"
+      "bytes": 1979,
+      "sha256": "492f563d3b3ecf9e17da9b3b1101b278c5e081b81b034a795c3acc9f9f4b99e9"
     },
     {
       "path": "public/images/department-logo.png",
@@ -278,8 +283,8 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 2806,
-      "sha256": "2cb24557ec115ccb4ce438f2bc2eed7201e1d2a8514b202091aadc3ccac73348"
+      "bytes": 2896,
+      "sha256": "7aa0f5c10b67ec668dcdfbac161291d67ab7f95483d909b02b1b88bfc74509a7"
     },
     {
       "path": "src/app/admin-legacy/page.tsx",
@@ -293,8 +298,8 @@
     },
     {
       "path": "src/app/admin/page.tsx",
-      "bytes": 16926,
-      "sha256": "ee751de6f69413d1a396b8307a4b01023cdfc1faeab51475db0b1046353e419b"
+      "bytes": 17122,
+      "sha256": "e392229df15dff7cbe67cca37515ce07308624b02db6876ee8b9aaeeac67e814"
     },
     {
       "path": "src/app/admin/setup/page.tsx",
@@ -303,13 +308,18 @@
     },
     {
       "path": "src/app/admin/workspace.tsx",
-      "bytes": 19687,
-      "sha256": "0d5910aaf07545235257f630f794cd2a75e44e428a274c23055064a9aa16f450"
+      "bytes": 21227,
+      "sha256": "3700b91c6784254c9d664b89166745ad781345e0b175e6bfb67966e1b6c91ee0"
     },
     {
       "path": "src/app/announcements/page.tsx",
       "bytes": 1924,
       "sha256": "620ff84d032e2b8014f4ca12f21044962de7abbe98b0ac307e94bd07f86b8cec"
+    },
+    {
+      "path": "src/app/api/admin/audit/route.ts",
+      "bytes": 1025,
+      "sha256": "4aa0393da6c9f6aea84f72d84e6f826252eebd496d757102f97c50c69746600e"
     },
     {
       "path": "src/app/api/admin/content/route.ts",
@@ -570,6 +580,11 @@
       "path": "src/lib/server/flags.ts",
       "bytes": 1982,
       "sha256": "008aef004166cea40b4290dfb0a9ab68e2949a446e933568882e890da18fe3aa"
+    },
+    {
+      "path": "src/lib/server/notify.test.mjs",
+      "bytes": 4890,
+      "sha256": "d4e926aa5f22a91da42b2a384d39a94815999ffe5b447ef37bdbaf46c2212a5e"
     },
     {
       "path": "src/lib/server/notify.ts",

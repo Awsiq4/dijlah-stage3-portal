@@ -10,7 +10,7 @@
     "verify": "node scripts/verify-structure.mjs",
     "verify:schedule": "node --experimental-strip-types scripts/verify-schedule.mjs",
     "gen:schedule-csv": "node --experimental-strip-types scripts/gen-schedule-csv.mjs",
-    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/public-map.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs src/lib/server/content-schema.test.mjs src/lib/server/db.test.mjs src/lib/server/public.test.mjs src/lib/server/rbac.test.mjs src/lib/server/publish.test.mjs src/lib/server/admin-api.test.mjs",
+    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/public-map.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs src/lib/server/content-schema.test.mjs src/lib/server/db.test.mjs src/lib/server/public.test.mjs src/lib/server/rbac.test.mjs src/lib/server/publish.test.mjs src/lib/server/admin-api.test.mjs src/lib/server/notify.test.mjs",
     "test:e2e": "node --experimental-strip-types scripts/e2e-publish-test.mjs",
     "db:schema": "node --experimental-strip-types scripts/apply-portal-schema.mjs",
     "db:rbac": "node --experimental-strip-types scripts/apply-portal-rbac.mjs",

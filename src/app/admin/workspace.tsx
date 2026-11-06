@@ -26,6 +26,7 @@ export function RoleWorkspace({me}: {me: Me}) {
   }, []);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lastLink, setLastLink] = useState("");
   const [kind, setKind] = useState<"ann" | "mat">(isRep ? "ann" : "mat");
 
   const type = kind === "ann" ? "announcements" : "lectures";
@@ -74,8 +75,10 @@ export function RoleWorkspace({me}: {me: Me}) {
         setNotice(`⛔ فشل حفظ المحتوى في قاعدة البيانات: ${j.error || "خطأ غير معروف"} — رابط الملف محفوظ، أعد الضغط على "نشر الآن".`);
         return;
       }
-      // success only after the content record is saved
-      setNotice("✅ تم نشر المحتوى بنجاح — willصل إشعار Telegram للمشتركين عند تفعيل الخدمة");
+      // success only after the content record is saved — include a link to the published item
+      const link = kind === "ann" ? "/announcements" : `/subjects/${subjectId}`;
+      setNotice(`✅ تم نشر المحتوى بنجاح — سيصل إشعار Telegram عند تفعيل الخدمة. 🔗 عرض المنشور: ${link}`);
+      setLastLink(link);
       setTitle(""); setBody(""); setFileUrl(""); setFile(null);
       load();
     } finally { setBusy(false); }
@@ -89,7 +92,7 @@ export function RoleWorkspace({me}: {me: Me}) {
 
   return <>
     <PageHeading title={kind === "ann" ? "نشر تبليغ" : "نشر محاضرة / ملزمة"} description={`${me.name || me.email} · ${me.role}${me.assigned_section ? ` · الشعبة ${me.assigned_section}` : ""}${me.assigned_subjects?.length ? ` · المواد: ${me.assigned_subjects.join("، ")}` : ""}`}/>
-    {notice && <p className="note" role="status">{notice}</p>}
+    {notice && <p className="note" role="status">{notice}{lastLink && <><br/><a href={lastLink} className="action-button secondary" style={{display:"inline-flex",marginTop:6}}>🔗 فتح المنشور ({lastLink})</a></>}</p>}
     {isRep && <div className="tabs admin-tabs" style={{marginBottom: 14}}>
       <button className={kind === "ann" ? "selected" : ""} onClick={() => setKind("ann")}>📢 تبليغ</button>
       <button className={kind === "mat" ? "selected" : ""} onClick={() => setKind("mat")}>📚 محاضرة / ملزمة</button>
@@ -169,7 +172,7 @@ export function UsersTab() {
 
   return <>
     <div className="panel"><div className="panel-heading"><h2><Plus size={18}/> إضافة مستخدم (دعوة)</h2></div><div className="panel-body">
-      {notice && <p className="note" role="status">{notice}</p>}
+    {notice && <p className="note" role="status">{notice}</p>}
       <form className="admin-form" onSubmit={invite}>
         <label className="form-field"><span>الاسم *</span><input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} required/></label>
         <label className="form-field"><span>البريد الإلكتروني *</span><input dir="ltr" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} required/></label>
@@ -250,7 +253,7 @@ export function TelegramCenterTab() {
           <div className="stat" key={String(s.table)}><SendIcon/><span>{String(s.table)}</span><strong>{String(s.count)}</strong></div>)}
       </div>
       <p className="subtle small">الحالة: <Status tone="muted">معطّل (TELEGRAM_BOT_ENABLED=false)</Status> — الإشعارات لا تُرسل حتى التفعيل الصريح.</p>
-      {notice && <p className="note" role="status">{notice}</p>}
+    {notice && <p className="note" role="status">{notice}</p>}
       <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
         <button className="action-button" onClick={createLink}><Link2 size={15}/> ربط حساب Telegram</button>
         <button className="action-button secondary" onClick={unlink}><Unlink size={15}/> إلغاء Rabط</button>
@@ -283,5 +286,21 @@ export function AccountPanel() {
     <p className="subtle small">Telegram: {link}</p>
     {notice && <p className="note" role="status">{notice}</p>}
     <button className="action-button secondary" onClick={create}><Link2 size={15}/> ربط حساب Telegram</button>
+  </div></div>;
+}
+
+// ---------- super admin: سجل الأحداث (audit log) ----------
+export function AuditTab() {
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    fetch("/api/admin/audit?limit=200", {cache: "no-store"}).then(r => r.json()).then(j => setRows(j.rows || [])).catch(() => setErr("تعذر تحميل السجل"));
+  }, []);
+  return <div className="panel"><div className="panel-heading"><h2>سجل الأحداث</h2></div><div className="panel-body">
+    {err && <p className="note" role="alert">{err}</p>}
+    {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map(r => <div className="list-row" key={String(r.id)}>
+      <div className="grow"><strong>{String(r.action)}</strong><p className="subtle small">{String(r.actor)} · {new Date(String(r.created_at)).toLocaleString("ar-IQ")}</p>
+      {r.detail ? <p className="subtle small" dir="ltr" style={{direction:"ltr", textAlign:"right"}}>{JSON.stringify(r.detail)}</p> : null}</div>
+    </div>)}</div> : <Empty description="لا توجد أحداث بعد."/>}
   </div></div>;
 }
