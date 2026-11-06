@@ -303,8 +303,8 @@
     },
     {
       "path": "src/app/admin/workspace.tsx",
-      "bytes": 18645,
-      "sha256": "2e17b7a52c14a14857f6922135b2324771fa7cac86f203d4fd235e2107a860d6"
+      "bytes": 19687,
+      "sha256": "0d5910aaf07545235257f630f794cd2a75e44e428a274c23055064a9aa16f450"
     },
     {
       "path": "src/app/announcements/page.tsx",
@@ -518,8 +518,8 @@
     },
     {
       "path": "src/lib/server/admin-api.test.mjs",
-      "bytes": 6107,
-      "sha256": "dd938c5e05f7387b93640b0c069842caa523c0a63aea902aa9f2fb60a54c5350"
+      "bytes": 7821,
+      "sha256": "28b77bf6bcbaa8c18a13340584db49abd169d2180fa88c1bd40906af86464a32"
     },
     {
       "path": "src/lib/server/auth.test.mjs",
@@ -618,8 +618,8 @@
     },
     {
       "path": "src/lib/server/storage.ts",
-      "bytes": 3112,
-      "sha256": "013b94e3a4752dd2294bc155c2c8e4500b427da4965bc9bf1292a1d5867d655c"
+      "bytes": 3254,
+      "sha256": "c6fdea29a808c7eb4da1bd26a60af41037c1aae3ad93f9de258ae4a7500fa4ca"
     },
     {
       "path": "src/lib/server/targeting.ts",

@@ -29,7 +29,7 @@ export async function uploadLecturePdf(buf: Buffer, filename: string): Promise<{
 // Validation for the direct-to-Blob upload token request (handleUpload onBeforeGenerateToken).
 // Checks: authenticated publisher role, PDF type, size cap, and (when given) subject authorization.
 import type {AdminInfo} from "./rbac.ts";
-import {canUseTelegramPublishing, canPublishSubjectContent, canManageAllContent} from "./rbac.ts";
+import {canUseTelegramPublishing, canPublishMaterial} from "./rbac.ts";
 
 export interface UploadRequestInfo {
   filename: string;
@@ -48,15 +48,14 @@ export function validateUploadRequest(admin: AdminInfo, info: Partial<UploadRequ
   if (size > MAX_PDF_BYTES_DIRECT) throw new UploadRejectedError("file too large (max 100MB direct upload; 20MB via bot)");
   const name = String(info.filename || "");
   if (!/\.pdf$/i.test(name)) throw new UploadRejectedError("filename must end with .pdf");
+  // Same server-side policy as lecture publishing (rbac.canPublishMaterial):
+  // section rep -> any valid subject, audience = own section OR all sections;
+  // general rep -> any subject, all or single section; teacher -> assigned subjects + permitted sections.
+  // The final authorization still happens again on POST /api/admin/content.
   if (info.subjectId) {
     const subj = String(info.subjectId);
-    if (!canManageAllContent(admin.role)) {
-      const subjects = admin.assigned_subjects || [];
-      if (!subjects.includes(subj)) throw new UploadRejectedError("forbidden: subject not authorized");
-      if (Array.isArray(info.sections) && info.sections.length) {
-        if (!canPublishSubjectContent(admin, subj, info.sections.map(String))) throw new UploadRejectedError("forbidden: sections not authorized");
-      }
-    }
+    const sections = Array.isArray(info.sections) && info.sections.length ? info.sections.map(String) : ["A", "B", "C", "F"];
+    if (!canPublishMaterial(admin, subj, sections)) throw new UploadRejectedError("forbidden: subject or audience not authorized");
   }
 }
 

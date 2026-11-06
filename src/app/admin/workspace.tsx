@@ -37,28 +37,46 @@ export function RoleWorkspace({me}: {me: Me}) {
   const publish = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setNotice("");
+    const sections = audience === "all" ? ["A", "B", "C", "F"] : [me.assigned_section || "A"];
     try {
       let url = fileUrl;
       if (kind === "mat" && file) {
-        // direct-to-Blob upload: bypasses the 4.5MB function limit; the route validates role/subject/type/size
-        const blob = await upload(file.name, file, {
-          access: "public",
-          handleUploadUrl: "/api/admin/upload",
-          contentType: "application/pdf",
-          clientPayload: JSON.stringify({filename: file.name, contentType: "application/pdf", size: file.size, subjectId}),
-        });
-        url = blob.url;
+        // direct-to-Blob upload: bypasses the 4.5MB function limit; the route validates role/subject/AUDIENCE/type/size
+        try {
+          const blob = await upload(file.name, file, {
+            access: "public",
+            handleUploadUrl: "/api/admin/upload",
+            contentType: "application/pdf",
+            clientPayload: JSON.stringify({filename: file.name, contentType: "application/pdf", size: file.size, subjectId, sections}),
+          });
+          url = blob.url;
+        } catch (err) {
+          // upload failure: keep title/subject/audience/file for retry, show a distinct Arabic error
+          const msg = err instanceof Error && err.message ? err.message : "";
+          setNotice(`⛔ فشل رفع ملف PDF: ${msg || "تحقق من أن الملف PDF صالح وأقل من 100MB"} — لم يُحفظ أي محتوى، يمكنك إعادة المحاولة.`);
+          return;
+        }
       }
-      if (kind === "mat" && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); setBusy(false); return; }
-      const sections = audience === "all" ? ["A", "B", "C", "F"] : [me.assigned_section || "A"];
+      if (kind === "mat" && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); return; }
       const row = isRep && kind === "ann"
         ? {id: `web-${Date.now()}`, title, body, scope: me.role === "section_representative" ? "section" : "general", section: me.role === "section_representative" ? me.assigned_section : "all", priority: "normal", published_at: new Date().toISOString(), pinned: "false"}
         : {id: `web-${Date.now()}`, subject_id: subjectId, number: Number(number) || 1, title, description: body, file_url: url, file_name: (file?.name || url.split("/").pop() || ""), sections, status: "published", updated_at: new Date().toISOString().slice(0, 10)};
-      const res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
+      let res;
+      try {
+        res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
+      } catch {
+        setNotice("⛔ تعذر الاتصال بالخادم أثناء حفظ المحتوى — لم يُحفظ شيء، أعد المحاولة.");
+        return;
+      }
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) { setNotice(j.error || "فشل النشر"); return; }
-      setNotice("✅ تم النشر بنجاح وسيصل إشعار Telegram للمشتركين عند تفعيل الخدمة");
-      setTitle(""); setBody(""); setFileUrl("");
+      if (!res.ok) {
+        // publishing failure (distinct from upload failure); form values are kept for retry
+        setNotice(`⛔ فشل حفظ المحتوى في قاعدة البيانات: ${j.error || "خطأ غير معروف"} — رابط الملف محفوظ، أعد الضغط على "نشر الآن".`);
+        return;
+      }
+      // success only after the content record is saved
+      setNotice("✅ تم نشر المحتوى بنجاح — willصل إشعار Telegram للمشتركين عند تفعيل الخدمة");
+      setTitle(""); setBody(""); setFileUrl(""); setFile(null);
       load();
     } finally { setBusy(false); }
   };

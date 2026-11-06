@@ -85,7 +85,7 @@ test("content API ownership: non-owner update is rejected with 403, owner update
 test("upload validation: role, pdf type, size cap, subject authorization", () => {
   const teacher = {id: 4, role: "teacher", status: "active", assigned_subjects: ["nonlinear-optics"], perms: {teacher_sections: {"nonlinear-optics": ["A"]}}};
   // happy path
-  validateUploadRequest(teacher, {filename: "lec.pdf", contentType: "application/pdf", size: 50 * 1024 * 1024, subjectId: "nonlinear-optics"});
+  validateUploadRequest(teacher, {filename: "lec.pdf", contentType: "application/pdf", size: 50 * 1024 * 1024, subjectId: "nonlinear-optics", sections: ["A"]});
   // non-pdf rejected
   assert.throws(() => validateUploadRequest(teacher, {filename: "x.exe", contentType: "application/x-msdownload", size: 1000}), UploadRejectedError);
   assert.throws(() => validateUploadRequest(teacher, {filename: "x.pdf", contentType: "text/html", size: 1000}), UploadRejectedError);
@@ -99,4 +99,21 @@ test("upload validation: role, pdf type, size cap, subject authorization", () =>
   assert.throws(() => validateUploadRequest({id: 9, role: "viewer", status: "active"}, {filename: "x.pdf", contentType: "application/pdf", size: 1000}), UploadRejectedError);
   // suspended teacher cannot upload
   assert.throws(() => validateUploadRequest({...teacher, status: "suspended", is_active: false}, {filename: "x.pdf", contentType: "application/pdf", size: 1000}), UploadRejectedError);
+});
+
+test("REGRESSION: section rep CAN upload/publish a valid subject (was 403), audience own-or-all only", () => {
+  const ALL = ["A", "B", "C", "F"];
+  // the original bug: rep A + digital-systems + all sections was rejected
+  validateUploadRequest(repA, {filename: "lec.pdf", contentType: "application/pdf", size: 1024, subjectId: "digital-systems", sections: ALL});
+  validateUploadRequest(repA, {filename: "lec.pdf", contentType: "application/pdf", size: 1024, subjectId: "digital-systems", sections: ["A"]});
+  // rep A targeting section B alone must still be rejected
+  assert.throws(() => validateUploadRequest(repA, {filename: "lec.pdf", contentType: "application/pdf", size: 1024, subjectId: "digital-systems", sections: ["B"]}), /not authorized/);
+  assert.throws(() => validateUploadRequest(repA, {filename: "lec.pdf", contentType: "application/pdf", size: 1024, subjectId: "digital-systems", sections: ["A", "B"]}), /not authorized/);
+});
+
+test("teacher upload: assigned subject OK, unassigned rejected, unpermitted section rejected", () => {
+  const t = {id: 4, role: "teacher", status: "active", assigned_subjects: ["nonlinear-optics"], perms: {teacher_sections: {"nonlinear-optics": ["A", "B"]}}};
+  validateUploadRequest(t, {filename: "x.pdf", contentType: "application/pdf", size: 1000, subjectId: "nonlinear-optics", sections: ["A"]});
+  assert.throws(() => validateUploadRequest(t, {filename: "x.pdf", contentType: "application/pdf", size: 1000, subjectId: "digital-systems"}), /not authorized/);
+  assert.throws(() => validateUploadRequest(t, {filename: "x.pdf", contentType: "application/pdf", size: 1000, subjectId: "nonlinear-optics", sections: ["C"]}), /not authorized/);
 });
