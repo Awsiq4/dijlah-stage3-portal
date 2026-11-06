@@ -67,11 +67,11 @@ S1 rep A لا ينشر لـB · S2 teacher بدون مادة/شعبة غير م�
 - `DATABASE_URL` / `SESSION_SECRET` / `ADMIN_API_SECRET` / `TELEGRAM_BOT_ENABLED=false`
 لا تُعيّن أيًا منها في Production. `scripts/vercel-set-env.mjs` لا ي Vita Production أبدًا.
 
-## 12. جمهور المواد/الملازم (Audience) — التحديث الأحدث
+## 12. جمهور المواد والملازم (Audience)
 
-- الصلاحية الجديدة `canPublishMaterial` في `rbac.ts`: ممثل الشعبةSri ينشر مادة/ملزمة لأي مادة белum (شعبته أو جميع الشعب فقط — الافتراضي «شعبتي»)، الممثل العام لأي مادة (جميع الشعب أو شعبة واحدة)، Ustadh للمواد المسندة فقط، السوبر admin للكل.
-- Ø¨Ø§ÙØ¥Ø¶Ø§ÙØ©: عمود `sections JSONB` جديد في `portal_lectures` (الهجرة أضيفت في `database/portal-rbac.sql` — default جميع الشعب للسطور القديمة).
-- Publika: `/api/public/content` يرشّح المحاضرات حسب `sections` (عبر `lecturesForSection`) — Ø§ÙØ·ÙØ§Ø¨ A,B,C,F يرون «جميع الشعب»، وشعبتهم فقط للمادة للمادة واحدة فقط.
-- البوت: خطوة «الجمهور» بعد المادة (شعبتي/جميع الشعب)، الـpreview يعرض الجمهور بالضبط، التأكيد يعيد فحص (link + status + role + subject + audience) — idempotent، والرابط Canonical `${PORTAL_BASE_URL}/subjects/<id>`.
-- ربط Telegram: refuse لتعارض (telegram_user_id مربوط بحساب آخر) + إلغاء يبطل الرموز المعلّقة.
-- اختبارات: M1/M2 (مصفوفة الصلاحيات) + E2E pg-mem (نشر لجميع الشعب vs شعبتي، الرفض، الظهور حسب الشعبة) — **60/60 pass**.
+- الصلاحية الجديدة `canPublishMaterial` في `rbac.ts`: ممثل الشعبة ينشر مادة/ملزمة لأي مادة (شعبته أو جميع الشعب فقط — الافتراضي «شعبتي»)؛ الممثل العام لأي مادة (جميع الشعب أو شعبة واحدة)؛ Ustadh للمواد المسندة فقط؛ السوبر admin للكل.
+- قاعدة البيانات: عمود `sections JSONB` جديد في `portal_lectures` (أُضيف في `database/portal-rbac.sql` — افتراضيًا جميع الشعب للسجلات old).
+- الطبقة العامة: `/api/public/content` يرشّح المحاضرات حسب `sections` عبر `lecturesForSection` — الطلاب في A,B,C,F يرون «جميع الشعب»، وشعبتهم فقط مادة واحدة واحدة.
+- البوت: خطوة «الجمهور» بعد المادة (شعبتي/جميع الشعب)، المعاينة تعرض الجمهور بالضبط، والتأكيد يعيد فحص (link + status + role + subject + audience) — idempotent، ويُرجع الرابط Canonical `${PORTAL_BASE_URL}/subjects/<id>`.
+- ربط Telegram: رفض التعارض (telegram_user_id مربوط بحساب آخر) + إلغاء الربط يبطل الرموز المعلّقة.
+- اختبارات: M1/M2 (مصفوفة الصلاحيات) + E2E pg-mem (نشر لجميع الشعب مقابل شعبتي، الرفض، الظهور حسب الشعبة) — **60/60 pass**.
