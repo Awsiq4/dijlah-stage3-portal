@@ -59,6 +59,10 @@ async function getState(chatId: number): Promise<BotState | null> {
   const s = await qOne<BotState>(`SELECT * FROM portal_bot_state WHERE chat_id=$1 AND expires_at > now()`, [chatId]);
   return s || null;
 }
+export async function hasActiveFlow(chatId: number): Promise<boolean> {
+  const s = await getState(chatId);
+  return Boolean(s?.flow);
+}
 async function setState(chatId: number, flow: string | null, data: Record<string, unknown>): Promise<void> {
   await q(
     `INSERT INTO portal_bot_state (chat_id, flow, data, updated_at, expires_at) VALUES ($1,$2,$3,now(), now() + interval '30 minutes')
@@ -151,7 +155,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
 
   if (data === "adm:ann") {
     if (!canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ حسابك معلّق — تم سحب صلاحيات النشر فوراً."); return; }
-    await setState(chatId, "ann", {step: "title"});
+    await setState(chatId, "ann", {step: "title", draftId: `ann-tg-${chatId}-${Date.now()}`});
     await sendMessage(chatId, "📢 عنوان التبليغ:");
     return;
   }
@@ -164,7 +168,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       subjects = await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
     }
     if (!subjects.length) { await sendMessage(chatId, "⚠️ لا توجد مواد."); return; }
-    await setState(chatId, "lec", {step: "subject"});
+    await setState(chatId, "lec", {step: "subject", draftId: `lec-tg-${chatId}-${Date.now()}`});
     const kb = {inline_keyboard: subjects.map(x => [{text: x.name, callback_data: "lec:subj:" + x.id}])};
     await sendMessage(chatId, "📚 اختر المادة:", {replyMarkup: kb});
     return;
@@ -197,7 +201,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       // re-check permissions immediately before publishing
       const scope = admin.role === "section_representative" ? "section" : "general";
       const section = admin.role === "section_representative" ? String(admin.assigned_section) : "all";
-      const r = await publishAnnouncement(admin, {title: String(d.title || ""), body: String(d.body || ""), scope, section, priority: "normal", source: "telegram"});
+      const r = await publishAnnouncement(admin, {id: String(d.draftId || undefined), title: String(d.title || ""), body: String(d.body || ""), scope, section, priority: "normal", source: "telegram"});
       await clearState(chatId);
       await sendMessage(chatId, r.ok
         ? (r.inserted ? `✅ تم نشر التبليغ.\n🔗 /announcements` : "ℹ️ هذا التبليغ منشور مسبقًا (لا تكرار).")
@@ -210,7 +214,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu()}); return; }
       const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
       const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1`, [String(d.subjectId)]);
-      const r = await publishLecture(fresh, {subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), sections, source: "telegram"});
+      const r = await publishLecture(fresh, {id: String(d.draftId || undefined), subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), sections, source: "telegram"});
       await clearState(chatId);
       await sendMessage(chatId, r.ok
         ? (r.inserted ? `✅ تم نشر المادة في <b>${d.subjectId}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/subjects/${d.subjectId}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")

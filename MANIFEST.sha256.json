@@ -383,8 +383,8 @@
     },
     {
       "path": "src/app/api/telegram/webhook/route.ts",
-      "bytes": 8907,
-      "sha256": "4ee1fc31955ef51fdc53692c7c7d21c30b13b0a99c0fecb7c23d98648556279a"
+      "bytes": 9506,
+      "sha256": "f3595d7c3b57054bb8953acac10c63df07f703bb8c27b1d6d76a4b790308edc2"
     },
     {
       "path": "src/app/api/telegram/worker/route.ts",
@@ -538,8 +538,8 @@
     },
     {
       "path": "src/lib/server/bot.ts",
-      "bytes": 14890,
-      "sha256": "24f9f10d9624e55e8f6ac1cfe4cead107ce96387f0333295ed2669f3d4c9f9d6"
+      "bytes": 15185,
+      "sha256": "bea46932f8ba91c7c888449c566a3d82aff920a9832fa0c6f9fd3bc7535671f9"
     },
     {
       "path": "src/lib/server/content-schema.test.mjs",

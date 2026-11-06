@@ -3,7 +3,7 @@ import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTI
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
 import {sendMessage} from "@/lib/server/telegram";
-import {getLinkedAdmin, handleLinkStart, handleAdminMessage, handleAdminCallback} from "@/lib/server/bot";
+import {getLinkedAdmin, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow} from "@/lib/server/bot";
 
 export const dynamic = "force-dynamic";
 
@@ -123,7 +123,13 @@ export async function POST(req: NextRequest) {
       if (text.startsWith("/start") && arg.startsWith("link_")) {
         await handleLinkStart(Number(message.chat.id), Number(message.from?.id || message.chat.id), arg);
       } else if (text.startsWith("/")) {
-        await handleCommand(Number(message.chat.id), text, arg);
+        // a linked admin mid-flow may send a file URL starting with "/" — route by active flow first
+        const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
+        if (admin && (await hasActiveFlow(Number(message.chat.id)))) {
+          await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
+        } else {
+          await handleCommand(Number(message.chat.id), text, arg);
+        }
       } else {
         // non-command message from a linked admin account -> publishing flow state machine
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
