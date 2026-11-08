@@ -72,6 +72,11 @@
       "sha256": "a8389259ebe19374696117e767142e5612063ef41616bc688b36db569acf7425"
     },
     {
+      "path": "docs/BOT_AUDIT_AND_PLAN.md",
+      "bytes": 10476,
+      "sha256": "6d658d8397e34f87fce6d855538ed8fec825670b5c0bbe36f6b9d39847e6a124"
+    },
+    {
       "path": "docs/HANDOFF_TO_OTHER_AI.md",
       "bytes": 13369,
       "sha256": "816265b28f127d41fb3bf6bdc665f26745aa0d1873c2f4895ba2b1af103f9878"
@@ -83,8 +88,8 @@
     },
     {
       "path": "docs/OWNER_GUIDE.md",
-      "bytes": 5443,
-      "sha256": "df378ef103a634e04ce57e597aa0b54f35d78222997995388b048bbce5d81833"
+      "bytes": 5420,
+      "sha256": "aff2d85952d62f5e430bcac7a606c18cc23aaf2a05cecbf4ba5e1112a5029412"
     },
     {
       "path": "docs/PHASE1_2_AUTOMATION.md",
@@ -283,8 +288,8 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 2896,
-      "sha256": "7aa0f5c10b67ec668dcdfbac161291d67ab7f95483d909b02b1b88bfc74509a7"
+      "bytes": 2925,
+      "sha256": "2dc77ee2016a2755fef3e74e8fe9a7ed4f348c5cb1fab2eddf14a19aa7d8128b"
     },
     {
       "path": "src/app/admin-legacy/page.tsx",
@@ -373,8 +378,8 @@
     },
     {
       "path": "src/app/api/telegram/admin/route.ts",
-      "bytes": 2617,
-      "sha256": "dcfb04e36507dfe173edad026f6d518e5a5e5c105741d3fb5683f72a549e353e"
+      "bytes": 4402,
+      "sha256": "8e8b52e740646d0e17ab51ba5b2297ffc58c57ef37db18eb3d589f07bdd97b08"
     },
     {
       "path": "src/app/api/telegram/health/route.ts",
@@ -393,8 +398,8 @@
     },
     {
       "path": "src/app/api/telegram/webhook/route.ts",
-      "bytes": 9506,
-      "sha256": "f3595d7c3b57054bb8953acac10c63df07f703bb8c27b1d6d76a4b790308edc2"
+      "bytes": 9795,
+      "sha256": "a80f0c3447a4ef928f17e5027623ff3aa5b9e4fb8884b2b9e337a42c3f24c17b"
     },
     {
       "path": "src/app/api/telegram/worker/route.ts",
@@ -548,8 +553,8 @@
     },
     {
       "path": "src/lib/server/bot.ts",
-      "bytes": 15185,
-      "sha256": "bea46932f8ba91c7c888449c566a3d82aff920a9832fa0c6f9fd3bc7535671f9"
+      "bytes": 15643,
+      "sha256": "532af371c2e36cfcf2df805da6f8a6dd38859170f71addd7bd0ef43659ab4c81"
     },
     {
       "path": "src/lib/server/content-schema.test.mjs",
