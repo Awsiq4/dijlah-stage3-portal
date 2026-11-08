@@ -10,6 +10,17 @@ export const ticketNumber = (id:unknown) => `SUP-${String(id).padStart(6,"0")}`;
 export type Actor = {identity?:string; owner:boolean; adminId?:number; telegramId?:number; permissions:string[]};
 export type Attachment = {name:string; mime:string; base64:string};
 export type Ticket = {id:number; identity_id:string; category:string;subject:string;section:string|null;status:string;priority:string;source:string;assigned_to:number|null;created_at:string;updated_at:string;telegram_id?:number;first_name?:string;last_name?:string;username?:string;reg_seq?:number};
+export type VerifiedStudentProfile = {
+  telegram_id: string;
+  first_name: string | null; last_name: string | null; username: string | null;
+  reg_seq: number | null; section: string | null; role: string | null;
+  status: string | null; registered_at: string | null;
+  verified: true;
+};
+export type SupportMessage = {
+  id: number; body: string; created_at: string; internal: boolean;
+  sender_type: "student" | "admin" | "internal";
+};
 export class SupportError extends Error { status:number; constructor(message:string, status=400) {super(message);this.status=status;} }
 export function permission(a:Actor, key:string) {return a.owner || a.permissions.includes('support.manage') || a.permissions.includes('support.'+key);}
 export async function adminActor(admin:AdminRow|null):Promise<Actor> {
@@ -67,9 +78,41 @@ export async function createTicket(a:Actor,input:{category:string;subject:string
 export async function getTicket(a:Actor,id:number) {
  const t=await ticket({q,qOne},a,id);
  const staff=permission(a,'view');
- const messages=await q(`SELECT id,author,body,internal,created_at FROM support_messages WHERE ticket_id=$1 ${staff?'':'AND internal=false'} ORDER BY id`,[id]);
- const attachments=await q(`SELECT f.id,f.message_id,f.name,f.mime FROM support_attachments f JOIN support_messages m ON m.id=f.message_id WHERE m.ticket_id=$1 ${staff?'':'AND m.internal=false'}`,[id]);
- return {ticket:t,messages,attachments,history:staff?await q(`SELECT action,detail,created_at,actor FROM support_history WHERE ticket_id=$1 ORDER BY id`,[id]):[]};
+ const raw=await q<{id:number;author:string;body:string;internal:boolean;created_at:string}>(
+   `SELECT id,author,body,internal,created_at FROM support_messages
+      WHERE ticket_id=$1 ${staff?'':'AND internal=false'} ORDER BY id`,[id]);
+ const messages:SupportMessage[]=raw.map(m=>({
+   id:m.id,body:m.body,internal:m.internal,created_at:m.created_at,
+   sender_type:m.internal?'internal':m.author.startsWith('student:')?'student':'admin',
+ }));
+ const attachments=await q(`SELECT f.id,f.message_id,f.name,f.mime
+   FROM support_attachments f JOIN support_messages m ON m.id=f.message_id
+   WHERE m.ticket_id=$1 ${staff?'':'AND m.internal=false'}`,[id]);
+ // Only the authenticated support staff can see an existing *verified* Telegram
+ // association. We never guess an identity from a username, IP or browser alone.
+ let studentProfile:VerifiedStudentProfile|null=null;
+ if(staff){
+   const existing=await qOne<{
+     telegram_id:string|number|null;first_name:string|null;last_name:string|null;
+     username:string|null;reg_seq:number|null;section:string|null;role:string|null;
+     status:string|null;registered_at:string|null;
+   }>(`SELECT i.telegram_id::text AS telegram_id,
+       s.first_name,s.last_name,s.username,s.reg_seq,s.section,s.role,
+       s.status,s.registered_at
+     FROM support_identities i
+     LEFT JOIN tg_subscribers s ON s.chat_id=i.telegram_id
+     WHERE i.id=$1`,[t.identity_id]);
+   if(existing?.telegram_id)studentProfile={
+     telegram_id:String(existing.telegram_id),
+     first_name:existing.first_name,last_name:existing.last_name,
+     username:existing.username,reg_seq:existing.reg_seq,section:existing.section,
+     role:existing.role,status:existing.status,registered_at:existing.registered_at,
+     verified:true,
+   };
+ }
+ const history=staff?await q(`SELECT action,detail,created_at,actor
+   FROM support_history WHERE ticket_id=$1 ORDER BY id`,[id]):[];
+ return {ticket:t,messages,attachments,history,...(staff?{studentProfile}:{})};
 }
 export async function listTickets(a:Actor,filters:Record<string,string>={}) {
  const staff=permission(a,'view'),params:unknown[]=[],conditions:string[]=[];
@@ -83,7 +126,14 @@ export async function listTickets(a:Actor,filters:Record<string,string>={}) {
  const join='FROM support_tickets t JOIN support_identities i ON i.id=t.identity_id LEFT JOIN tg_subscribers s ON s.chat_id=i.telegram_id';
  const total=await qOne<{n:number}>(`SELECT count(*)::int AS n ${join} ${where}`,params);
  const page=Math.max(0,Math.min(10000,Number(filters.page)||0));
- const rows=await q<Ticket>(`SELECT t.*,s.first_name,s.last_name,s.username,s.reg_seq,i.telegram_id ${join} ${where} ORDER BY t.updated_at DESC,t.id DESC LIMIT 10 OFFSET $${params.length+1}`,[...params,page*10]);
+ const rows=await q<Ticket & {last_sender_type:string;section_from_telegram?:string}>(`
+   SELECT t.*,
+     ${staff?'s.first_name,s.last_name,s.username,s.reg_seq,i.telegram_id,s.section AS section_from_telegram,':''}
+     (SELECT CASE WHEN m.author LIKE 'student:%' THEN 'student' ELSE 'admin' END
+        FROM support_messages m WHERE m.ticket_id=t.id AND m.internal=false
+        ORDER BY m.id DESC LIMIT 1) AS last_sender_type
+   ${join} ${where}
+   ORDER BY t.updated_at DESC,t.id DESC LIMIT 10 OFFSET ${params.length+1}`,[...params,page*10]);
  return {rows,total:total?.n||0,page};
 }
 export async function reply(a:Actor,id:number,body:string,key:string,internal=false,file?:Attachment){

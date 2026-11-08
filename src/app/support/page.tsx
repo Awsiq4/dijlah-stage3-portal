@@ -6,11 +6,19 @@ import "./support.css";
 type TicketRow = {
   id: number; subject: string; category: string; status: string;
   priority: string; section: string | null; created_at: string;
-  first_name?: string; username?: string; assigned_to?: number | null;
+  first_name?: string; last_name?: string; username?: string; assigned_to?: number | null;
+  telegram_id?: string | number | null; reg_seq?: number | null; section_from_telegram?: string | null;
+  last_sender_type?: "student" | "admin" | null;
+};
+type VerifiedStudent = {
+  verified: true; telegram_id: string; first_name: string | null; last_name: string | null;
+  username: string | null; reg_seq: number | null; section: string | null;
+  role: string | null; status: string | null; registered_at: string | null;
 };
 type TicketDetail = {
   ticket: TicketRow;
-  messages: {id: number; author: string; body: string; internal: boolean; created_at: string}[];
+  studentProfile?: VerifiedStudent | null;
+  messages: {id: number; sender_type: "student" | "admin" | "internal"; body: string; internal: boolean; created_at: string}[];
   attachments: {id: string; message_id: number; name: string}[];
   history: {action: string; actor: string; created_at: string}[];
 };
@@ -43,6 +51,12 @@ const metricNames: Record<string,string> = {
   resolution_minutes: "دقائق حتى الحل",
 };
 const shortDate = (value: string) => new Date(value).toLocaleDateString("ar-IQ", {timeZone: "Asia/Baghdad"});
+function statusLabel(status: string, isStaff: boolean, last?: "student" | "admin" | null) {
+  if (status === "closed" || status === "resolved") return statuses[status];
+  if (last === "admin") return isStaff ? "بانتظار الطالب" : "ردّت الإدارة";
+  if (last === "student") return isStaff ? "ردّ الطالب" : "بانتظار الإدارة";
+  return statuses[status] || status;
+}
 
 export default function SupportPage() {
   const [view, setView] = useState<View>("main");
@@ -231,8 +245,14 @@ export default function SupportPage() {
             <span>
               <strong>{ticket.subject}</strong>
               <small>#{String(ticket.id).padStart(6,"0")} · {shortDate(ticket.created_at)}</small>
+              {staff && <small>👤 {ticket.first_name
+                ? [ticket.first_name,ticket.last_name].filter(Boolean).join(" ")
+                : ticket.telegram_id ? "حساب Telegram مرتبط" : "زائر غير معروف"}
+                {ticket.section || ticket.section_from_telegram ? " · شعبة " + (ticket.section || ticket.section_from_telegram) : ""}</small>}
             </span>
-            <span className={"sup-status " + ticket.status}>{statuses[ticket.status] || ticket.status}</span>
+            <span className={"sup-status " + (ticket.last_sender_type === "admin" ? "answered" : ticket.status)}>
+              {statusLabel(ticket.status, staff, ticket.last_sender_type)}
+            </span>
           </button>)}
         </div>
         {total > 10 && <div className="sup-pagination">
@@ -247,11 +267,32 @@ export default function SupportPage() {
     {view === "ticket" && detail && <div className="sup-detail">
       <header className="sup-detail-title">
         <div><small>#{String(detail.ticket.id).padStart(6,"0")}</small><h2>{detail.ticket.subject}</h2></div>
-        <span className={"sup-status " + detail.ticket.status}>{statuses[detail.ticket.status] || detail.ticket.status}</span>
+        <span className={"sup-status " + (detail.messages.at(-1)?.sender_type === "admin" ? "answered" : detail.ticket.status)}>
+          {statusLabel(detail.ticket.status, staff,
+            detail.messages.filter(item => !item.internal).at(-1)?.sender_type as "student" | "admin" | undefined)}
+        </span>
       </header>
-      <div className="sup-thread">
-        {detail.messages.map(entry => <article key={entry.id} className={"sup-bubble " + (entry.internal?"private":entry.author.startsWith("student:")?"student":"support")}>
-          <small>{entry.internal?"ملاحظة داخلية":entry.author.startsWith("student:")?"الطالب":"الدعم"} · {shortDate(entry.created_at)}</small>
+      {staff && <aside className="sup-student-card">
+        <strong>👤 معلومات صاحب الطلب</strong>
+        {detail.studentProfile?.verified ? <>
+          <div className="sup-student-fields">
+            <span>الاسم: <b>{[detail.studentProfile.first_name,detail.studentProfile.last_name].filter(Boolean).join(" ") || "غير متوفر"}</b></span>
+            <span>Telegram: <b dir="ltr">{detail.studentProfile.username ? "@"+detail.studentProfile.username : "بدون يوزر"}</b></span>
+            <span>Telegram ID: <b dir="ltr">{detail.studentProfile.telegram_id}</b></span>
+            <span>رقم التسجيل: <b>{detail.studentProfile.reg_seq ? "#"+String(detail.studentProfile.reg_seq).padStart(6,"0") : "غير متوفر"}</b></span>
+            <span>الشعبة: <b>{detail.studentProfile.section ? "شعبة "+detail.studentProfile.section : "غير محددة"}</b></span>
+            <span>الدور: <b>{detail.studentProfile.role === "student" ? "طالب" : detail.studentProfile.role || "غير محدد"}</b></span>
+          </div>
+          <small>✓ حساب Telegram مرتبط مسبقاً ومتحقق منه. ما احتاج الطالب يربطه مرة ثانية.</small>
+        </> : <p className="sup-no-profile">زائر موقع — ماكو حساب Telegram موثّق مرتبط بهذا الطلب.</p>}
+      </aside>}
+      <div className="sup-thread" aria-label="محادثة طلب الدعم">
+        {detail.messages.map((entry,index) => <article key={entry.id} className={"sup-bubble " + entry.sender_type}>
+          <div className="sup-message-heading">
+            <strong>{entry.sender_type === "internal" ? "🔒 ملاحظة داخلية" :
+              entry.sender_type === "admin" ? "✅ رد الإدارة" : index === 0 ? "📝 طلب الطالب" : "💬 رد الطالب"}</strong>
+            <small>{shortDate(entry.created_at)}</small>
+          </div>
           <p>{entry.body}</p>
           {detail.attachments.filter(file=>file.message_id===entry.id).map(file=>
             <a key={file.id} href={"/api/support?file="+encodeURIComponent(file.id)}>📎 {file.name}</a>)}
