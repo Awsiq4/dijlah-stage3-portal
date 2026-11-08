@@ -2,7 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTION_SECRET, botConfigured, webhookAuthorized} from "@/lib/server/flags";
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
-import {sendMessage} from "@/lib/server/telegram";
+import {sendMessage, tgFetch} from "@/lib/server/telegram";
 import {getLinkedAdmin, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow, adminMenu} from "@/lib/server/bot";
 
 export const dynamic = "force-dynamic";
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
       } else {
         await handleCallback(Number(callback.message.chat.id), data);
       }
-      await sendMessage(userId, "✅ تم.").catch(() => undefined);
+      await tgFetch("answerCallbackQuery", {callback_query_id: String(callback.id)});
     }
     return NextResponse.json({ok: true});
   } catch (err) {
