@@ -69,7 +69,7 @@ export async function publishAnnouncement(
       priority: input.priority || "normal", published_at: new Date().toISOString(), pinned: input.pinned ? "true" : "false",
     });
   } catch (e) { return fail(e instanceof Error ? e.message : "invalid input"); }
-  const res = await insertWithOwnership("announcements", admin, row, input.source || "web", input.id ? "update" : "nothing");
+  const res = await insertWithOwnership("announcements", admin, row, input.source || "web", input.source === "telegram" ? "nothing" : input.id ? "update" : "nothing");
   if (res.ok && res.inserted) {
     await notifyIfEnabled({type: "announcement", refId: id, title: input.title, body: input.body, url: "/announcements", scope: scope as "general", section, subject_id: input.subjectId, priority: input.priority});
   }
@@ -95,7 +95,7 @@ export async function publishLecture(
       sections, status: "published", updated_at: new Date().toISOString().slice(0, 10),
     });
   } catch (e) { return fail(e instanceof Error ? e.message : "invalid input"); }
-  const res = await insertWithOwnership("lectures", admin, row, input.source || "web", input.id ? "update" : "nothing");
+  const res = await insertWithOwnership("lectures", admin, row, input.source || "web", input.source === "telegram" ? "nothing" : input.id ? "update" : "nothing");
   if (res.ok && res.inserted) {
     const isAll = ALL.every(x => sections.includes(x));
     await notifyIfEnabled({type: "lecture", refId: id, title: input.title, body: input.description, url: `/subjects/${input.subjectId}`, scope: isAll ? "general" : "section", section: isAll ? undefined : sections[0], subject_id: input.subjectId});
@@ -113,7 +113,7 @@ export async function publishExam(admin: AdminInfo, input: Record<string, unknow
   const id = String(input.id || `exam-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   let row: Record<string, unknown>;
   try { row = sanitizeRow("exams", {...input, id, sections: input.sections || ["A", "B", "C", "F"]}); } catch (e) { return fail(e instanceof Error ? e.message : "invalid input"); }
-  const res = await insertWithOwnership("exams", admin, row, input.source || "web", input.id ? "update" : "nothing");
+  const res = await insertWithOwnership("exams", admin, row, input.source || "web", input.source === "telegram" ? "nothing" : input.id ? "update" : "nothing");
   if (res.ok && res.inserted) await notifyIfEnabled({type: "exam", refId: id, title: String(input.title || ""), url: "/exams", scope: "general", subject_id: subjectId});
   return res;
 }
@@ -126,7 +126,7 @@ export async function publishAssignment(admin: AdminInfo, input: Record<string, 
   const id = String(input.id || `asg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   let row: Record<string, unknown>;
   try { row = sanitizeRow("assignments", {...input, id, sections: input.sections || ["A", "B", "C", "F"]}); } catch (e) { return fail(e instanceof Error ? e.message : "invalid input"); }
-  const res = await insertWithOwnership("assignments", admin, row, input.source || "web", input.id ? "update" : "nothing");
+  const res = await insertWithOwnership("assignments", admin, row, input.source || "web", input.source === "telegram" ? "nothing" : input.id ? "update" : "nothing");
   if (res.ok && res.inserted) await notifyIfEnabled({type: "assignment", refId: id, title: String(input.title || ""), url: "/assignments", scope: "general", subject_id: subjectId});
   return res;
 }
