@@ -11,13 +11,15 @@ import {
   archiveContent, deleteOwnContent,
 } from "./publish.ts";
 import type {LinkedAdmin} from "./bot.ts";
+import {isBotOwner} from "./registry.ts";
 import {getLinkedAdmin, hasActiveFlow, adminMenu, resumeDraft, escapeHtml} from "./bot.ts";
 
 const backHome = {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]};
 const PER_PAGE = 5;
 
 // ---------- home menus ----------
-export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean) {
+export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean, telegramUserId?: number) {
+  const ownerBtn = telegramUserId && isBotOwner(telegramUserId) ? [[{text: "👑 لوحة المالك", callback_data: "own:home"}]] : [];
   if (admin && canUseTelegramPublishing(admin)) {
     return {inline_keyboard: [
       [{text: "✍️ نشر جديد", callback_data: "adm:new"}],
@@ -34,6 +36,7 @@ export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean) {
     [{text: "📝 الامتحانات والواجبات", callback_data: "stu:exams"}],
     [{text: "⚙️ إعدادات الإشعارات", callback_data: "stu:prefs"}],
     [{text: "❓ مساعدة", callback_data: "stu:help"}],
+    ...ownerBtn,
   ]};
 }
 
@@ -48,7 +51,7 @@ export async function handleStudentCallback(chatId: number, userId: number, data
   if (!sec && !["stu:home", "stu:help", "stu:sec"].includes(data)) { await sendMessage(chatId, "اختر شعبتك أولًا:", {replyMarkup: {inline_keyboard: SECTIONS.map(x => [{text: "شعبة " + x, callback_data: "sec:" + x}])}}); return; }
   if (data === "stu:home") {
     const admin = await getLinkedAdmin(userId);
-    await sendMessage(chatId, "مرحبًا بك في بوابة المرحلة الثالثة 🌟\nاختر من القائمة:", {replyMarkup: homeMenuFor(null, true)});
+    await sendMessage(chatId, "مرحبًا بك في بوابة المرحلة الثالثة 🌟\nاختر من القائمة:", {replyMarkup: homeMenuFor(null, true, userId)});
     return;
   }
   if (data === "stu:ann") {
@@ -100,7 +103,7 @@ export async function handleStudentCallback(chatId: number, userId: number, data
   }
   if (data === "stu:prefs") { await sendMessage(chatId, "⚙️ إعدادات الإشعارات — استخدم /settings أو الأزرار أدناه:", {replyMarkup: {inline_keyboard: [[{text: "🔔 تفعيل/تعطيل التبليغات", callback_data: "pref:announcements"}], [{text: "📚 تفعيل/تعطيل المحاضرات", callback_data: "pref:lectures"}], [{text: "📝 تفعيل/تعطيل الامتحانات", callback_data: "pref:exams"}], [{text: "📄 تفعيل/تعطيل الواجبات", callback_data: "pref:assignments"}], [{text: "🗓 تفعيل/تعطيل تغييرات الجدول", callback_data: "pref:schedule"}], [{text: "🔄 تغيير الشعبة", callback_data: "stu:sec"}], [{text: "🚫 إلغاء الاشتراك", callback_data: "stu:stop"}], [{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]}}); return; }
   if (data === "stu:sec") { await sendMessage(chatId, "اختر شعبتك الدراسية:", {replyMarkup: {inline_keyboard: SECTIONS.map(s => [{text: "شعبة " + s, callback_data: "sec:" + s}])}}); return; }
-  if (data === "stu:stop") { await q(`UPDATE tg_subscribers SET status='stopped', updated_at=now() WHERE chat_id=$1`, [chatId]); await sendMessage(chatId, "🚫 تم إيقاف الإشعارات. يمكنك العودة في أي وقت عبر /start.", {replyMarkup: homeMenuFor(await getLinkedAdmin(userId), false)}); return; }
+  if (data === "stu:stop") { await q(`UPDATE tg_subscribers SET status='stopped', updated_at=now() WHERE chat_id=$1`, [chatId]); await sendMessage(chatId, "🚫 تم إيقاف الإشعارات. يمكنك العودة في أي وقت عبر /start.", {replyMarkup: homeMenuFor(await getLinkedAdmin(userId), false, userId)}); return; }
   if (data === "stu:help") {
     await sendMessage(chatId, "❓ كيف تستخدم البوت؟\n\n• تصفح المحتوى من القائمة الرئيسية.\n• تغيير الشعبة أو تفضيلات الإشعارات من «إعدادات الإشعارات».\n• لإيقاف الإشعارات: /stop أو من الإعدادات.\n\nللمسؤولين: استخدم «نشر جديد» من قائمة الناشر.", {replyMarkup: backHome});
     return;
@@ -199,7 +202,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
   if (data === "nav:owner") {
     if (admin?.role !== "super_admin") return;
     const counts = await qOne<{admins: number; lectures: number; announcements: number; subscribers: number}>(`SELECT (SELECT count(*) FROM portal_admins) AS admins, (SELECT count(*) FROM portal_lectures) AS lectures, (SELECT count(*) FROM portal_announcements) AS announcements, (SELECT count(*) FROM tg_subscribers WHERE status='active') AS subscribers`);
-    await sendMessage(chatId, `ملخص الإدارة\nالحسابات: ${counts?.admins}\nالملازم: ${counts?.lectures}\nالتبليغات: ${counts?.announcements}\nالمشتركون النشطون: ${counts?.subscribers}`, {replyMarkup: homeMenuFor(admin, true)}); return;
+    await sendMessage(chatId, `ملخص الإدارة\nالحسابات: ${counts?.admins}\nالملازم: ${counts?.lectures}\nالتبليغات: ${counts?.announcements}\nالمشتركون النشطون: ${counts?.subscribers}`, {replyMarkup: homeMenuFor(admin, true, userId)}); return;
   }
   if (data === "nav:home") {
     const subscriber = await qOne<{section: string; status: string}>(`SELECT section, status FROM tg_subscribers WHERE chat_id=$1`, [chatId]);
@@ -214,13 +217,13 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
       ]}});
       return;
     }
-    await sendMessage(chatId, `🏠 القائمة الرئيسية${subscriber ? " — شعبة " + subscriber.section : ""}:`, {replyMarkup: homeMenuFor(admin, true)});
+    await sendMessage(chatId, `🏠 القائمة الرئيسية${subscriber ? " — شعبة " + subscriber.section : ""}:`, {replyMarkup: homeMenuFor(admin, true, userId)});
     return;
   }
   if (data === "flow:discard") {
     const {setFlowState} = await import("./bot.ts");
     await setFlowState(chatId, "", {});
-    await sendMessage(chatId, "🗑 تم تجاهل المسودة.", {replyMarkup: homeMenuFor(admin, true)});
+    await sendMessage(chatId, "🗑 تم تجاهل المسودة.", {replyMarkup: homeMenuFor(admin, true, userId)});
     return;
   }
   if (data === "flow:resume") {

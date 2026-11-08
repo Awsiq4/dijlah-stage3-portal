@@ -5,6 +5,10 @@ import {q, qOne} from "@/lib/server/db";
 import {sendMessage, tgFetch} from "@/lib/server/telegram";
 import {getLinkedAdmin, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow, adminMenu} from "@/lib/server/bot";
 import {handleStudentCallback, handleManageCallback, handleNavCallback} from "@/lib/server/botx";
+import {handleOwnerCallback} from "@/lib/server/botowner";
+import {registerUser, notifyOwnerNewUser, touchActivity, isBotOwner} from "@/lib/server/registry";
+import {listUsers} from "@/lib/server/analytics";
+import {getFlowState, setFlowState} from "@/lib/server/bot";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +49,7 @@ async function upsertSubscriber(chatId: number, userId: number | undefined, user
   await q(`INSERT INTO tg_audit (action, detail) VALUES ($1,$2)`, ["subscriber.upsert", {chat_id: chatId, section}]);
 }
 
-async function handleCommand(chatId: number, text: string, arg: string) {
+async function handleCommand(chatId: number, text: string, arg: string, from?: {id?: number; username?: string; first_name?: string; last_name?: string}) {
   const cmd = text.split(" ")[0].split("@")[0];
   if (cmd === "/start") {
     const payload = arg ? verifySubscribeToken(arg, SUBSCRIPTION_SECRET) : null;
@@ -55,7 +59,9 @@ async function handleCommand(chatId: number, text: string, arg: string) {
     }
     if (!payload) { await sendMessage(chatId, "اختر شعبتك لتفعيل الإشعارات:", {replyMarkup: sectionKeyboard()}); return; }
     const section = payload.section;
-    await upsertSubscriber(chatId, undefined, undefined, section);
+    const reg = await registerUser(chatId, from?.id, from?.username, from?.first_name, from?.last_name, section);
+    if (reg.isNew) await notifyOwnerNewUser({...reg, section});
+    await upsertSubscriber(chatId, from?.id, from?.username, section);
     await sendMessage(chatId, `✅ تم تفعيل إشعارات البوابة بنجاح!\nالشعبة: <b>${section}</b>\n\nسيصلك كل جديد: المحاضرات، الامتحانات، التبليغات، الواجبات، وتغييرات الجدول.\n\nلتغيير الشعبة استخدم /section، وللإعدادات /settings، وللعرض /status، وللإيقاف /stop.`, {parseMode: "HTML"});
     return;
   }
@@ -119,6 +125,8 @@ export async function POST(req: NextRequest) {
     if (!telegramServiceEnabled()) return NextResponse.json({ok: true, disabled: true}); // enabled+configured but DB missing -> inert
     const update = await req.json().catch(() => null);
     if (!update || typeof update !== "object") return NextResponse.json({ok: true});
+    const chatId0 = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id ?? update.edited_message?.chat?.id;
+    if (chatId0) await touchActivity(Number(chatId0));
     const message = update.message;
     const callback = update.callback_query;
     replyChat = Number(message?.chat?.id || callback?.message?.chat?.id) || undefined;
@@ -138,9 +146,19 @@ export async function POST(req: NextRequest) {
         } else if (admin && (await hasActiveFlow(Number(message.chat.id)))) {
           await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
         } else {
-          await handleCommand(Number(message.chat.id), text, arg);
+          await handleCommand(Number(message.chat.id), text, arg, message.from);
         }
       } else {
+        // owner search flow
+        const st = await getFlowState(Number(message.chat.id));
+        if (st?.flow === "ownersearch" && st.data?.step === "q" && isBotOwner(Number(message.from?.id || 0))) {
+          const {rows, total} = await listUsers((await import("@/lib/server/db")).defaultQueryer, 0, 8, {q: text});
+          await setFlowState(Number(message.chat.id), "", {});
+          const kb = rows.map(u => [{text: `#${String(u.reg_seq ?? "?").padStart(6, "0")} ${(`${u.first_name} ${u.last_name}`.trim() || u.username || u.chat_id)}`, callback_data: `own:u:${u.chat_id}`}]);
+          kb.push([{text: "👑 لوحة المالك", callback_data: "own:home"}]);
+          await sendMessage(Number(message.chat.id), rows.length ? `🔍 نتائج البحث عن «${text}» (${total}):` : "لا نتائج.", {replyMarkup: {inline_keyboard: kb}});
+          return NextResponse.json({ok: true});
+        }
         // non-command message from a linked admin account -> publishing flow state machine
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
         const doc = message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined;
@@ -156,7 +174,9 @@ export async function POST(req: NextRequest) {
       await tgFetch("answerCallbackQuery", {callback_query_id: String(callback.id)});
       const data = String(callback.data);
       const userId = Number(callback.from?.id || callback.message.chat.id);
-      if (data.startsWith("stu:") ) {
+      if (data.startsWith("own:")) {
+        await handleOwnerCallback(Number(callback.message.chat.id), userId, data);
+      } else if (data.startsWith("stu:") ) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
       } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("page:my:")) {
         await handleManageCallback(Number(callback.message.chat.id), userId, data);

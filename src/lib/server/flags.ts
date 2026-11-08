@@ -35,3 +35,5 @@ export function webhookAuthorized(headerSecret: string | null, opts: {botEnabled
   if (!headerSecret || !timingSafeEqual(headerSecret, opts.webhookSecret)) return "unauthorized";
   return "ok";
 }
+
+export const BOT_OWNER_ID = process.env.BOT_OWNER_ID || ""; // numerical Telegram user id of the bot owner
