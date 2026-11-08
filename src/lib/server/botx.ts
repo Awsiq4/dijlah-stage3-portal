@@ -11,19 +11,20 @@ import {
   archiveContent, deleteOwnContent,
 } from "./publish.ts";
 import type {LinkedAdmin} from "./bot.ts";
-import {getLinkedAdmin, hasActiveFlow, adminMenu} from "./bot.ts";
+import {getLinkedAdmin, hasActiveFlow, adminMenu, resumeDraft, escapeHtml} from "./bot.ts";
 
-const backHome = {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}, {text: "❌ إلغاء", callback_data: "adm:cancel"}]]};
+const backHome = {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]};
 const PER_PAGE = 5;
 
 // ---------- home menus ----------
-export function homeMenuFor(admin: LinkedAdmin | null, isSubscriber: boolean) {
+export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean) {
   if (admin && canUseTelegramPublishing(admin)) {
     return {inline_keyboard: [
       [{text: "✍️ نشر جديد", callback_data: "adm:new"}],
-      [{text: "🗂 إدارة منشوراتي", callback_data: "adm:my"}],
+      [{text: admin.role === "super_admin" ? "🗂 إدارة المحتوى" : "🗂 إدارة منشوراتي", callback_data: "adm:my"}],
       [{text: "👀 تصفح المحتوى (كطالب)", callback_data: "stu:home"}],
       [{text: "👤 حسابي", callback_data: "adm:me"}],
+      ...(admin.role === "super_admin" ? [[{text: "⚙️ لوحة المالك والحسابات", url: PORTAL_BASE_URL + "/admin"}], [{text: "📊 ملخص الإدارة", callback_data: "nav:owner"}]] : []),
     ]};
   }
   return {inline_keyboard: [
@@ -38,22 +39,27 @@ export function homeMenuFor(admin: LinkedAdmin | null, isSubscriber: boolean) {
 
 async function subscriberSection(chatId: number): Promise<string> {
   const row = await qOne<{section: string}>(`SELECT section FROM tg_subscribers WHERE chat_id=$1`, [chatId]);
-  return row?.section || "A";
+  return row?.section || "";
 }
 
 // ---------- student browsing ----------
 export async function handleStudentCallback(chatId: number, userId: number, data: string): Promise<void> {
   const sec = await subscriberSection(chatId);
+  if (!sec && !["stu:home", "stu:help", "stu:sec"].includes(data)) { await sendMessage(chatId, "اختر شعبتك أولًا:", {replyMarkup: {inline_keyboard: SECTIONS.map(x => [{text: "شعبة " + x, callback_data: "sec:" + x}])}}); return; }
   if (data === "stu:home") {
     const admin = await getLinkedAdmin(userId);
     await sendMessage(chatId, "مرحبًا بك في بوابة المرحلة الثالثة 🌟\nاختر من القائمة:", {replyMarkup: homeMenuFor(null, true)});
     return;
   }
   if (data === "stu:ann") {
-    const rows = await q<Record<string, unknown>>(`SELECT title, section, published_at FROM portal_announcements WHERE archived_at IS NULL AND (scope='general' OR section='all' OR section=$1) ORDER BY published_at DESC LIMIT 8`, [sec]);
+    const rows = await q<Record<string, unknown>>(`SELECT id, title, section, published_at FROM portal_announcements WHERE archived_at IS NULL AND (scope='general' OR section='all' OR section=$1) ORDER BY published_at DESC LIMIT 8`, [sec]);
     const text = rows.length ? rows.map(r => `📢 ${r.title} — ${r.section === "all" ? "جميع الشعب" : "شعبة " + r.section}`).join("\n") : "لا توجد تبليغات حاليًا.";
-    await sendMessage(chatId, `📢 التبليغات (شعبتك: ${sec}):\n\n${text}\n\n🔗 الموقع: ${PORTAL_BASE_URL}/announcements`, {replyMarkup: backHome});
+    await sendMessage(chatId, `📢 التبليغات (شعبتك: ${sec}):\n\n${text}\n\n🔗 الموقع: ${PORTAL_BASE_URL}/announcements`, {replyMarkup: {inline_keyboard: [...rows.map(r => [{text: String(r.title).slice(0, 45), callback_data: "stu:read:" + r.id}]), ...backHome.inline_keyboard]}});
     return;
+  }
+  if (data.startsWith("stu:read:")) {
+    const row = await qOne<{title: string; body: string}>(`SELECT title, body FROM portal_announcements WHERE id=$1 AND archived_at IS NULL AND (scope='general' OR section='all' OR section=$2)`, [data.slice(9), sec]);
+    await sendMessage(chatId, row ? `${escapeHtml(row.title)}\n\n${row.body}`.slice(0, 3900) : "التبليغ غير متاح لشعبتك.", {replyMarkup: backHome}); return;
   }
   if (data === "stu:lec") {
     const subs = await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
@@ -62,25 +68,29 @@ export async function handleStudentCallback(chatId: number, userId: number, data
   }
   if (data.startsWith("stu:lec:")) {
     const subj = data.slice(8);
-    const rows = await q<Record<string, unknown>>(`SELECT number, title, file_url FROM portal_lectures WHERE archived_at IS NULL AND status='published' AND subject_id=$1 AND (sections IS NULL OR sections @> $2::jsonb OR sections::text LIKE '%'||$3||'%') ORDER BY number`, [subj, JSON.stringify([sec]), sec]);
-    // portable fallback: filter in JS if @> unsupported
-    const all = await q<Record<string, unknown>>(`SELECT number, title, file_url, sections FROM portal_lectures WHERE archived_at IS NULL AND status='published' AND subject_id=$1 ORDER BY number`, [subj]);
+    const all = await q<Record<string, unknown>>(`SELECT id, number, title, file_url, sections FROM portal_lectures WHERE archived_at IS NULL AND status='published' AND subject_id=$1 ORDER BY number`, [subj]);
     const vis = all.filter(r => !Array.isArray(r.sections) || r.sections.includes(sec));
     const text = vis.length ? vis.map(r => `• محاضرة ${r.number}: ${r.title} — ${PORTAL_BASE_URL}/subjects/${subj}`).join("\n") : "لا توجد محاضرات منشورة لهذه المادة بعد.";
-    void rows;
-    await sendMessage(chatId, `📚 محاضرات وملازم المادة:\n\n${text}`, {replyMarkup: backHome});
+
+    await sendMessage(chatId, `📚 محاضرات وملازم المادة:\n\n${text}`.slice(0, 3500), {replyMarkup: {inline_keyboard: [...vis.slice(0, 20).map(r => [{text: "📎 " + String(r.title).slice(0, 40), url: new URL(String(r.file_url), PORTAL_BASE_URL).toString()}]), ...backHome.inline_keyboard]}});
     return;
   }
   if (data === "stu:sched") {
-    const rows = await q<Record<string, unknown>>(`SELECT day, start, "end", subject_id, room, kind FROM portal_schedule WHERE section=$1 ORDER BY day, start LIMIT 12`, [sec]);
-    const DAYS: Record<string, string> = {"6": "السبت", "0": "الأحد", "1": "الاثنين", "2": "الثلاثاء", "3": "الأربعاء"};
-    const text = rows.length ? rows.map(r => `${DAYS[String(r.day)] || r.day} ${r.start}–${r.end} — ${r.subject_id} ${r.room ? "· " + r.room : ""}`).join("\n") : "لا يوجد جدول منشور لشعبتك بعد.";
+    await sendMessage(chatId, "أي جدول تريد؟", {replyMarkup: {inline_keyboard: [[{text: "اليوم", callback_data: "stu:sched:today"}, {text: "غدًا", callback_data: "stu:sched:tomorrow"}], [{text: "الأسبوع كاملًا", callback_data: "stu:sched:week"}], ...backHome.inline_keyboard]}}); return;
+  }
+  if (data.startsWith("stu:sched:")) {
+    const rows = await q<Record<string, unknown>>(`SELECT s.day, s.start, s."end", COALESCE(p.name,s.subject_id) AS subject_id, s.room, s.kind FROM portal_schedule s LEFT JOIN portal_subjects p ON p.id=s.subject_id WHERE s.section=$1 ORDER BY s.day, s.start`, [sec]);
+    const DAYS: Record<string, string> = {"6": "السبت", "0": "الأحد", "1": "الاثنين", "2": "الثلاثاء", "3": "الأربعاء", "4": "الخميس", "5": "الجمعة"};
+    const weekday = new Intl.DateTimeFormat("en-US", {timeZone:"Asia/Baghdad", weekday:"short"}).format(new Date());
+    const today = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(weekday);
+    const visible = data.endsWith(":week") ? rows : rows.filter(r => Number(r.day) === (today + (data.endsWith(":tomorrow") ? 1 : 0)) % 7);
+    const text = visible.length ? visible.map(r => `${DAYS[String(r.day)] || r.day} ${r.start}–${r.end} — ${r.subject_id} ${r.room ? "· " + r.room : ""}`).join("\n") : "لا توجد محاضرات لهذا اليوم أو لم يُنشر الجدول بعد.";
     await sendMessage(chatId, `🗓 جدول شعبة ${sec}:\n\n${text}\n\n🔗 ${PORTAL_BASE_URL}/schedule`, {replyMarkup: backHome});
     return;
   }
   if (data === "stu:exams") {
-    const exams = await q<Record<string, unknown>>(`SELECT title, date, type, room FROM portal_exams WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') ORDER BY date LIMIT 8`, [sec]);
-    const asg = await q<Record<string, unknown>>(`SELECT title, due_at FROM portal_assignments WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') ORDER BY due_at LIMIT 8`, [sec]);
+    const exams = await q<Record<string, unknown>>(`SELECT title, date, type, room FROM portal_exams WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') AND date >= CURRENT_DATE ORDER BY date LIMIT 8`, [sec]);
+    const asg = await q<Record<string, unknown>>(`SELECT title, due_at FROM portal_assignments WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') AND due_at >= now() ORDER BY due_at LIMIT 8`, [sec]);
     const text = [
       exams.length ? "📝 الامتحانات:\n" + exams.map(e => `• ${e.title} — ${e.date} ${e.room ? "· " + e.room : ""}`).join("\n") : "",
       asg.length ? "📄 الواجبات:\n" + asg.map(a => `• ${a.title} — حتى ${a.due_at}`).join("\n") : "",
@@ -92,7 +102,7 @@ export async function handleStudentCallback(chatId: number, userId: number, data
   if (data === "stu:sec") { await sendMessage(chatId, "اختر شعبتك الدراسية:", {replyMarkup: {inline_keyboard: SECTIONS.map(s => [{text: "شعبة " + s, callback_data: "sec:" + s}])}}); return; }
   if (data === "stu:stop") { await q(`UPDATE tg_subscribers SET status='stopped', updated_at=now() WHERE chat_id=$1`, [chatId]); await sendMessage(chatId, "🚫 تم إيقاف الإشعارات. يمكنك العودة في أي وقت عبر /start.", {replyMarkup: homeMenuFor(await getLinkedAdmin(userId), false)}); return; }
   if (data === "stu:help") {
-    await sendMessage(chatId, "❓ كيف تستخدم البوت؟\n\n• تصفح المحتوى من القائمة الرئيسية.\n• changing الشعبة أو تفضيلات الإشعارات من «إعدادات الإشعارات».\n• لإيقاف الإشعارات: /stop أو من الإعدادات.\n\nللمسؤولين: استخدم «نشر جديد» من قائمة الناشر.", {replyMarkup: backHome});
+    await sendMessage(chatId, "❓ كيف تستخدم البوت؟\n\n• تصفح المحتوى من القائمة الرئيسية.\n• تغيير الشعبة أو تفضيلات الإشعارات من «إعدادات الإشعارات».\n• لإيقاف الإشعارات: /stop أو من الإعدادات.\n\nللمسؤولين: استخدم «نشر جديد» من قائمة الناشر.", {replyMarkup: backHome});
     return;
   }
 }
@@ -120,14 +130,14 @@ export async function handleManageCallback(chatId: number, userId: number, data:
     if ((page + 1) * PER_PAGE < total) nav.push({text: "➡️ التالي", callback_data: `page:my:${type}:${page + 1}`});
     nav.push({text: "🏠 القائمة الرئيسية", callback_data: "nav:home"});
     kb.push(nav);
-    await sendMessage(chatId, rows.length ? `page ${page + 1} — الإجمالي ${total}. اختر عنصرًا:` : "لا توجد منشورات بعد.", {replyMarkup: {inline_keyboard: kb}});
+    await sendMessage(chatId, rows.length ? `صفحة ${page + 1} — الإجمالي ${total}. اختر عنصرًا:` : "لا توجد منشورات بعد.", {replyMarkup: {inline_keyboard: kb}});
     return;
   }
   if (data.startsWith("it:arch:")) {
     const [, , type, id] = data.split(":");
     const row = (await listOwnContent(admin, type as "announcements" | "lectures", 0, 100)).rows.find(r => r.id === id);
     const r = await archiveContent(admin, type as "announcements" | "lectures", id, !row?.archived_at);
-    await sendMessage(chatId, r.ok ? (row?.archived_at ? "♻️ تمت الاستعادة." : "🗄 تمت الأرشفة — اختفى من الموقع temporarily." ) : `⛔ ${r.error}`, {replyMarkup: backHome});
+    await sendMessage(chatId, r.ok ? (row?.archived_at ? "♻️ تمت الاستعادة." : "🗄 تمت الأرشفة — اختفى من الموقع مؤقتًا." ) : `⛔ ${r.error}`, {replyMarkup: backHome});
     return;
   }
   if (data.startsWith("it:del:")) {
@@ -135,7 +145,7 @@ export async function handleManageCallback(chatId: number, userId: number, data:
     const row = (await listOwnContent(admin, type as "announcements" | "lectures", 0, 100)).rows.find(r => r.id === id);
     if (!row) { await sendMessage(chatId, "⚠️ العنصر غير موجود.", {replyMarkup: backHome}); return; }
     const aud = type === "lectures" ? "الجمهور: " + (Array.isArray(row.sections) && row.sections.length === 4 ? "جميع الشعب" : (row.sections as string[]).join(",")) : "الجمهور: شعبة " + row.section;
-    await sendMessage(chatId, `🗑 حذف نهائي؟\n\n<b>${row.title}</b>\n${aud}\n\n⚠️ لا يمكن التراجع عن الحذف النهائي.`, {parseMode: "HTML", replyMarkup: {inline_keyboard: [
+    await sendMessage(chatId, `🗑 حذف نهائي؟\n\n<b>${escapeHtml(row.title)}</b>\n${aud}\n\n⚠️ لا يمكن التراجع عن الحذف النهائي.`, {parseMode: "HTML", replyMarkup: {inline_keyboard: [
       [{text: "✅ نعم، احذف نهائيًا", callback_data: `it:delok:${type}:${id}`}],
       [{text: "🗄 أرشفة بدلًا من الحذف", callback_data: `it:arch:${type}:${id}`}],
       [{text: "❌ إلغاء", callback_data: `it:${type}:${id}`}],
@@ -169,7 +179,7 @@ export async function handleManageCallback(chatId: number, userId: number, data:
     const row = rows.find(r => r.id === id);
     if (!row) { await sendMessage(chatId, "⚠️ هذا العنصر غير موجود أو ليس ملكك.", {replyMarkup: backHome}); return; }
     const aud = type === "lectures" ? (Array.isArray(row.sections) && row.sections.length === 4 ? "🌐 جميع الشعب" : "شعبة " + (row.sections as string[]).join(",")) : (row.section === "all" ? "🌐 جميع الشعب" : "شعبة " + row.section);
-    const text = `${type === "announcements" ? "📢" : "📚"} <b>${row.title}</b>\nالجمهور: ${aud}${row.archived_at ? "\n🗄 الحالة: مؤرشف" : ""}${type === "lectures" ? `\n🔗 ${PORTAL_BASE_URL}/subjects/${row.subject_id}` : ""}`;
+    const text = `${type === "announcements" ? "📢" : "📚"} <b>${escapeHtml(row.title)}</b>\nالجمهور: ${aud}${row.archived_at ? "\n🗄 الحالة: مؤرشف" : ""}${type === "lectures" ? `\n🔗 ${PORTAL_BASE_URL}/subjects/${row.subject_id}` : ""}`;
     const kb = {inline_keyboard: [
       [{text: "✏️ تعديل", callback_data: `it:edit:${type}:${id}`}],
       [{text: row.archived_at ? "♻️ استعادة" : "🗄 أرشفة", callback_data: `it:arch:${type}:${id}`}],
@@ -186,7 +196,16 @@ export async function handleManageCallback(chatId: number, userId: number, data:
 // ---------- navigation + draft recovery + Flow B ----------
 export async function handleNavCallback(chatId: number, userId: number, data: string, document?: {file_id: string; file_name?: string; mime_type?: string; file_size?: number}): Promise<void> {
   const admin = await getLinkedAdmin(userId);
+  if (data === "nav:owner") {
+    if (admin?.role !== "super_admin") return;
+    const counts = await qOne<{admins: number; lectures: number; announcements: number; subscribers: number}>(`SELECT (SELECT count(*) FROM portal_admins) AS admins, (SELECT count(*) FROM portal_lectures) AS lectures, (SELECT count(*) FROM portal_announcements) AS announcements, (SELECT count(*) FROM tg_subscribers WHERE status='active') AS subscribers`);
+    await sendMessage(chatId, `ملخص الإدارة\nالحسابات: ${counts?.admins}\nالملازم: ${counts?.lectures}\nالتبليغات: ${counts?.announcements}\nالمشتركون النشطون: ${counts?.subscribers}`, {replyMarkup: homeMenuFor(admin, true)}); return;
+  }
   if (data === "nav:home") {
+    const subscriber = await qOne<{section: string; status: string}>(`SELECT section, status FROM tg_subscribers WHERE chat_id=$1`, [chatId]);
+    if (!admin && !subscriber) { await sendMessage(chatId, "أهلًا بك! اختر شعبتك لتفعيل الإشعارات وعرض محتواها:", {replyMarkup: {inline_keyboard: SECTIONS.map(x => [{text: "شعبة " + x, callback_data: "sec:" + x}])}}); return; }
+    if (!admin && subscriber?.status !== "active") { await sendMessage(chatId, "إشعاراتك متوقفة. تقدر تتصفح أو تعيد تفعيلها:", {replyMarkup: {inline_keyboard: [[{text: "🔔 إعادة تفعيل الإشعارات", callback_data: "sec:" + subscriber?.section}], ...homeMenuFor(null, false).inline_keyboard]}}); return; }
+
     if (admin && (await hasActiveFlow(chatId))) {
       // draft recovery: resume or discard
       await sendMessage(chatId, "📝 لديك مسودة غير منتهية. ماذا تريد؟", {replyMarkup: {inline_keyboard: [
@@ -195,7 +214,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
       ]}});
       return;
     }
-    await sendMessage(chatId, "🏠 القائمة الرئيسية:", {replyMarkup: homeMenuFor(admin, true)});
+    await sendMessage(chatId, `🏠 القائمة الرئيسية${subscriber ? " — شعبة " + subscriber.section : ""}:`, {replyMarkup: homeMenuFor(admin, true)});
     return;
   }
   if (data === "flow:discard") {
@@ -205,7 +224,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
     return;
   }
   if (data === "flow:resume") {
-    await sendMessage(chatId, "▶️ استؤنفت المسودة — أكمل الخطوة الحالية.", {replyMarkup: homeMenuFor(admin, true)});
+    await resumeDraft(chatId, userId);
     return;
   }
   if (data === "adm:new") {
@@ -220,7 +239,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
   if (document && admin && !(await hasActiveFlow(chatId))) {
     await sendMessage(chatId, `📎 استلمت ملف PDF${document.file_name ? `: ${document.file_name}` : ""}.\nهل تريد إنشاء «محاضرة/ملزمة» جديدة بهذا الملف؟`, {replyMarkup: {inline_keyboard: [
       [{text: "✅ نعم، إنشاء مادة بهذا الملف", callback_data: "pdf:new"}],
-      [{text: "❌ لا", callback_data: "nav:home"}],
+      [{text: "❌ لا", callback_data: "flow:discard"}],
     ]}});
     const {setFlowState} = await import("./bot.ts");
     await setFlowState(chatId, "pendingpdf", {file_id: document.file_id, file_name: document.file_name, mime_type: document.mime_type, file_size: document.file_size});
@@ -233,7 +252,8 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
     if (!doc.file_id) { await sendMessage(chatId, "⚠️ انتهت صلاحية الملف — أرسله من جديد."); return; }
     // start lec flow with the file pre-attached
     await setFlowState(chatId, "lec", {step: "subject", draftId: `lec-tg-${chatId}-${Date.now()}`, pendingDoc: doc});
-    const subjects = admin?.role === "teacher" ? (admin.assigned_subjects || []).map(id => ({id, name: id})) : await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
+    const all = await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
+    const subjects = admin?.role === "teacher" ? all.filter(x => admin.assigned_subjects?.includes(x.id)) : all;
     await sendMessage(chatId, "📚 اختر المادة:", {replyMarkup: {inline_keyboard: (subjects || []).map(x => [{text: x.name, callback_data: "lec:subj:" + x.id}])}});
     return;
   }
