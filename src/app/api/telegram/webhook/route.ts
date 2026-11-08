@@ -144,8 +144,8 @@ export async function POST(req: NextRequest) {
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
         if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
           // every /start registers the user (idempotent; owner notified only when genuinely new)
-          const reg = await registerUser(Number(message.chat.id), Number(message.from?.id || message.chat.id), message.from?.username, message.from?.first_name, message.from?.last_name, "A");
-          if (reg.isNew) await notifyOwnerNewUser({...reg, section: "A", username: message.from?.username, first_name: message.from?.first_name, last_name: message.from?.last_name});
+          const reg = await registerUser(Number(message.chat.id), Number(message.from?.id || message.chat.id), message.from?.username, message.from?.first_name, message.from?.last_name, null);
+          if (reg.isNew) await notifyOwnerNewUser({...reg, username: message.from?.username, first_name: message.from?.first_name, last_name: message.from?.last_name});
           await handleNavCallback(Number(message.chat.id), Number(message.from?.id || message.chat.id), "nav:home");
         } else if (admin && (await hasActiveFlow(Number(message.chat.id)))) {
           await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
