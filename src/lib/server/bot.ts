@@ -122,7 +122,7 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
   }
   if (state.flow === "lec") {
     const d = state.data;
-    if (d.step === "title") { await setState(chatId, "lec", {...d, step: "file", title: text}); await sendMessage(chatId, "📎 أرسل رابط ملف PDF (مثال: /lectures/xxx.pdf) — أو ارفع الملف من لوحة الويب وأرسل الرابط هنا."); return; }
+    if (d.step === "title") { await setState(chatId, "lec", {...d, step: "file", title: text}); await sendMessage(chatId, "📎 أرسل ملف الملزمة بصيغة PDF هنا مباشرة (حتى 20MB). سأرفعه وأعرض لك معاينة قبل تأكيد النشر. يمكنك أيضًا إرسال رابط PDF محفوظ."); return; }
     if (d.step === "file") {
       if (document) {
         if (document.mime_type !== "application/pdf") { await sendMessage(chatId, "⚠️ الملف ليس PDF. أرسل ملف PDF أو رابط ملف محفوظ."); return; }
@@ -132,7 +132,9 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
           const g = await tgFetch<{file_path: string}>("getFile", {file_id: document.file_id});
           if (!g.ok || !g.result?.file_path) { await sendMessage(chatId, "⚠️ تعذر قراءة الملف من Telegram."); return; }
           const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${g.result.file_path}`);
+          if (!dl.ok) { await sendMessage(chatId, "⚠️ تعذر تنزيل الملف من Telegram. أعد إرساله."); return; }
           const buf = Buffer.from(await dl.arrayBuffer());
+          if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
           if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ الملف ليس PDF صالحًا."); return; }
           const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
           await setState(chatId, "lec", {...d, step: "confirm", fileUrl: url});
@@ -175,7 +177,8 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
   }
   if (data.startsWith("lec:subj:")) {
     const subjectId = data.slice(9);
-    await setState(chatId, "lec", {step: "audience", subjectId});
+    const state = await getState(chatId);
+    await setState(chatId, "lec", {...(state?.data || {}), step: "audience", subjectId});
     await sendMessage(chatId, "🎯 اختر الجمهور (الشعب):", {replyMarkup: audienceKeyboard(admin)});
     return;
   }
