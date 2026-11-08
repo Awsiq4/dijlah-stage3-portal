@@ -36,6 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_tg_student_section_changes_user
 CREATE OR REPLACE FUNCTION record_tg_student_section_change()
 RETURNS TRIGGER AS $$
 BEGIN
+  IF NEW.analytics_opt_out THEN
+    RETURN NEW;
+  END IF;
   IF TG_OP = 'INSERT' THEN
     IF NEW.section IS NOT NULL THEN
       INSERT INTO tg_student_section_changes(chat_id, old_section, new_section)
