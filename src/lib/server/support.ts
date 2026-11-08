@@ -134,7 +134,7 @@ export async function listTickets(a:Actor,filters:Record<string,string>={}) {
         FROM support_messages m WHERE m.ticket_id=t.id AND m.internal=false
         ORDER BY m.id DESC LIMIT 1) AS last_sender_type
    ${join} ${where}
-   ORDER BY t.updated_at DESC,t.id DESC LIMIT ${params.length+1} OFFSET ${params.length+2}`,[...params,10,page*10]);
+   ORDER BY t.updated_at DESC,t.id DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,[...params,10,page*10]);
  return {rows,total:total?.n||0,page};
 }
 export async function reply(a:Actor,id:number,body:string,key:string,internal=false,file?:Attachment){
