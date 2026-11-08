@@ -53,7 +53,8 @@ async function handleCommand(chatId: number, text: string, arg: string) {
       await sendMessage(chatId, "⚠️ رابط الاشتراك غير صالح أو منتهي الصلاحية. افتح صفحة «تفعيل الإشعارات» من البوابة مجددًا.");
       return;
     }
-    const section = payload?.section || "A";
+    if (!payload) { await sendMessage(chatId, "اختر شعبتك لتفعيل الإشعارات:", {replyMarkup: sectionKeyboard()}); return; }
+    const section = payload.section;
     await upsertSubscriber(chatId, undefined, undefined, section);
     await sendMessage(chatId, `✅ تم تفعيل إشعارات البوابة بنجاح!\nالشعبة: <b>${section}</b>\n\nسيصلك كل جديد: المحاضرات، الامتحانات، التبليغات، الواجبات، وتغييرات الجدول.\n\nلتغيير الشعبة استخدم /section، وللإعدادات /settings، وللعرض /status، وللإيقاف /stop.`, {parseMode: "HTML"});
     return;
@@ -91,22 +92,24 @@ async function handleCallback(chatId: number, data: string) {
   if (data.startsWith("sec:")) {
     const section = data.slice(4);
     if (!SECTIONS.includes(section as never)) return;
-    await q(`UPDATE tg_subscribers SET section=$2, updated_at=now() WHERE chat_id=$1`, [chatId, section]);
+    await upsertSubscriber(chatId, chatId, undefined, section);
     await q(`INSERT INTO tg_audit (action, detail) VALUES ($1,$2)`, ["subscriber.section", {chat_id: chatId, section}]);
-    await sendMessage(chatId, `✅ تم تغيير شعبتك إلى <b>${section}</b>.`, {parseMode: "HTML"});
+    await sendMessage(chatId, `✅ تم تغيير شعبتك إلى <b>${section}</b>.`, {parseMode: "HTML", replyMarkup: {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]}});
     return;
   }
   if (data.startsWith("pref:")) {
     const key = data.slice(5);
     const row = await qOne<{prefs: Record<string, boolean>}>(`SELECT prefs FROM tg_subscribers WHERE chat_id=$1`, [chatId]);
-    if (!row) return;
-    const prefs = {...(row.prefs || {}), [key]: (row.prefs || {})[key] === false};
+    if (!row) { await sendMessage(chatId, "اختر شعبتك أولًا لتفعيل الإشعارات:", {replyMarkup: sectionKeyboard()}); return; }
+    if (!Object.hasOwn(PREF_LABELS, key)) return;
+    const prefs = {...Object.fromEntries(Object.keys(PREF_LABELS).map(k => [k, true])), ...(row.prefs || {}), [key]: (row.prefs || {})[key] === false};
     await q(`UPDATE tg_subscribers SET prefs=$2, updated_at=now() WHERE chat_id=$1`, [chatId, JSON.stringify(prefs)]);
     await sendMessage(chatId, "⚙️ تم تحديث الإعدادات:", {replyMarkup: prefsKeyboard(prefs)});
   }
 }
 
 export async function POST(req: NextRequest) {
+  let replyChat: number | undefined;
   try {
     // TELEGRAM_BOT_ENABLED is authoritative: disabled -> ignore everything.
     // When enabled, the webhook secret header is MANDATORY (no secret configured -> reject all).
@@ -118,6 +121,8 @@ export async function POST(req: NextRequest) {
     if (!update || typeof update !== "object") return NextResponse.json({ok: true});
     const message = update.message;
     const callback = update.callback_query;
+    replyChat = Number(message?.chat?.id || callback?.message?.chat?.id) || undefined;
+    if ((message?.chat?.type || callback?.message?.chat?.type) !== "private") return NextResponse.json({ok: true});
     if (message?.chat?.id && (message.text || message.document)) {
       const text = String(message.text || message.caption || "");
       const arg = text.split(" ").slice(1).join(" ").trim();
@@ -143,9 +148,12 @@ export async function POST(req: NextRequest) {
           await handleNavCallback(Number(message.chat.id), Number(message.from.id), "doc", doc); // Flow B offer
         } else if (admin) {
           await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, doc);
+        } else {
+          await sendMessage(Number(message.chat.id), "اختر من الأزرار حتى أساعدك:", {replyMarkup: {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]}});
         }
       }
     } else if (callback?.message?.chat?.id && callback.data) {
+      await tgFetch("answerCallbackQuery", {callback_query_id: String(callback.id)});
       const data = String(callback.data);
       const userId = Number(callback.from?.id || callback.message.chat.id);
       if (data.startsWith("stu:") ) {
@@ -154,16 +162,16 @@ export async function POST(req: NextRequest) {
         await handleManageCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || data === "adm:new" || data === "pdf:new") {
         await handleNavCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
+      } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
         await handleAdminCallback(Number(callback.message.chat.id), userId, data);
       } else {
         await handleCallback(Number(callback.message.chat.id), data);
       }
-      await tgFetch("answerCallbackQuery", {callback_query_id: String(callback.id)});
     }
     return NextResponse.json({ok: true});
   } catch (err) {
     console.error("telegram webhook error", err instanceof Error ? err.message : err);
+    if (replyChat) await sendMessage(replyChat, "تعذر إكمال الخطوة الآن. ارجع للمسودة أو حاول مجددًا.", {replyMarkup: {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]}});
     return NextResponse.json({ok: true});
   }
 }
