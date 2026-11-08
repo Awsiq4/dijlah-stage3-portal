@@ -125,7 +125,8 @@ export async function listTickets(a:Actor,filters:Record<string,string>={}) {
  const where=conditions.length?'WHERE '+conditions.join(' AND '):'';
  const join='FROM support_tickets t JOIN support_identities i ON i.id=t.identity_id LEFT JOIN tg_subscribers s ON s.chat_id=i.telegram_id';
  const total=await qOne<{n:number}>(`SELECT count(*)::int AS n ${join} ${where}`,params);
- const page=Math.max(0,Math.min(10000,Number(filters.page)||0));
+ const requestedPage=Number(filters.page ?? 0);
+ const page=Number.isSafeInteger(requestedPage) && requestedPage>=0 ? Math.min(10000,requestedPage) : 0;
  const rows=await q<Ticket & {last_sender_type:string;section_from_telegram?:string}>(`
    SELECT t.*,
      ${staff?'s.first_name,s.last_name,s.username,s.reg_seq,i.telegram_id,s.section AS section_from_telegram,':''}
@@ -133,7 +134,7 @@ export async function listTickets(a:Actor,filters:Record<string,string>={}) {
         FROM support_messages m WHERE m.ticket_id=t.id AND m.internal=false
         ORDER BY m.id DESC LIMIT 1) AS last_sender_type
    ${join} ${where}
-   ORDER BY t.updated_at DESC,t.id DESC LIMIT 10 OFFSET ${params.length+1}`,[...params,page*10]);
+   ORDER BY t.updated_at DESC,t.id DESC LIMIT ${params.length+1} OFFSET ${params.length+2}`,[...params,10,page*10]);
  return {rows,total:total?.n||0,page};
 }
 export async function reply(a:Actor,id:number,body:string,key:string,internal=false,file?:Attachment){
