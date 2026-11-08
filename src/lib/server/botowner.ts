@@ -106,6 +106,10 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
       ? stats.byFeature.map(f => "• " + esc(FEATURE_LABELS[f.feature] || f.feature) +
         ": " + f.interactions + " تفاعل (" + f.students + " طالب)").join("\n")
       : "لا توجد أحداث مسجلة بعد.";
+    const subjects = stats.bySubject.length
+      ? stats.bySubject.map(s => "• " + esc(s.subject) + ": " + s.selections +
+        " اختيار (" + s.students + " طالب)").join("\n")
+      : "ماكو اختيار مواد مسجّل بعد.";
     const daily = stats.daily.length
       ? stats.daily.map(d => "• " + d.day + ": " + d.interactions +
         " تفاعل / " + d.users + " طالب").join("\n")
@@ -120,6 +124,8 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
       "",
       "📚 <b>أكثر أقسام البوت استخدامًا (30 يومًا)</b>",
       top, "",
+      "📘 <b>المواد الأكثر اختياراً داخل البوت (30 يومًا)</b>",
+      subjects, "",
       "📅 <b>النشاط اليومي (7 أيام، توقيت بغداد)</b>",
       daily, "",
       "ℹ️ هذه أحداث ضغط الأزرار والأوامر داخل البوت فقط، ولا تثبت قراءة المحاضرات أو تنزيل الملفات.",
@@ -229,6 +235,8 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
       "📊 أحداث الاستخدام: 7 أيام " + usage.interactions7d + " · 30 يومًا " + usage.interactions30d,
       "📚 الأكثر تصفحًا: " + (usage.topFeatures.length ? usage.topFeatures.slice(0,3).map(f =>
         esc(FEATURE_LABELS[f.feature] || f.feature) + " (" + f.interactions + ")").join(" · ") : "لا توجد بيانات بعد"),
+      "📘 أكثر المواد اختيارًا: " + (usage.topSubjects.length ? usage.topSubjects.slice(0,3)
+        .map(s => esc(s.subject) + " (" + s.selections + ")").join(" · ") : "لا توجد بيانات بعد"),
       "",
       rows.length ? "اضغط على اسم أي طالب لعرض حسابه:" : "لا توجد حسابات في هذه الشعبة.",
     ].join("\n"), {parseMode: "HTML", replyMarkup: {inline_keyboard: keyboard}});
@@ -307,6 +315,9 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
       "📚 الأقسام المستخدمة: " + (usage.topFeatures.length
         ? usage.topFeatures.map(f => esc(FEATURE_LABELS[f.feature] || f.feature) +
           " (" + f.interactions + ")").join("، ") : "لا يوجد سجل بعد"),
+      "📘 المواد التي اختار عرضها: " + (usage.topSubjects.length
+        ? usage.topSubjects.map(s => esc(s.subject) + " (" + s.selections + ")").join("، ")
+        : "لا توجد اختيارات مسجلة"),
       "",
       "📬 <b>الإشعارات</b>",
       "✅ أُرسلت: " + usage.deliveries.sent + " · ❌ فشلت: " + usage.deliveries.failed +
