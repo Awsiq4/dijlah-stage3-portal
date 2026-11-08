@@ -74,8 +74,16 @@ export async function createTicket(a:Actor,input:{category:string;subject:string
   if(!t)return (await db.qOne<{id:number}>(`SELECT id FROM support_tickets WHERE identity_id=$1 AND request_key=$2`,[a.identity,key]))!;
   await addMessage(db,{...a,owner:false,adminId:undefined,permissions:[]},t.id,body,key,false,input.file);
   await audit(db,a,t.id,'created',{source:input.source});
-  const profile=a.telegramId?await db.qOne<{first_name:string;last_name:string}>(`SELECT first_name,last_name FROM tg_subscribers WHERE chat_id=$1`,[a.telegramId]):null;
-  await enqueue(db,'new:'+t.id,BOT_OWNER_ID,t.id,`🔔 طلب دعم جديد\n🎫 ${ticketNumber(t.id)}\n👤 ${profile?`${profile.first_name||''} ${profile.last_name||''}`:'مستخدم الموقع'}\n🏫 الشعبة: ${section||'غير محددة'}\n📂 ${categories[input.category]}\n📝 ${subject}`);
+  const profile=await db.qOne<{telegram_id:number|null;first_name:string|null;last_name:string|null;username:string|null;section:string|null}>(
+    `SELECT i.telegram_id, s.first_name, s.last_name, s.username, s.section
+       FROM support_identities i LEFT JOIN tg_subscribers s ON s.chat_id=i.telegram_id
+       WHERE i.id=$1`,[a.identity]);
+  const name=[profile?.first_name,profile?.last_name].filter(Boolean).join(' ').trim() || (profile?.telegram_id?'مستخدم Telegram':'زائر الموقع');
+  const user=profile?.username?'@'+profile.username:'لا يوجد';
+  const tg=profile?.telegram_id?String(profile.telegram_id):'غير مربوط';
+  const sectionName=section||profile?.section||'غير محددة';
+  await enqueue(db,'new:'+t.id,BOT_OWNER_ID,t.id,
+    `🔔 طلب دعم جديد\n🎫 ${ticketNumber(t.id)}\n👤 ${name}\n🔗 اليوزر: ${user}\n🆔 Telegram ID: ${tg}\n🏫 الشعبة: ${sectionName}\n📂 ${categories[input.category]}\n📝 ${subject}`);
   return t;
  });
 }
