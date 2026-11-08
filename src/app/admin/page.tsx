@@ -1,6 +1,7 @@
 "use client";
 import React,{useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
+import Link from "next/link";
 import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogOut,ShieldCheck,Database,Send,Pencil,Plus,Trash2,X,GraduationCap,Users} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./workspace";
@@ -181,6 +182,7 @@ export default function AdminDashboard(){
 
   return <>
     <PageHeading title="لوحة الإدارة" description={`${me.email} · ${me.role}`} action={<button className="action-button secondary" onClick={logout}><LogOut size={16}/> خروج</button>}/>
+    {me.role === "super_admin" && <div style={{marginBottom:16}}><Link href="/support" className="action-button"><FileQuestion size={16}/> 🎫 إدارة الدعم والاقتراحات</Link></div>}
     <div className="tabs admin-tabs">
       {tabs.map(t => <button key={t.id} className={tab === t.id ? "selected" : ""} onClick={() => { setTab(t.id); cancelEdit(); }}><t.Icon size={15}/> {t.label}</button>)}
     </div>
