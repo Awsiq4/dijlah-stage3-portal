@@ -84,8 +84,14 @@ test("analytics: counts, roles, sections, growth (Baghdad boundaries), zero-base
   setPoolForTests(pool);
   const a = await computeAnalytics(defaultQueryer, new Date(now));
   assert.equal(a.total, 4);
-  assert.equal(a.newToday, 1);
-  assert.equal(a.newYesterday, 0);
+  // In Baghdad shortly after midnight, "1 hour ago" belongs to yesterday.
+  // Compute expected calendar-day counts instead of assuming daytime execution.
+  const baghdadDay = timestamp => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Baghdad", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(timestamp));
+  const hourAgoDay = baghdadDay(now - 60 * 60 * 1000);
+  assert.equal(a.newToday, hourAgoDay === baghdadDay(now) ? 1 : 0);
+  assert.equal(a.newYesterday, hourAgoDay === baghdadDay(now - 24 * 60 * 60 * 1000) ? 1 : 0);
   assert.equal(a.new7d, 2);
   assert.equal(a.new30d, 3);
   assert.equal(a.active24h, 1);

@@ -1,8 +1,5 @@
-import {createHash, randomBytes, randomUUID} from "node:crypto";
+import {createHash, randomUUID} from "node:crypto";
 import {q, qOne, withTx, type Queryer} from "./db.ts";
-import {getLinkedAdmin} from "./bot.ts";
-import {BOT_OWNER_ID} from "./flags.ts";
-import {sendMessage} from "./telegram.ts";
 import {checkLoginRateLimit, type AdminRow} from "./auth.ts";
 
 export const categories: Record<string,string> = {support:"تواصل مع الدعم",idea:"اقترح فكرة",problem:"الإبلاغ عن مشكلة"};
@@ -17,18 +14,8 @@ export class SupportError extends Error { status:number; constructor(message:str
 export function permission(a:Actor, key:string) {return a.owner || a.permissions.includes('support.manage') || a.permissions.includes('support.'+key);}
 export async function adminActor(admin:AdminRow|null):Promise<Actor> {
  if(!admin) return {owner:false,permissions:[]};
- const linked=BOT_OWNER_ID ? await qOne(`SELECT admin_id FROM portal_telegram_links WHERE admin_id=$1 AND telegram_user_id=$2 AND revoked_at IS NULL`,[admin.id,BOT_OWNER_ID]) : null;
  const grants=await qOne<{permissions:string[]}>(`SELECT permissions FROM support_grants WHERE admin_id=$1`,[admin.id]);
- return {owner:!!linked && admin.role==='super_admin',adminId:admin.id,permissions:grants?.permissions||[]};
-}
-export async function telegramActor(id:number):Promise<Actor> {
- const admin=await getLinkedAdmin(id);
- const a=await adminActor(admin as AdminRow|null);
- a.owner=!!BOT_OWNER_ID && String(id)===String(BOT_OWNER_ID); a.telegramId=id;
- const existing=await qOne<{id:string}>(`SELECT id FROM support_identities WHERE telegram_id=$1`,[id]);
- if(existing) a.identity=existing.id;
- else {const row=await qOne<{id:string}>(`INSERT INTO support_identities(id,telegram_id) VALUES($1,$2) ON CONFLICT(telegram_id) DO UPDATE SET telegram_id=EXCLUDED.telegram_id RETURNING id`,[randomUUID(),id]);a.identity=row!.id;}
- return a;
+ return {owner:admin.role==='super_admin' && admin.is_active===true,adminId:admin.id,permissions:grants?.permissions||[]};
 }
 export async function anonymousIdentity(secret:string) {
  const digest=hash(secret);
@@ -54,17 +41,17 @@ async function ticket(db:Queryer,a:Actor,id:number,lock=false):Promise<Ticket>{
  if(!t||!canRead(a,t))throw new SupportError('الطلب غير موجود أو غير متاح لحسابك.',404);return t;
 }
 async function audit(db:Queryer,a:Actor,id:number|null,action:string,detail:unknown={}){await db.q(`INSERT INTO support_history(ticket_id,actor,action,detail) VALUES($1,$2,$3,$4)`,[id,author(a),action,JSON.stringify(detail)]);}
-async function enqueue(db:Queryer,key:string,recipient:unknown,id:number,body:string){if(!recipient)return;await db.q(`INSERT INTO support_jobs(event_key,recipient,ticket_id,text) VALUES($1,$2,$3,$4) ON CONFLICT(event_key) DO NOTHING`,[key,recipient,id,body.slice(0,3500)]);}
 async function addMessage(db:Queryer,a:Actor,id:number,body:string,key:string,internal=false,file?:Attachment){
  const bytes=file?validateAttachment(file):null;
  const m=await db.qOne<{id:number}>(`INSERT INTO support_messages(ticket_id,author,body,request_key,internal) VALUES($1,$2,$3,$4,$5) ON CONFLICT(ticket_id,author,request_key) DO NOTHING RETURNING id`,[id,author(a),body,key,internal]);
  if(m&&file&&bytes)await db.q(`INSERT INTO support_attachments(id,message_id,name,mime,bytes) VALUES($1,$2,$3,$4,$5)`,[randomUUID(),m.id,file.name.replace(/[\r\n"/\\]/g,'_').slice(0,100),file.mime,bytes]);
  return m;
 }
-export async function createTicket(a:Actor,input:{category:string;subject:string;body:string;section?:string;key:string;file?:Attachment;source:'web'|'telegram'}) {
+export async function createTicket(a:Actor,input:{category:string;subject:string;body:string;section?:string;key:string;file?:Attachment;source:'web'}) {
  if(!a.identity)throw new SupportError('أعد فتح صفحة الدعم.',401);
  const subject=text(input.subject,3,160),body=text(input.body,3,3000),key=text(input.key,8,100);
  if(!categories[input.category])throw new SupportError('اختر نوع الطلب.');
+ if(input.source!=='web')throw new SupportError('طلبات الدعم متاحة عبر الموقع فقط.');
  if(input.file)validateAttachment(input.file);
  const section=['A','B','C','F'].includes(input.section||'')?input.section:null;
  const old=await qOne<{id:number}>(`SELECT id FROM support_tickets WHERE identity_id=$1 AND request_key=$2`,[a.identity,key]);if(old)return old;
@@ -74,16 +61,6 @@ export async function createTicket(a:Actor,input:{category:string;subject:string
   if(!t)return (await db.qOne<{id:number}>(`SELECT id FROM support_tickets WHERE identity_id=$1 AND request_key=$2`,[a.identity,key]))!;
   await addMessage(db,{...a,owner:false,adminId:undefined,permissions:[]},t.id,body,key,false,input.file);
   await audit(db,a,t.id,'created',{source:input.source});
-  const profile=await db.qOne<{telegram_id:number|null;first_name:string|null;last_name:string|null;username:string|null;section:string|null}>(
-    `SELECT i.telegram_id, s.first_name, s.last_name, s.username, s.section
-       FROM support_identities i LEFT JOIN tg_subscribers s ON s.chat_id=i.telegram_id
-       WHERE i.id=$1`,[a.identity]);
-  const name=[profile?.first_name,profile?.last_name].filter(Boolean).join(' ').trim() || (profile?.telegram_id?'مستخدم Telegram':'زائر الموقع');
-  const user=profile?.username?'@'+profile.username:'لا يوجد';
-  const tg=profile?.telegram_id?String(profile.telegram_id):'غير مربوط';
-  const sectionName=section||profile?.section||'غير محددة';
-  await enqueue(db,'new:'+t.id,BOT_OWNER_ID,t.id,
-    `🔔 طلب دعم جديد\n🎫 ${ticketNumber(t.id)}\n👤 ${name}\n🔗 اليوزر: ${user}\n🆔 Telegram ID: ${tg}\n🏫 الشعبة: ${sectionName}\n📂 ${categories[input.category]}\n📝 ${subject}`);
   return t;
  });
 }
@@ -119,8 +96,6 @@ export async function reply(a:Actor,id:number,body:string,key:string,internal=fa
   if(t.status==='closed'&&!internal)throw new SupportError('الطلب مغلق. أعد فتحه قبل الرد.');
   const m=await addMessage(db,a,id,body,key,internal,file);if(!m)return;
   if(!internal){await db.q(`UPDATE support_tickets SET updated_at=now(),status=$2,first_response_at=CASE WHEN $3 THEN COALESCE(first_response_at,now()) ELSE first_response_at END WHERE id=$1`,[id,staff?'awaiting':'progress',staff]);
-   const identity=await db.qOne<{telegram_id:number}>(`SELECT telegram_id FROM support_identities WHERE id=$1`,[t.identity_id]);
-   await enqueue(db,'reply:'+m.id,staff?identity?.telegram_id:BOT_OWNER_ID,id,`💬 رد جديد على ${ticketNumber(id)}\n${body}`);
   }
   await audit(db,a,id,internal?'internal_note':'reply');
  });
@@ -132,8 +107,6 @@ export async function changeStatus(a:Actor,id:number,status:string){
   if(t.status===status)return;
   await db.q(`UPDATE support_tickets SET status=$2,updated_at=now(),resolved_at=CASE WHEN $2='resolved' THEN now() WHEN $2='progress' THEN NULL ELSE resolved_at END,closed_at=CASE WHEN $2='closed' THEN now() ELSE NULL END,reopened=reopened+$3 WHERE id=$1`,[id,status,['closed','resolved'].includes(t.status)&&status==='progress'?1:0]);
   await audit(db,a,id,'status',{from:t.status,to:status});
-  const identity=await db.qOne<{telegram_id:number}>(`SELECT telegram_id FROM support_identities WHERE id=$1`,[t.identity_id]);
-  await enqueue(db,'status:'+id+':'+randomUUID(),staff?identity?.telegram_id:BOT_OWNER_ID,id,`${ticketNumber(id)}\nحالة الطلب: ${statuses[status]}`);
  });
 }
 export async function attachment(a:Actor,id:string){
@@ -154,30 +127,6 @@ export async function grant(a:Actor,adminId:number,permissions:string[]){
  await q(`INSERT INTO support_grants(admin_id,permissions) VALUES($1,$2) ON CONFLICT(admin_id) DO UPDATE SET permissions=EXCLUDED.permissions`,[adminId,JSON.stringify(permissions)]);
  await audit({q,qOne},a,null,'permissions',{adminId,permissions});
 }
-export async function createLink(a:Actor){if(!a.identity)throw new SupportError('الجلسة غير متاحة.');const raw=randomBytes(24).toString('base64url');await q(`INSERT INTO support_links(token_hash,identity_id,expires_at) VALUES($1,$2,$3)`,[hash(raw),a.identity,new Date(Date.now()+15*60000).toISOString()]);return raw;}
-export async function bindLink(raw:string,telegramId:number){
- if (!Number.isSafeInteger(telegramId) || telegramId<=0) throw new SupportError('حساب Telegram غير صالح.');
- await withTx(async db=>{
-  const link=await db.qOne<{identity_id:string}>(`UPDATE support_links SET used_at=now() WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now() RETURNING identity_id`,[hash(raw)]);
-  if(!link)throw new SupportError('رابط الربط منتهي أو مستخدم. اطلب رابطًا جديدًا من الموقع.');
-  const target=await db.qOne<{id:string;secret_hash:string|null;telegram_id:number|null}>(`SELECT id,secret_hash,telegram_id FROM support_identities WHERE id=$1 FOR UPDATE`,[link.identity_id]);
-  if(!target)throw new SupportError('جلسة الدعم لم تعد متاحة.');
-  if(target.telegram_id&&String(target.telegram_id)!==String(telegramId))throw new SupportError('هذه الجلسة مرتبطة بحساب Telegram مختلف.',403);
-  const existing=await db.qOne<{id:string}>(`SELECT id FROM support_identities WHERE telegram_id=$1 FOR UPDATE`,[telegramId]);
-  if(existing&&existing.id!==target.id){
-   // The student may already have sent tickets through Telegram. Preserve them
-   // and merge the browser tickets into that verified Telegram identity.
-   await db.q(`UPDATE support_tickets SET identity_id=$2 WHERE identity_id=$1`,[target.id,existing.id]);
-   await db.q(`UPDATE support_links SET identity_id=$2 WHERE identity_id=$1`,[target.id,existing.id]);
-   if(target.secret_hash){
-    await db.q(`UPDATE support_identities SET secret_hash=NULL WHERE id=$1`,[target.id]);
-    await db.q(`INSERT INTO support_browser_links(secret_hash,identity_id) VALUES($1,$2) ON CONFLICT(secret_hash) DO UPDATE SET identity_id=EXCLUDED.identity_id`,[target.secret_hash,existing.id]);
-   }
-  } else if (!existing) {
-   await db.q(`UPDATE support_identities SET telegram_id=$2 WHERE id=$1`,[target.id,telegramId]);
-  }
- });
-}
 export async function analytics(a:Actor){
  if(!a.owner)throw new SupportError('للمالك فقط.',403);
  const summary=await qOne(`SELECT count(*)::int AS total,count(*) FILTER(WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'Asia/Baghdad') AT TIME ZONE 'Asia/Baghdad')::int AS today,count(*) FILTER(WHERE created_at>=now()-interval '7 days')::int AS days7,count(*) FILTER(WHERE created_at>=now()-interval '30 days')::int AS days30,count(*) FILTER(WHERE status NOT IN ('closed','resolved'))::int AS open,count(*) FILTER(WHERE first_response_at IS NULL)::int AS unanswered,COALESCE(sum(reopened),0)::int AS reopened,round(avg(extract(epoch from(first_response_at-created_at)))/60)::int AS first_response_minutes,round(avg(extract(epoch from(resolved_at-created_at)))/60)::int AS resolution_minutes FROM support_tickets`);
@@ -185,12 +134,4 @@ export async function analytics(a:Actor){
  const daily=await q(`SELECT to_char(created_at AT TIME ZONE 'Asia/Baghdad','YYYY-MM-DD') AS day,count(*)::int AS count FROM support_tickets WHERE created_at>=now()-interval '30 days' GROUP BY day ORDER BY day`);
  const common=await q(`SELECT subject,count(*)::int AS count FROM support_tickets WHERE category='problem' GROUP BY subject ORDER BY count(*) DESC LIMIT 10`);
  return {summary,groups,daily,common};
-}
-// Durable bounded retry queue. Telegram has no exactly-once send API: a crash after send can duplicate a notification.
-export async function drainSupport(limit=10){
- const jobs=await q<{id:number;recipient:number;ticket_id:number;text:string;attempts:number}>(`UPDATE support_jobs SET next_at=now()+interval '2 minutes',attempts=attempts+1 WHERE id IN (SELECT id FROM support_jobs WHERE sent_at IS NULL AND failed=false AND next_at<=now() AND attempts<6 ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED) RETURNING *`,[limit]);
- for(const j of jobs){const res=await sendMessage(j.recipient,j.text,{replyMarkup:{inline_keyboard:[[{text:'📖 عرض الطلب',callback_data:'sup:view:'+j.ticket_id}],[{text:'💬 الرد',callback_data:'sup:reply:'+j.ticket_id}],[{text:'📋 الطلبات',callback_data:'sup:list:0'}]]}});
- if(res.ok)await q(`UPDATE support_jobs SET sent_at=now() WHERE id=$1`,[j.id]);
- else await q(`UPDATE support_jobs SET failed=$2,next_at=$3 WHERE id=$1`,[j.id,j.attempts>=6||[400,403].includes(res.error?.code||0),new Date(Date.now()+Math.max(res.retryAfter||0,Math.min(3600,30*2**j.attempts))*1000).toISOString()]);}
- return {processed:jobs.length};
 }

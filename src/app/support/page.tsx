@@ -1,64 +1,337 @@
-'use client';
-import {useEffect,useState} from 'react';
-import './support.css';
-type Row={id:number;subject:string;status:string;category:string;priority:string;section:string;created_at:string;first_name?:string;username?:string;assigned_to?:number};
-type FileData={name:string;mime:string;base64:string};
-type Detail={ticket:Row;messages:{id:number;author:string;body:string;internal:boolean;created_at:string}[];attachments:{id:string;message_id:number;name:string}[];history:{action:string;created_at:string;actor:string}[]};
-const cats:Record<string,string>={support:'💬 تواصل مع الدعم',idea:'💡 اقترح فكرة',problem:'🐞 الإبلاغ عن مشكلة'};
-const states:Record<string,string>={new:'جديد',awaiting:'بانتظار رد الطالب',progress:'قيد المعالجة',resolved:'تم الحل',closed:'مغلق'};
-const levels:Record<string,string>={normal:'عادي',important:'مهم',urgent:'عاجل'};
-const fmt=(s:string)=>new Date(s).toLocaleString('ar-IQ',{timeZone:'Asia/Baghdad'});
-export default function SupportPage(){
- const [rows,setRows]=useState<Row[]>([]),[total,setTotal]=useState(0),[page,setPage]=useState(0),[owner,setOwner]=useState(false),[staff,setStaff]=useState(false),[permissions,setPermissions]=useState<string[]>([]);
- const [view,setView]=useState<'list'|'new'|'detail'|'stats'|'staff'>('list'),[detail,setDetail]=useState<Detail|null>(null),[category,setCategory]=useState('support'),[subject,setSubject]=useState(''),[body,setBody]=useState(''),[section,setSection]=useState(''),[file,setFile]=useState<FileData>(),[key,setKey]=useState('');
- const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[internal,setInternal]=useState(false),[link,setLink]=useState('');
- const [filters,setFilters]=useState({q:'',status:'',category:'',section:'',priority:'',from:'',to:''});
- const [stats,setStats]=useState<{summary:Record<string,number|null>;groups:Record<string,{label:string;count:number}[]>;daily:{day:string;count:number}[];common:{subject:string;count:number}[]}|null>(null);
- const [people,setPeople]=useState<{id:number;name:string;permissions:string[]}[]>([]),[assignee,setAssignee]=useState(''),[priority,setPriority]=useState('normal');
- const can=(p:string)=>owner||permissions.includes('support.manage')||permissions.includes('support.'+p);
- async function request(url='/api/support',data?:unknown){const r=await fetch(url,data?{method:'POST',headers:{'content-type':'application/json','x-support':'1'},body:JSON.stringify(data)}:{cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'تعذر إكمال الطلب.');return j;}
- async function task(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError(e instanceof Error?e.message:'تعذر إكمال العملية.');}finally{setBusy(false);}}
- async function load(p=page){const j=await request('/api/support?'+new URLSearchParams({...filters,page:String(p)}));setRows(j.rows);setTotal(j.total);setOwner(j.owner);setStaff(j.staff);setPermissions(j.permissions);setPage(p);}
- useEffect(()=>{setKey(crypto.randomUUID());void task(()=>load(0));},[]);
- async function open(id:number){const j=await request('/api/support?id='+id);setDetail(j);setView('detail');setBody('');setFile(undefined);setKey(crypto.randomUUID());setAssignee(j.ticket.assigned_to?String(j.ticket.assigned_to):'');setPriority(j.ticket.priority);if(can('assign'))setPeople(await request('/api/support?staff=1'));}
- async function pick(f?:File){if(!f){setFile(undefined);return;}if(f.size>2097152||!['image/png','image/jpeg','application/pdf'].includes(f.type)){setError('المسموح PNG أو JPG أو PDF حتى 2MB.');return;}const bytes=new Uint8Array(await f.arrayBuffer());let b='';for(const x of bytes)b+=String.fromCharCode(x);setFile({name:f.name,mime:f.type,base64:btoa(b)});}
- function fresh(c:string){setCategory(c);setSubject('');setBody('');setFile(undefined);setKey(crypto.randomUUID());setNotice('');setView('new');}
- async function submit(){const j=await request('/api/support',{action:'create',category,subject,body,section,file,key});setNotice('تم استلام طلبك: SUP-'+String(j.id).padStart(6,'0'));await open(j.id);await load(0);}
- async function updateStatus(status:string){if(!detail)return;await request('/api/support',{action:'status',id:detail.ticket.id,status});await open(detail.ticket.id);await load();}
- const attachInput=<label className="sup-field">مرفق اختياري — PNG / JPG / PDF حتى 2MB<input type="file" accept="image/png,image/jpeg,application/pdf" onChange={e=>void pick(e.target.files?.[0])}/>{file&&<span>{file.name} <button type="button" onClick={()=>setFile(undefined)}>إزالة</button></span>}</label>;
- return <section className="support-center" dir="rtl"><header className="sup-heading"><h1>الدعم والاقتراحات</h1><p>شلون نكدر نساعدك؟</p></header>
+"use client";
 
- <div className="sup-choices">
-   {Object.entries(cats).map(([c,n])=><button className="sup-choice" disabled={busy} key={c} onClick={()=>fresh(c)}><span>{n}</span><span aria-hidden="true">←</span></button>)}
- </div>
- {view!=='list'&&<button type="button" className="sup-back" onClick={()=>{setView('list');setError('');}}>← رجوع للطلبات</button>}
- {owner&&view==='list'&&<details className="sup-tools"><summary>⚙️ إدارة الدعم</summary><div className="sup-actions">
-   <button onClick={()=>void task(async()=>{setStats(await request('/api/support?stats=1'));setView('stats');})}>📊 الإحصائيات</button>
-   <button onClick={()=>void task(async()=>{setPeople(await request('/api/support?staff=1'));setView('staff');})}>👥 الفريق</button>
- </div></details>}
- {error&&<p role="alert" className="sup-error">{error}</p>}{notice&&<p role="status" className="sup-success">{notice}</p>}{busy&&<p role="status">جارٍ إكمال الطلب…</p>}
- {!staff&&view==='list'&&<details className="sup-tools"><summary>🔔 استلام الردود عبر Telegram</summary><div className="sup-link">
-   <button disabled={busy} onClick={()=>void task(async()=>{const j=await request('/api/support',{action:'link'});setLink(j.url);})}>ربط حسابي</button>
-   {link&&<a href={link} target="_blank" rel="noreferrer">افتح البوت لإكمال الربط</a>}
- </div></details>}
- {view==='new'&&<form className="sup-panel sup-compose" onSubmit={e=>{e.preventDefault();void task(submit);}}>
-   <h2>{cats[category]}</h2>
-   <label className="sup-field">العنوان<input required minLength={3} maxLength={160} placeholder="اكتب عنوان طلبك" value={subject} onChange={e=>setSubject(e.target.value)}/></label>
-   <label className="sup-field">الرسالة<textarea required minLength={3} maxLength={3000} rows={5} placeholder="اكتب شنو تحتاج..." value={body} onChange={e=>setBody(e.target.value)}/></label>
-   <details className="sup-options"><summary>إضافة شعبة أو مرفق (اختياري)</summary>
-     <label className="sup-field">الشعبة<select value={section} onChange={e=>setSection(e.target.value)}><option value="">غير محددة</option>{['A','B','C','F'].map(s=><option key={s}>{s}</option>)}</select></label>
-     {attachInput}
-   </details>
-   <button type="submit" className="sup-primary sup-submit" disabled={busy}>{busy?'جارٍ الإرسال…':'إرسال الطلب ←'}</button>
- </form>}
- {view==='list'&&<div className="sup-panel sup-list-panel"><div className="sup-list-heading"><h2>{staff?'طلبات الدعم':'طلباتي السابقة'}</h2><span>{total}</span></div>{staff&&<details className="sup-tools"><summary>بحث وتصفية</summary><form className="sup-filters" onSubmit={e=>{e.preventDefault();void task(()=>load(0));}}><label>بحث<input placeholder="رقم الطلب، الاسم، اليوزر، الآيدي، العنوان" value={filters.q} onChange={e=>setFilters({...filters,q:e.target.value})}/></label>{(['status','category','priority','section'] as const).map(k=><label key={k}>{{status:'الحالة',category:'النوع',priority:'الأولوية',section:'الشعبة'}[k]}<select value={filters[k]} onChange={e=>setFilters({...filters,[k]:e.target.value})}><option value="">الكل</option>{Object.entries(k==='status'?states:k==='category'?cats:k==='priority'?levels:{A:'A',B:'B',C:'C',F:'F'}).map(([v,n])=><option value={v} key={v}>{n}</option>)}</select></label>)}<label>من<input type="date" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/></label><label>إلى<input type="date" value={filters.to} onChange={e=>setFilters({...filters,to:e.target.value})}/></label><button disabled={busy}>تطبيق</button></form></details>}
- {!rows.length&&!busy&&<div className="sup-empty">ما عندك طلبات لحد الآن.</div>}<div className="sup-list">{rows.map(t=><button className="sup-ticket" key={t.id} onClick={()=>void task(()=>open(t.id))}><span><small>SUP-{String(t.id).padStart(6,'0')} · {cats[t.category]}</small><strong>{t.subject}</strong><small>{staff?(t.first_name||'مستخدم الموقع')+' · ':''}{fmt(t.created_at)}</small></span><span className={'sup-badge '+t.status}>{states[t.status]}</span></button>)}</div><div className="sup-actions"><button disabled={!page||busy} onClick={()=>void task(()=>load(page-1))}>السابق</button><span>صفحة {page+1}</span><button disabled={(page+1)*10>=total||busy} onClick={()=>void task(()=>load(page+1))}>التالي</button></div></div>}
- {view==='detail'&&detail&&<div className="sup-panel"><div className="sup-detail-head"><div><small>SUP-{String(detail.ticket.id).padStart(6,'0')}</small><h2>{detail.ticket.subject}</h2></div><span className={'sup-badge '+detail.ticket.status}>{states[detail.ticket.status]}</span></div><div className="sup-thread">{detail.messages.map(m=><article className={'sup-message '+(m.internal?'internal':m.author.startsWith('student:')?'student':'agent')} key={m.id}><small>{m.internal?'🔒 ملاحظة داخلية':m.author.startsWith('student:')?'الطالب':'فريق الدعم'} · {fmt(m.created_at)}</small><p>{m.body}</p>{detail.attachments.filter(f=>f.message_id===m.id).map(f=><a key={f.id} href={'/api/support?file='+f.id} target="_blank" rel="noreferrer">📎 {f.name}</a>)}</article>)}</div>
- {detail.ticket.status!=='closed'&&<form onSubmit={e=>{e.preventDefault();void task(async()=>{await request('/api/support',{action:'reply',id:detail.ticket.id,body,key,internal:can('reply')&&internal,file});await open(detail.ticket.id);});}}><label className="sup-field">{internal?'ملاحظة داخلية':'أضف ردًا'}<textarea required maxLength={3000} rows={4} value={body} onChange={e=>setBody(e.target.value)}/></label>{attachInput}{can('reply')&&<label><input type="checkbox" checked={internal} onChange={e=>setInternal(e.target.checked)}/> ملاحظة داخلية — لا تظهر للطالب</label>}<button className="sup-primary" disabled={busy}>إرسال</button></form>}
- <div className="sup-actions">{can('close')?<select aria-label="تغيير الحالة" value={detail.ticket.status} disabled={busy} onChange={e=>void task(()=>updateStatus(e.target.value))}>{Object.entries(states).map(([v,n])=><option value={v} key={v}>{n}</option>)}</select>:<button disabled={busy} onClick={()=>void task(()=>updateStatus(['closed','resolved'].includes(detail.ticket.status)?'progress':'closed'))}>{['closed','resolved'].includes(detail.ticket.status)?'إعادة فتح الطلب':'إغلاق الطلب'}</button>}<button onClick={()=>void task(()=>open(detail.ticket.id))}>تحديث المحادثة</button></div>
- {can('assign')&&<div className="sup-actions"><select aria-label="موظف الدعم" value={assignee} onChange={e=>setAssignee(e.target.value)}><option value="">غير مسند</option>{people.filter(p=>p.permissions?.some(v=>['support.reply','support.manage'].includes(v))).map(p=><option key={p.id} value={p.id}>{p.name||p.id}</option>)}</select><select aria-label="الأولوية" value={priority} onChange={e=>setPriority(e.target.value)}>{Object.entries(levels).map(([v,n])=><option key={v} value={v}>{n}</option>)}</select><button onClick={()=>void task(async()=>{await request('/api/support',{action:'assign',id:detail.ticket.id,adminId:assignee,priority});await open(detail.ticket.id);})}>حفظ الإسناد والأولوية</button></div>}
- {staff&&<details><summary>سجل الإجراءات</summary>{detail.history.map((h,i)=><p key={i}>{h.action} · {h.actor} · {fmt(h.created_at)}</p>)}</details>}</div>}
- {view==='stats'&&stats&&<div className="sup-panel"><h2>إحصائيات الدعم</h2><div className="sup-metrics">{Object.entries(stats.summary).map(([k,v])=><div key={k}><strong>{v??'—'}</strong><span>{{total:'إجمالي الطلبات',today:'اليوم',days7:'آخر 7 أيام',days30:'آخر 30 يومًا',open:'المفتوحة',unanswered:'بدون أول رد',reopened:'إعادات الفتح',first_response_minutes:'متوسط أول رد / دقيقة',resolution_minutes:'متوسط الحل / دقيقة'}[k]||k}</span></div>)}</div>{Object.entries(stats.groups).map(([k,rows])=><div key={k}><h3>{{section:'حسب الشعبة',category:'حسب النوع',priority:'حسب الأولوية',status:'حسب الحالة',assigned_to:'عبء العمل حسب رقم الموظف'}[k]||k}</h3>{rows.map((r,i)=><p key={i}>{states[r.label]||cats[r.label]||levels[r.label]||r.label||'غير محدد'}: {r.count}</p>)}</div>)}<h3>الاتجاه اليومي خلال 30 يومًا</h3>{stats.daily.map(r=><p key={r.day}>{r.day}: {r.count}</p>)}<h3>عناوين المشكلات المتكررة</h3>{stats.common.map(r=><p key={r.subject}>{r.subject}: {r.count}</p>)}</div>}
- {view==='staff'&&owner&&<div className="sup-panel"><h2>صلاحيات فريق الدعم</h2><p>لا يحصل التدريسيون أو الممثلون على صلاحية الدعم تلقائيًا.</p>{people.map(p=><div className="sup-staff" key={p.id}><strong>{p.name||p.id}</strong>{['view','reply','assign','close','manage'].map(v=><label key={v}><input type="checkbox" checked={p.permissions?.includes('support.'+v)||false} onChange={e=>setPeople(people.map(x=>x.id===p.id?{...x,permissions:e.target.checked?[...(x.permissions||[]),'support.'+v]:(x.permissions||[]).filter(z=>z!=='support.'+v)}:x))}/>{{view:'عرض',reply:'رد',assign:'إسناد',close:'إغلاق',manage:'إدارة كاملة'}[v]}</label>)}<button disabled={busy} onClick={()=>void task(async()=>{await request('/api/support',{action:'grant',adminId:p.id,permissions:p.permissions||[]});setNotice('تم حفظ الصلاحيات.');})}>حفظ</button></div>)}</div>}
- <details className="sup-privacy"><summary>الخصوصية</summary><p>طلباتك تظهر إلك ولفريق الدعم المخوّل فقط. لا ترسل معلومات حساسة. طلبات الموقع محفوظة لهذا المتصفح؛ اربط Telegram حتى تتابعها من جهاز آخر.</p></details></section>;
+import {useEffect, useState} from "react";
+import "./support.css";
+
+type TicketRow = {
+  id: number; subject: string; category: string; status: string;
+  priority: string; section: string | null; created_at: string;
+  first_name?: string; username?: string; assigned_to?: number | null;
+};
+type TicketDetail = {
+  ticket: TicketRow;
+  messages: {id: number; author: string; body: string; internal: boolean; created_at: string}[];
+  attachments: {id: string; message_id: number; name: string}[];
+  history: {action: string; actor: string; created_at: string}[];
+};
+type Stats = {
+  summary: Record<string, number | null>;
+  groups: Record<string, {label: string; count: number}[]>;
+  daily: {day: string; count: number}[];
+  common: {subject: string; count: number}[];
+};
+type Member = {id: number; name: string; permissions: string[]};
+type View = "main" | "ticket" | "stats" | "team";
+const categories: Record<string,string> = {
+  support: "تواصل مع الدعم",
+  idea: "اقترح فكرة",
+  problem: "بلّغ عن مشكلة",
+};
+const statuses: Record<string,string> = {
+  new: "جديد",
+  awaiting: "بانتظار ردك",
+  progress: "قيد المعالجة",
+  resolved: "تم الحل",
+  closed: "مغلق",
+};
+const priorities: Record<string,string> = {normal: "عادي", important: "مهم", urgent: "عاجل"};
+const metricNames: Record<string,string> = {
+  total: "كل الطلبات", today: "اليوم", days7: "آخر 7 أيام",
+  days30: "آخر 30 يومًا", open: "المفتوحة",
+  unanswered: "بانتظار أول رد", reopened: "أُعيد فتحها",
+  first_response_minutes: "دقائق حتى أول رد",
+  resolution_minutes: "دقائق حتى الحل",
+};
+const shortDate = (value: string) => new Date(value).toLocaleDateString("ar-IQ", {timeZone: "Asia/Baghdad"});
+
+export default function SupportPage() {
+  const [view, setView] = useState<View>("main");
+  const [rows, setRows] = useState<TicketRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [owner, setOwner] = useState(false);
+  const [staff, setStaff] = useState(false);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [category, setCategory] = useState("support");
+  const [message, setMessage] = useState("");
+  const [requestKey, setRequestKey] = useState("");
+  const [detail, setDetail] = useState<TicketDetail | null>(null);
+  const [replyBody, setReplyBody] = useState("");
+  const [replyKey, setReplyKey] = useState("");
+  const [internal, setInternal] = useState(false);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [people, setPeople] = useState<Member[]>([]);
+  const [assignedTo, setAssignedTo] = useState("");
+  const [priority, setPriority] = useState("normal");
+  const [filters, setFilters] = useState({q: "", status: "", category: "", section: ""});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const can = (action: string) => owner || permissions.includes("support.manage") || permissions.includes("support." + action);
+
+  async function api(url: string, payload?: Record<string, unknown>) {
+    const response = await fetch(url, payload ? {
+      method: "POST",
+      headers: {"content-type": "application/json", "x-support": "1"},
+      body: JSON.stringify(payload),
+    } : {cache: "no-store"});
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(json.error || "تعذر إكمال الطلب.");
+    return json;
+  }
+
+  async function run(operation: () => Promise<void>) {
+    setBusy(true);
+    setError("");
+    try { await operation(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "تعذر الاتصال. حاول مرة ثانية."); }
+    finally { setBusy(false); }
+  }
+
+  async function load(nextPage = 0) {
+    const params = new URLSearchParams({...filters, page: String(nextPage)});
+    const response = await api("/api/support?" + params);
+    setRows(response.rows || []);
+    setTotal(Number(response.total) || 0);
+    setPage(nextPage);
+    setOwner(Boolean(response.owner));
+    setStaff(Boolean(response.staff));
+    setPermissions(response.permissions || []);
+  }
+
+  useEffect(() => {
+    setRequestKey(crypto.randomUUID());
+    setReplyKey(crypto.randomUUID());
+    void run(() => load(0));
+  }, []);
+
+  async function openTicket(id: number) {
+    const response: TicketDetail = await api("/api/support?id=" + id);
+    setDetail(response);
+    setAssignedTo(response.ticket.assigned_to ? String(response.ticket.assigned_to) : "");
+    setPriority(response.ticket.priority);
+    setReplyBody("");
+    setInternal(false);
+    setReplyKey(crypto.randomUUID());
+    setView("ticket");
+  }
+
+  async function sendTicket() {
+    const body = message.trim();
+    if (body.length < 3) {setError("اكتب رسالتك أولاً."); return;}
+    const subject = body.replace(/\s+/g, " ").slice(0, 90);
+    const key = requestKey || crypto.randomUUID();
+    const result = await api("/api/support", {action: "create", category, body, subject, key});
+    setMessage("");
+    setRequestKey(crypto.randomUUID());
+    setNotice("✅ تم إرسال طلبك. تگدر تتابع الرد هنا.");
+    await load(0);
+    await openTicket(Number(result.id));
+  }
+
+  async function sendReply() {
+    if (!detail || !replyBody.trim()) return;
+    await api("/api/support", {
+      action: "reply", id: detail.ticket.id,
+      body: replyBody.trim(), key: replyKey || crypto.randomUUID(),
+      internal: staff && internal,
+    });
+    await openTicket(detail.ticket.id);
+    await load(page);
+  }
+
+  async function setStatus(status: string) {
+    if (!detail) return;
+    await api("/api/support", {action: "status", id: detail.ticket.id, status});
+    await openTicket(detail.ticket.id);
+    await load(page);
+  }
+
+  async function saveAssignment() {
+    if (!detail) return;
+    await api("/api/support", {
+      action: "assign", id: detail.ticket.id, adminId: assignedTo || null, priority,
+    });
+    await openTicket(detail.ticket.id);
+    setNotice("تم الحفظ.");
+  }
+
+  async function saveMember(member: Member) {
+    await api("/api/support", {action: "grant", adminId: member.id, permissions: member.permissions});
+    setNotice("تم حفظ الصلاحيات.");
+  }
+
+  function back() {setView("main");setDetail(null);setError("");setNotice("");void run(() => load(0));}
+
+  return <section className="support-center" dir="rtl">
+    <header className="sup-heading">
+      <h1>الدعم والاقتراحات</h1>
+      <p>{staff ? "إدارة الطلبات والردود" : "عندك سؤال أو اقتراح؟ اكتب لنا."}</p>
+    </header>
+
+    {view !== "main" && <button className="sup-back" onClick={back} type="button">→ رجوع</button>}
+    {error && <div role="alert" className="sup-error">{error}</div>}
+    {notice && <div role="status" className="sup-success">{notice}</div>}
+
+    {view === "main" && <>
+      {!staff && <form className="sup-compose" onSubmit={event => {event.preventDefault();void run(sendTicket);}}>
+        <div className="sup-category" role="group" aria-label="نوع الطلب">
+          {Object.entries(categories).map(([key, label]) =>
+            <button key={key} type="button" aria-pressed={category===key}
+              className={category===key ? "active" : ""}
+              disabled={busy} onClick={() => setCategory(key)}>{label}</button>
+          )}
+        </div>
+        <label className="sup-message-label" htmlFor="support-message">رسالتك</label>
+        <textarea id="support-message" rows={4} required minLength={3} maxLength={3000}
+          value={message} disabled={busy} onChange={event => setMessage(event.target.value)}
+          placeholder="اكتب رسالتك هنا..." />
+        <button type="submit" className="sup-primary sup-submit" disabled={busy || message.trim().length<3}>
+          {busy ? "جارٍ الإرسال..." : "إرسال الطلب"}
+        </button>
+      </form>}
+
+      {staff && <div className="sup-staff-controls">
+        <details className="sup-tools">
+          <summary>بحث وتصفية</summary>
+          <form className="sup-filters" onSubmit={event => {event.preventDefault();void run(() => load(0));}}>
+            <input aria-label="بحث" placeholder="ابحث برقم الطلب أو العنوان" value={filters.q}
+              onChange={event => setFilters({...filters,q:event.target.value})}/>
+            <select aria-label="الحالة" value={filters.status} onChange={event => setFilters({...filters,status:event.target.value})}>
+              <option value="">كل الحالات</option>
+              {Object.entries(statuses).map(([key,value])=><option value={key} key={key}>{value}</option>)}
+            </select>
+            <select aria-label="النوع" value={filters.category} onChange={event => setFilters({...filters,category:event.target.value})}>
+              <option value="">كل الأنواع</option>
+              {Object.entries(categories).map(([key,value])=><option value={key} key={key}>{value}</option>)}
+            </select>
+            <select aria-label="الشعبة" value={filters.section} onChange={event => setFilters({...filters,section:event.target.value})}>
+              <option value="">كل الشعب</option>
+              {["A","B","C","F"].map(key=><option key={key}>{key}</option>)}
+            </select>
+            <button type="submit" disabled={busy}>تطبيق</button>
+          </form>
+        </details>
+        {owner && <>
+          <button type="button" onClick={() => void run(async () => {setStats(await api("/api/support?stats=1"));setView("stats");})}>الإحصائيات</button>
+          <button type="button" onClick={() => void run(async () => {setPeople(await api("/api/support?staff=1"));setView("team");})}>الفريق</button>
+        </>}
+      </div>}
+
+      <div className="sup-requests">
+        <div className="sup-requests-header">
+          <h2>{staff ? "طلبات الطلاب" : "طلباتي"}</h2>
+          <span>{total}</span>
+        </div>
+        {!busy && rows.length===0 && <p className="sup-empty">ماكو طلبات حالياً.</p>}
+        <div className="sup-list">
+          {rows.map(ticket => <button type="button" className="sup-ticket" key={ticket.id}
+            onClick={() => void run(() => openTicket(ticket.id))}>
+            <span>
+              <strong>{ticket.subject}</strong>
+              <small>#{String(ticket.id).padStart(6,"0")} · {shortDate(ticket.created_at)}</small>
+            </span>
+            <span className={"sup-status " + ticket.status}>{statuses[ticket.status] || ticket.status}</span>
+          </button>)}
+        </div>
+        {total > 10 && <div className="sup-pagination">
+          <button disabled={busy || page===0} onClick={() => void run(()=>load(page-1))}>السابق</button>
+          <span>{page + 1}</span>
+          <button disabled={busy || (page+1)*10>=total} onClick={() => void run(()=>load(page+1))}>التالي</button>
+        </div>}
+      </div>
+      {!staff && <p className="sup-hint">الردود تظهر هنا من نفس المتصفح. احتفظ ببيانات متصفحك حتى تگدر ترجع لطلباتك.</p>}
+    </>}
+
+    {view === "ticket" && detail && <div className="sup-detail">
+      <header className="sup-detail-title">
+        <div><small>#{String(detail.ticket.id).padStart(6,"0")}</small><h2>{detail.ticket.subject}</h2></div>
+        <span className={"sup-status " + detail.ticket.status}>{statuses[detail.ticket.status] || detail.ticket.status}</span>
+      </header>
+      <div className="sup-thread">
+        {detail.messages.map(entry => <article key={entry.id} className={"sup-bubble " + (entry.internal?"private":entry.author.startsWith("student:")?"student":"support")}>
+          <small>{entry.internal?"ملاحظة داخلية":entry.author.startsWith("student:")?"الطالب":"الدعم"} · {shortDate(entry.created_at)}</small>
+          <p>{entry.body}</p>
+          {detail.attachments.filter(file=>file.message_id===entry.id).map(file=>
+            <a key={file.id} href={"/api/support?file="+encodeURIComponent(file.id)}>📎 {file.name}</a>)}
+        </article>)}
+      </div>
+      {detail.ticket.status!=="closed" &&
+        <form className="sup-reply" onSubmit={event=>{event.preventDefault();void run(sendReply);}}>
+          <textarea rows={3} required maxLength={3000} placeholder="اكتب ردك..." value={replyBody}
+            onChange={event=>setReplyBody(event.target.value)} disabled={busy}/>
+          {can("reply") && <label className="sup-inline-check">
+            <input type="checkbox" checked={internal} onChange={event=>setInternal(event.target.checked)}/>
+            ملاحظة داخلية
+          </label>}
+          <button type="submit" className="sup-primary" disabled={busy||!replyBody.trim()}>إرسال الرد</button>
+        </form>}
+      <div className="sup-detail-actions">
+        {can("close")
+          ? <select aria-label="حالة الطلب" value={detail.ticket.status} disabled={busy}
+              onChange={event=>void run(()=>setStatus(event.target.value))}>
+              {Object.entries(statuses).map(([value,label])=><option value={value} key={value}>{label}</option>)}
+            </select>
+          : <button type="button" disabled={busy} onClick={()=>void run(()=>setStatus(["closed","resolved"].includes(detail.ticket.status)?"progress":"closed"))}>
+              {["closed","resolved"].includes(detail.ticket.status)?"إعادة فتح":"إغلاق الطلب"}
+            </button>}
+        <button type="button" onClick={()=>void run(()=>openTicket(detail.ticket.id))} disabled={busy}>تحديث</button>
+      </div>
+      {can("assign") && <details className="sup-tools">
+        <summary>إعدادات الطلب</summary>
+        <div className="sup-admin-extra">
+          <select aria-label="موظف الدعم" value={assignedTo} onChange={event=>setAssignedTo(event.target.value)}>
+            <option value="">غير مسند</option>
+            {people.filter(person=>person.permissions?.some(p=>["support.reply","support.manage"].includes(p)))
+              .map(person=><option key={person.id} value={person.id}>{person.name || person.id}</option>)}
+          </select>
+          <select aria-label="الأولوية" value={priority} onChange={event=>setPriority(event.target.value)}>
+            {Object.entries(priorities).map(([value,label])=><option value={value} key={value}>{label}</option>)}
+          </select>
+          <button type="button" disabled={busy} onClick={()=>void run(saveAssignment)}>حفظ</button>
+        </div>
+      </details>}
+      {staff && detail.history.length>0 && <details className="sup-tools">
+        <summary>سجل الإجراءات</summary>
+        {detail.history.map((entry,index)=><p key={index}>{entry.action} · {shortDate(entry.created_at)}</p>)}
+      </details>}
+    </div>}
+
+    {view === "stats" && stats && owner && <div className="sup-analytics">
+      <h2>إحصائيات الدعم</h2>
+      <div className="sup-stats-grid">
+        {Object.entries(stats.summary).map(([key,value])=><div key={key}>
+          <strong>{value ?? "—"}</strong><span>{metricNames[key] || key}</span>
+        </div>)}
+      </div>
+      <details className="sup-tools"><summary>التفاصيل حسب النوع والشعبة والحالة</summary>
+        {Object.entries(stats.groups).map(([key,values])=><section key={key}>
+          <h3>{({section:"الشعبة",category:"النوع",priority:"الأولوية",status:"الحالة",assigned_to:"الفريق"} as Record<string,string>)[key] || key}</h3>
+          {values.map((entry,index)=><p key={index}>{categories[entry.label] || statuses[entry.label] || priorities[entry.label] || entry.label || "غير محدد"}: {entry.count}</p>)}
+        </section>)}
+      </details>
+    </div>}
+
+    {view === "team" && owner && <div className="sup-team">
+      <h2>فريق الدعم</h2>
+      {people.map(member=><div className="sup-member" key={member.id}>
+        <strong>{member.name || member.id}</strong>
+        <div className="sup-member-perms">
+          {(["view","reply","assign","close","manage"] as const).map(kind=><label key={kind}>
+            <input type="checkbox" checked={member.permissions?.includes("support."+kind)||false}
+              onChange={event=>setPeople(people.map(person=>
+                person.id===member.id
+                  ? {...person,permissions:event.target.checked
+                      ? [...(person.permissions||[]),"support."+kind]
+                      : (person.permissions||[]).filter(p=>p!=="support."+kind)}
+                  : person
+              ))}/>
+            {({view:"عرض",reply:"رد",assign:"إسناد",close:"إغلاق",manage:"إدارة"} as const)[kind]}
+          </label>)}
+        </div>
+        <button disabled={busy} onClick={()=>void run(()=>saveMember(member))}>حفظ</button>
+      </div>)}
+    </div>}
+  </section>;
 }
