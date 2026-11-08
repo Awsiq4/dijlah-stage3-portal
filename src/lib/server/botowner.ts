@@ -10,6 +10,7 @@ const backHome = {inline_keyboard: [[{text: "👑 لوحة المالك", callba
 
 export function ownerMenu() {
   return {inline_keyboard: [
+    [{text:"🎫 إدارة الدعم والاقتراحات",callback_data:"sup:list:0"}],
     [{text: "📊 إحصائيات البوت", callback_data: "own:stats"}],
     [{text: "👥 إدارة المستخدمين", callback_data: "own:users:0"}],
     [{text: "🆕 أحدث المسجلين", callback_data: "own:recent:0"}],

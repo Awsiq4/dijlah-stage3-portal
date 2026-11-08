@@ -1,3 +1,6 @@
+import {after} from "next/server";
+import {supportCallback,supportMessage} from "@/lib/server/botsupport";
+import {bindLink,drainSupport} from "@/lib/server/support";
 import {NextRequest, NextResponse} from "next/server";
 import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTION_SECRET, botConfigured, webhookAuthorized} from "@/lib/server/flags";
 import {verifySubscribeToken} from "@/lib/server/tokens";
@@ -134,9 +137,15 @@ export async function POST(req: NextRequest) {
     const callback = update.callback_query;
     replyChat = Number(message?.chat?.id || callback?.message?.chat?.id) || undefined;
     if ((message?.chat?.type || callback?.message?.chat?.type) !== "private") return NextResponse.json({ok: true});
-    if (message?.chat?.id && (message.text || message.document)) {
+    after(()=>drainSupport().catch(()=>undefined));
+    if (message?.chat?.id && (message.text || message.document || message.photo)) {
       const text = String(message.text || message.caption || "");
       const arg = text.split(" ").slice(1).join(" ").trim();
+      if (text.startsWith("/start") && arg.startsWith("sup_")) {
+        try {await bindLink(arg.slice(4), Number(message.from.id)); await sendMessage(Number(message.chat.id), "تم ربط طلبات الموقع بحسابك. ستصلك الردود هنا.");} catch(e) {await sendMessage(Number(message.chat.id), e instanceof Error?e.message:"تعذر الربط.");}
+        return NextResponse.json({ok:true});
+      }
+      if (!text.startsWith("/") && await supportMessage(Number(message.chat.id),Number(message.from.id),message)) return NextResponse.json({ok:true});
       if (text.startsWith("/start") && arg.startsWith("link_")) {
         await handleLinkStart(Number(message.chat.id), Number(message.from?.id || message.chat.id), arg);
       } else if (text.startsWith("/")) {
@@ -178,7 +187,9 @@ export async function POST(req: NextRequest) {
       await tgFetch("answerCallbackQuery", {callback_query_id: String(callback.id)});
       const data = String(callback.data);
       const userId = Number(callback.from?.id || callback.message.chat.id);
-      if (data.startsWith("own:")) {
+      if (data.startsWith("sup:")) {
+        await supportCallback(Number(callback.message.chat.id),userId,data);
+      } else if (data.startsWith("own:")) {
         await handleOwnerCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("stu:") ) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
