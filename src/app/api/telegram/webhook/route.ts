@@ -57,11 +57,12 @@ async function handleCommand(chatId: number, text: string, arg: string, from?: {
       await sendMessage(chatId, "⚠️ رابط الاشتراك غير صالح أو منتهي الصلاحية. افتح صفحة «تفعيل الإشعارات» من البوابة مجددًا.");
       return;
     }
-    if (!payload) { await sendMessage(chatId, "اختر شعبتك لتفعيل الإشعارات:", {replyMarkup: sectionKeyboard()}); return; }
-    const section = payload.section;
+    const section = payload?.section || "A";
+    // register on every /start (idempotent; owner notified only for genuinely new users)
     const reg = await registerUser(chatId, from?.id, from?.username, from?.first_name, from?.last_name, section);
-    if (reg.isNew) await notifyOwnerNewUser({...reg, section});
+    if (reg.isNew) await notifyOwnerNewUser({...reg, section, username: from?.username, first_name: from?.first_name, last_name: from?.last_name});
     await upsertSubscriber(chatId, from?.id, from?.username, section);
+    if (!payload) { await sendMessage(chatId, "اختر شعبتك لتفعيل الإشعارات:", {replyMarkup: sectionKeyboard()}); return; }
     await sendMessage(chatId, `✅ تم تفعيل إشعارات البوابة بنجاح!\nالشعبة: <b>${section}</b>\n\nسيصلك كل جديد: المحاضرات، الامتحانات، التبليغات، الواجبات، وتغييرات الجدول.\n\nلتغيير الشعبة استخدم /section، وللإعدادات /settings، وللعرض /status، وللإيقاف /stop.`, {parseMode: "HTML"});
     return;
   }
@@ -94,11 +95,13 @@ async function handleCommand(chatId: number, text: string, arg: string, from?: {
   await sendMessage(chatId, HELP);
 }
 
-async function handleCallback(chatId: number, data: string) {
+async function handleCallback(chatId: number, data: string, from?: {id?: number; username?: string; first_name?: string; last_name?: string}) {
   if (data.startsWith("sec:")) {
     const section = data.slice(4);
     if (!SECTIONS.includes(section as never)) return;
-    await upsertSubscriber(chatId, chatId, undefined, section);
+    const reg = await registerUser(chatId, from?.id ?? chatId, from?.username, from?.first_name, from?.last_name, section);
+    if (reg.isNew) await notifyOwnerNewUser({...reg, section, username: from?.username, first_name: from?.first_name, last_name: from?.last_name});
+    await upsertSubscriber(chatId, from?.id ?? chatId, from?.username, section);
     await q(`INSERT INTO tg_audit (action, detail) VALUES ($1,$2)`, ["subscriber.section", {chat_id: chatId, section}]);
     await sendMessage(chatId, `✅ تم تغيير شعبتك إلى <b>${section}</b>.`, {parseMode: "HTML", replyMarkup: {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]}});
     return;
@@ -139,9 +142,10 @@ export async function POST(req: NextRequest) {
       } else if (text.startsWith("/")) {
         // a linked admin mid-flow may send a file URL starting with "/" — route by active flow first
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
-        if (admin && ["/start", "/menu"].includes(text.trim().split("@")[0])) {
-          await handleNavCallback(Number(message.chat.id), Number(message.from.id), "nav:home");
-        } else if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
+        if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
+          // every /start registers the user (idempotent; owner notified only when genuinely new)
+          const reg = await registerUser(Number(message.chat.id), Number(message.from?.id || message.chat.id), message.from?.username, message.from?.first_name, message.from?.last_name, "A");
+          if (reg.isNew) await notifyOwnerNewUser({...reg, section: "A", username: message.from?.username, first_name: message.from?.first_name, last_name: message.from?.last_name});
           await handleNavCallback(Number(message.chat.id), Number(message.from?.id || message.chat.id), "nav:home");
         } else if (admin && (await hasActiveFlow(Number(message.chat.id)))) {
           await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
@@ -185,7 +189,7 @@ export async function POST(req: NextRequest) {
       } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
         await handleAdminCallback(Number(callback.message.chat.id), userId, data);
       } else {
-        await handleCallback(Number(callback.message.chat.id), data);
+        await handleCallback(Number(callback.message.chat.id), data, callback.from);
       }
     }
     return NextResponse.json({ok: true});

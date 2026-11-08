@@ -403,8 +403,8 @@
     },
     {
       "path": "src/app/api/telegram/webhook/route.ts",
-      "bytes": 13867,
-      "sha256": "8d0249d2b8963de4b42293e77b3a685db4ed3b1afb696d39cf266e4fa6f86c91"
+      "bytes": 14724,
+      "sha256": "d63fa0c43d3c72871fc3eddc589df534e99cc78988a1bbf840bb79c91b964245"
     },
     {
       "path": "src/app/api/telegram/worker/route.ts",
