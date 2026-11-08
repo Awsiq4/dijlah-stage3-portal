@@ -18,7 +18,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   other: "تنقل آخر",
 };
 export type ActivityFeature = keyof typeof FEATURE_LABELS;
-export type ClassifiedActivity = {feature: ActivityFeature; action: string};
+export type ClassifiedActivity = {feature: ActivityFeature; action: string; subjectId?: string};
 type TelegramActor = {
   id?: number; username?: string; first_name?: string; last_name?: string; language_code?: string;
 };
@@ -59,8 +59,13 @@ export function classifyBotActivity(update: BotUpdate): ClassifiedActivity | nul
     return {feature: "home", action: "open_home"};
   if (data === "stu:ann" || data.startsWith("stu:ann:"))
     return {feature: "announcements", action: "open_announcements"};
-  if (data === "stu:lec" || data.startsWith("stu:lec:"))
+  if (data === "stu:lec") return {feature: "lectures", action: "open_subject_list"};
+  if (data.startsWith("stu:lec:")) {
+    const id = data.slice(8);
+    if (/^[a-zA-Z0-9_-]{1,60}$/.test(id))
+      return {feature: "lectures", action: "select_subject", subjectId: id};
     return {feature: "lectures", action: "browse_lectures"};
+  }
   if (data === "stu:sched" || data.startsWith("stu:sched:"))
     return {feature: "schedule", action: "open_schedule"};
   if (data === "stu:exams" || data.startsWith("stu:exams:"))
@@ -86,10 +91,10 @@ export async function recordBotActivity(update: BotUpdate, db: Queryer = default
   try {
     // Only interactions from already-registered, opted-in users.
     await db.q(
-      "INSERT INTO tg_student_activity (update_id, chat_id, feature, action, language_code, section_at_event) " +
-      "SELECT $1, s.chat_id, $2, $3, $4, s.section FROM tg_subscribers s " +
-      "WHERE s.chat_id=$5 AND s.analytics_opt_out=false ON CONFLICT (update_id) DO NOTHING",
-      [id, classified.feature, classified.action, language, chatId]
+      "INSERT INTO tg_student_activity (update_id, chat_id, feature, action, subject_id, language_code, section_at_event) " +
+      "SELECT $1, s.chat_id, $2, $3, $4, $5, s.section FROM tg_subscribers s " +
+      "WHERE s.chat_id=$6 AND s.analytics_opt_out=false ON CONFLICT (update_id) DO NOTHING",
+      [id, classified.feature, classified.action, classified.subjectId || null, language, chatId]
     );
     // Opportunistic 90-day retention purge, without a recurring paid worker.
     if (id % 250 === 0) {
@@ -111,11 +116,13 @@ const STUDENTS_ONLY = "s.role='student' AND s.chat_id<>$1 AND a.id IS NULL";
 const ownerId = () => /^[0-9]+$/.test(BOT_OWNER_ID) ? BOT_OWNER_ID : "0";
 
 export interface FeatureCount {feature: string; interactions: number; students: number}
+export interface SubjectCount {subject: string; selections: number; students: number}
 export interface EngagementOverview {
   interactions7d: number; interactions30d: number;
   engaged7d: number; engaged30d: number;
   firstRecordedAt: string | null;
   byFeature: FeatureCount[];
+  bySubject: SubjectCount[];
   daily: {day: string; interactions: number; users: number}[];
 }
 export interface DeliveryOverview {total: number; sent: number; failed: number; pending: number}
@@ -144,6 +151,15 @@ export async function getEngagementOverview(db: Queryer = defaultQueryer): Promi
     "GROUP BY e.feature ORDER BY interactions DESC, e.feature LIMIT 12",
     [ownerId()]
   );
+  const subjects = await db.q<{subject: string; selections: string | number; students: string | number}>(
+    "SELECT COALESCE(p.name, e.subject_id) AS subject, COUNT(*)::int AS selections, " +
+    "COUNT(DISTINCT e.chat_id)::int AS students " +
+    FROM_EVENTS + " LEFT JOIN portal_subjects p ON p.id=e.subject_id " +
+    "WHERE " + STUDENTS_ONLY + " AND e.subject_id IS NOT NULL " +
+    "AND e.occurred_at>=now()-interval '30 days' " +
+    "GROUP BY p.name, e.subject_id ORDER BY selections DESC LIMIT 7",
+    [ownerId()]
+  );
   const daily = await db.q<{day: string; interactions: string | number; users: string | number}>(
     "SELECT to_char(e.occurred_at AT TIME ZONE 'Asia/Baghdad','YYYY-MM-DD') AS day, " +
     "COUNT(*)::int AS interactions, COUNT(DISTINCT e.chat_id)::int AS users " +
@@ -159,12 +175,14 @@ export async function getEngagementOverview(db: Queryer = defaultQueryer): Promi
     engaged30d: Number(overview?.engaged30d || 0),
     firstRecordedAt: overview?.first_recorded_at || null,
     byFeature: features.map(x => ({feature: x.feature, interactions: Number(x.interactions), students: Number(x.students)})),
+    bySubject: subjects.map(x => ({subject: x.subject, selections: Number(x.selections), students: Number(x.students)})),
     daily: daily.map(x => ({day: x.day, interactions: Number(x.interactions), users: Number(x.users)})),
   };
 }
 
 export async function getSectionEngagement(section: string, db: Queryer = defaultQueryer) {
-  if (!["A", "B", "C", "F", "NA"].includes(section)) return {interactions7d: 0, interactions30d: 0, topFeatures: [] as FeatureCount[]};
+  if (!["A", "B", "C", "F", "NA"].includes(section))
+    return {interactions7d: 0, interactions30d: 0, topFeatures: [] as FeatureCount[], topSubjects: [] as SubjectCount[]};
   const extra = section === "NA"
     ? " AND (s.section IS NULL OR s.section='')"
     : " AND s.section=$2";
@@ -180,9 +198,19 @@ export async function getSectionEngagement(section: string, db: Queryer = defaul
     " AND e.occurred_at>=now()-interval '30 days' GROUP BY e.feature ORDER BY interactions DESC LIMIT 5",
     params
   );
+  const subjects = await db.q<{subject: string; selections: number | string; students: number | string}>(
+    "SELECT COALESCE(p.name, e.subject_id) AS subject, COUNT(*)::int AS selections, " +
+    "COUNT(DISTINCT e.chat_id)::int AS students " +
+    FROM_EVENTS + " LEFT JOIN portal_subjects p ON p.id=e.subject_id " +
+    "WHERE " + STUDENTS_ONLY + extra +
+    " AND e.subject_id IS NOT NULL AND e.occurred_at>=now()-interval '30 days' " +
+    "GROUP BY p.name, e.subject_id ORDER BY selections DESC LIMIT 5",
+    params
+  );
   return {
     interactions7d: Number(totals?.d7 || 0), interactions30d: Number(totals?.d30 || 0),
     topFeatures: top.map(x => ({feature: x.feature, interactions: Number(x.interactions), students: Number(x.students)})),
+    topSubjects: subjects.map(x => ({subject: x.subject, selections: Number(x.selections), students: Number(x.students)})),
   };
 }
 
@@ -191,13 +219,14 @@ export interface StudentUsage {
   firstRecorded: string | null; lastRecorded: string | null;
   languageCode: string | null; optedOut: boolean;
   topFeatures: {feature: string; interactions: number}[];
+  topSubjects: {subject: string; selections: number}[];
   recent: {feature: string; occurred_at: string}[];
   sectionHistory: {old_section: string | null; new_section: string | null; changed_at: string}[];
   deliveries: DeliveryOverview;
   preferences: Record<string, boolean>;
 }
 export async function getStudentUsage(chatId: number, db: Queryer = defaultQueryer): Promise<StudentUsage> {
-  const [row, counts, features, recents, language, changes, notifications] = await Promise.all([
+  const [row, counts, features, subjects, recents, language, changes, notifications] = await Promise.all([
     db.qOne<{prefs: Record<string, boolean> | string; analytics_opt_out: boolean}>(
       "SELECT prefs, analytics_opt_out FROM tg_subscribers WHERE chat_id=$1", [chatId]),
     db.qOne<{events7d: number | string; events30d: number | string; days: number | string;
@@ -212,6 +241,12 @@ export async function getStudentUsage(chatId: number, db: Queryer = defaultQuery
       "SELECT feature, COUNT(*)::int AS interactions FROM tg_student_activity " +
       "WHERE chat_id=$1 AND occurred_at>=now()-interval '30 days' " +
       "GROUP BY feature ORDER BY interactions DESC LIMIT 8", [chatId]),
+    db.q<{subject: string; selections: number | string}>(
+      "SELECT COALESCE(p.name, e.subject_id) AS subject, COUNT(*)::int AS selections " +
+      "FROM tg_student_activity e LEFT JOIN portal_subjects p ON p.id=e.subject_id " +
+      "WHERE e.chat_id=$1 AND e.subject_id IS NOT NULL " +
+      "AND e.occurred_at>=now()-interval '30 days' " +
+      "GROUP BY p.name, e.subject_id ORDER BY selections DESC LIMIT 7", [chatId]),
     db.q<{feature: string; occurred_at: string}>(
       "SELECT feature, occurred_at FROM tg_student_activity WHERE chat_id=$1 " +
       "ORDER BY occurred_at DESC LIMIT 5", [chatId]),
@@ -237,6 +272,7 @@ export async function getStudentUsage(chatId: number, db: Queryer = defaultQuery
     lastRecorded: counts?.last || null, languageCode: language?.language_code || null,
     optedOut: row?.analytics_opt_out === true,
     topFeatures: features.map(x => ({feature: x.feature, interactions: Number(x.interactions)})),
+    topSubjects: subjects.map(x => ({subject: x.subject, selections: Number(x.selections)})),
     recent: recents,
     sectionHistory: changes,
     deliveries: {
