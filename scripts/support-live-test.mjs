@@ -14,7 +14,7 @@ if(memory){
  const {newDb,DataType}=await import('pg-mem'); const mem=newDb();
  mem.public.registerFunction({name:'octet_length',args:[DataType.bytea],returns:DataType.integer,implementation:b=>b.length});
  const {Pool}=mem.adapters.createPg(); (await import('../src/lib/server/db.ts')).setPoolForTests(new Pool());
- await q(`CREATE TABLE portal_admins(id BIGSERIAL PRIMARY KEY,name TEXT,email TEXT,role TEXT,status TEXT,is_active BOOLEAN,assigned_section TEXT,assigned_subjects JSONB,perms JSONB);CREATE TABLE portal_telegram_links(id BIGSERIAL PRIMARY KEY,admin_id BIGINT,telegram_user_id BIGINT,revoked_at TIMESTAMPTZ);CREATE TABLE tg_subscribers(chat_id BIGINT PRIMARY KEY,first_name TEXT,last_name TEXT,username TEXT,reg_seq BIGINT,section TEXT);CREATE TABLE portal_login_attempts(key TEXT PRIMARY KEY,count INTEGER,reset_at TIMESTAMPTZ);`);
+ await q(`CREATE TABLE portal_admins(id BIGSERIAL PRIMARY KEY,name TEXT,email TEXT,role TEXT,status TEXT,is_active BOOLEAN,assigned_section TEXT,assigned_subjects JSONB,perms JSONB);CREATE TABLE portal_telegram_links(id BIGSERIAL PRIMARY KEY,admin_id BIGINT,telegram_user_id BIGINT,revoked_at TIMESTAMPTZ);CREATE TABLE tg_subscribers(chat_id BIGINT PRIMARY KEY,first_name TEXT,last_name TEXT,username TEXT,reg_seq BIGINT,section TEXT,role TEXT,status TEXT,registered_at TIMESTAMPTZ);CREATE TABLE portal_login_attempts(key TEXT PRIMARY KEY,count INTEGER,reset_at TIMESTAMPTZ);`);
 }
 const sql=readFileSync(new URL('../database/support.sql',import.meta.url),'utf8');
 for(let i=0;i<(memory?1:2);i++)for(const part of sql.split(';').map(s=>s.trim()).filter(Boolean))await q(part);
@@ -36,6 +36,13 @@ assert.throws(()=>S.validateAttachment({...file,base64:Buffer.alloc(2097153).toS
 await S.reply(owner,t.id,'رد من المالك',randomUUID());await S.reply(owner,t.id,'ملاحظة داخلية خاصة',randomUUID(),true);
 detail=await S.getTicket(student,t.id);ok(detail.messages.length===2,'internal notes hidden from student');
 ok((await S.getTicket(owner,t.id)).messages.length===3,'owner sees internal notes');
+const ownDetail=await S.getTicket(owner,t.id);
+ok(ownDetail.studentProfile===null,'unlinked website visitor is not falsely identified as a Telegram student');
+ok(ownDetail.messages.some(m=>m.sender_type==='admin'&&!m.internal),'admin reply is server-labeled distinctly');
+ok(ownDetail.messages.some(m=>m.sender_type==='internal'),'internal note is server-labeled distinctly');
+ok(!('author' in ownDetail.messages[0]),'raw staff identifiers are not leaked in support messages');
+ok(!('studentProfile' in await S.getTicket(student,t.id)),'student never receives staff-only Telegram metadata');
+
 const replyKey=randomUUID();await S.reply(student,t.id,'رد الطالب',replyKey);await S.reply(student,t.id,'رد الطالب',replyKey);
 ok((await S.getTicket(student,t.id)).messages.length===3,'reply deduplicated');
 await S.changeStatus(owner,t.id,'resolved');await S.changeStatus(student,t.id,'progress');ok((await S.getTicket(student,t.id)).ticket.status==='progress','student reopens resolved ticket');
@@ -47,6 +54,20 @@ if(!memory) ok(!(await S.listTickets(outsider,{q:key})).rows.some(x=>x.id===t.id
 if(!memory) ok((await S.listTickets(owner,{q:key,section:'A'})).rows.length===0,'section filter');
 await assert.rejects(()=>S.analytics(student));passed++;
 if(!memory) ok(Number((await S.analytics(owner)).summary.total)>0,'analytics from real records');
+
+const knownIdentity = await S.anonymousIdentity(randomUUID());
+await q('UPDATE support_identities SET telegram_id=$2 WHERE id=$1',[knownIdentity,88776655]);
+await q(`INSERT INTO tg_subscribers(chat_id,first_name,last_name,username,reg_seq,section,role,status,registered_at)
+ VALUES(88776655,'Test','Student','teststudent',7,'B','student','active',now())`);
+const knownStudent={owner:false,permissions:[],identity:knownIdentity};
+const knownTicket=await S.createTicket(knownStudent,{category:'idea',subject:'Known verified student',body:'Student message',key:randomUUID(),source:'web'});
+const knownOwnerDetail=await S.getTicket(owner,knownTicket.id);
+ok(knownOwnerDetail.studentProfile?.verified===true,'previous verified Telegram identity is discovered without new linking');
+ok(knownOwnerDetail.studentProfile?.telegram_id==='88776655','correct Telegram ID shown to authorized support');
+ok(knownOwnerDetail.studentProfile?.username==='teststudent','Telegram username shown only to support');
+ok(knownOwnerDetail.studentProfile?.section==='B','academic section is inherited only from the verified Telegram account');
+ok(!('studentProfile' in await S.getTicket(knownStudent,knownTicket.id)),'verified Telegram metadata stays private to staff');
+
 await q("INSERT INTO portal_admins(id,name,email,role,status,is_active) VALUES(1,'Site Owner','owner@example.test','super_admin','active',true)");
 const siteOwner=await S.adminActor({id:1,email:'owner@example.test',role:'super_admin',is_active:true});
 ok(siteOwner.owner===true,'site super admin manages support without Telegram account linkage');
