@@ -75,6 +75,27 @@ ok(typeof S.createLink==='undefined'&&typeof S.bindLink==='undefined'&&typeof S.
   'Telegram support links and identity paths are removed');
 await assert.rejects(()=>S.createTicket(student,{category:'idea',subject:'Unallowed bot ticket',body:'Test only',key:randomUUID(),source:'telegram'}));passed++;
 console.log('PASS Telegram support submissions refused');
+// Mimic PostgreSQL's strict prepared-statement parameter count for both roles.
+// pg-mem does not check extra bind parameters, which hid the production bug.
+const testPool=(await import('../src/lib/server/db.ts')).getPool();
+const queryOriginal=testPool.query.bind(testPool);
+const seenPages=[];
+testPool.query=async (sql,params=[])=>{
+  if (String(sql).includes('ORDER BY t.updated_at DESC,t.id DESC LIMIT')) {
+    const placeholders=[...String(sql).matchAll(/\$(\d+)/g)].map(match=>Number(match[1]));
+    assert.equal(Math.max(...placeholders),params.length,'PostgreSQL bind argument count matches placeholders');
+    assert.equal(params.at(-2),10,'page size parameter included');
+    assert.equal(params.at(-1),10,'page offset bound for requested second page');
+    seenPages.push(params.length);
+    return {rows:[]};
+  }
+  return queryOriginal(sql,params);
+};
+try {
+  await S.listTickets(student,{page:'1'});
+  await S.listTickets(owner,{page:'1'});
+} finally {testPool.query=queryOriginal;}
+ok(seenPages.length===2,'pagination uses valid prepared parameters for visitor and owner');
 const jobs=await qOne('SELECT count(*)::int AS total FROM support_jobs');
 ok(Number(jobs.total)===0,'ticket creation and replies do not enqueue Telegram notifications');
 console.log('Support integration: '+passed+' PASS; '+(memory?'pg-mem':'isolated real PostgreSQL')+'; website-only, no Telegram integration.');
