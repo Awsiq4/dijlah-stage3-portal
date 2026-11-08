@@ -21,6 +21,8 @@ jobs:
         run: npm run verify:schedule:json
       - name: Unit tests (mergeById)
         run: npm test
+      - name: Support integration tests (isolated in-memory PostgreSQL)
+        run: node --experimental-strip-types scripts/support-live-test.mjs --memory
       - name: TypeScript typecheck
         run: npm run typecheck
       - name: Production build
