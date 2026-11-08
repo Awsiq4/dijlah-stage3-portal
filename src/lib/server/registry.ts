@@ -78,7 +78,7 @@ export async function notifyOwnerNewUser(u: RegisteredUser & {username?: string 
     if (!(await ownerNotificationsEnabled())) { await defaultQueryer.q(`UPDATE tg_owner_notifs SET sent_at=now() WHERE event_key=$1`, [key]); return; }
     const total = await defaultQueryer.qOne<{c: string | number}>(`SELECT count(*)::int AS c FROM tg_subscribers`);
     const name = `${u.first_name || ""} ${u.last_name || ""}`.trim() || "—";
-    const text = `🔔 <b>مستخدم جديد</b>\n\n👤 الاسم: ${esc(name)}\n🔗 المعرف: ${u.username ? "@" + esc(u.username) : "لا يوجد username"}\n🆔 TG ID: <code>${u.chat_id}</code>\n🔢 رقم التسجيل: #${String(u.reg_seq).padStart(6, "0")}\n🎓 الدور: طالب\n🏫 الشعبة: ${esc(u.section || "A")}\n📅 التسجيل: ${baghdadStamp(new Date())}\n👥 إجمالي المسجلين: ${Number(total?.c || 0)}`;
+    const text = `🔔 <b>مستخدم جديد</b>\n\n👤 الاسم: ${esc(name)}\n🔗 المعرف: ${u.username ? "@" + esc(u.username) : "لا يوجد username"}\n🆔 TG ID: <code>${u.chat_id}</code>\n🔢 رقم التسجيل: #${String(u.reg_seq).padStart(6, "0")}\n🎓 الدور: طالب\n🏫 الشعبة: ${esc(u.section || "غير محددة")}\n📅 التسجيل: ${baghdadStamp(new Date())}\n👥 إجمالي المسجلين: ${Number(total?.c || 0)}`;
     const delivered = await sendMessage(Number(BOT_OWNER_ID), text, {parseMode: "HTML"});
     if (!delivered.ok) throw new Error("Telegram rejected owner notification");
     await defaultQueryer.q(`UPDATE tg_owner_notifs SET sent_at=now(), attempts=attempts+1 WHERE event_key=$1`, [key]);
