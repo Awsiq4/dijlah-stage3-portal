@@ -9,23 +9,26 @@ import {handleOwnerCallback} from "@/lib/server/botowner";
 import {registerUser, notifyOwnerNewUser, touchActivity, isBotOwner} from "@/lib/server/registry";
 import {listUsers} from "@/lib/server/analytics";
 import {getFlowState, setFlowState} from "@/lib/server/bot";
+import {recordBotActivity} from "@/lib/server/owner-intelligence";
 
 export const dynamic = "force-dynamic";
 
 const SECTIONS = ["A", "B", "C", "F"] as const;
 const PREF_LABELS: Record<string, string> = {lectures: "المحاضرات", exams: "الامتحانات والكوزات", announcements: "التبليغات", schedule: "تغييرات الجدول", assignments: "الواجبات"};
 
-const HELP = `🤖 بوت إشعارات بوابة طلبة المرحلة الثالثة
+const HELP = `🤖 بوت بوابة طلبة المرحلة الثالثة
 
-الأوامر المتاحة:
-/start — الاشتراك وتأكيد الشعبة
+/start — فتح البوت وتأكيد الشعبة
 /section — تغيير الشعبة الدراسية
 /settings — إعدادات الإشعارات
-/status — حالة الاشتراك الحالية
+/status — حالة الاشتراك
 /stop — إيقاف الإشعارات
-/help — هذه المساعدة
+/help — مساعدة
+/privacy — شنو البيانات المخزونة عنك؟
+/analytics_off — إيقاف تتبع الاستخدام وحذف سجله
+/analytics_on — تفعيل تتبع الاستخدام من جديد
 
-الخصوصية: بياناتكقتصر على معرف محادثتك وشعبتك، ويمكنك إلغاء الاشتراك في أي وقت.`;
+🔒 الخصوصية: نحفظ معلومات الحساب التي تصلنا من Telegram والشعبة وإعدادات التنبيه وتواريخ النشاط. نسجل فقط نوع التفاعل مع أقسام البوت لتحسين الخدمة وإعداد إحصائيات مجمّعة ولوحة المالك. لا نسجل نصوص الرسائل أو محادثاتك الأخرى. السجل التحليلي يُحذف بعد 90 يومًا، ويمكن إيقافه وحذف سجله في أي وقت باستخدام /analytics_off.`;
 
 function sectionKeyboard() {
   return {inline_keyboard: SECTIONS.map(s => [{text: `شعبة ${s}`, callback_data: `sec:${s}`}]), one_time_keyboard: true};
@@ -67,6 +70,23 @@ async function handleCommand(chatId: number, text: string, arg: string, from?: {
     return;
   }
   if (cmd === "/help") { await sendMessage(chatId, HELP); return; }
+  if (cmd === "/privacy") {
+    const me = await qOne<{analytics_opt_out: boolean}>(`SELECT analytics_opt_out FROM tg_subscribers WHERE chat_id=$1`, [chatId]);
+    await sendMessage(chatId, "🔒 بياناتك في البوت تشمل اسم حساب Telegram واليوزر والآيدي والشعبة وإعدادات الإشعارات وتواريخ التسجيل والنشاط. نسجل أنواع الأزرار والأقسام المستخدمة فقط، بدون نص الرسائل أو محادثاتك الخاصة. السجل التحليلي يُحذف بعد 90 يومًا.\n\nحالة التتبع: " + (me?.analytics_opt_out ? "متوقف" : "مفعّل") + "\n\n/analytics_off — حذف بيانات التفاعل وإيقاف تسجيلها\n/analytics_on — تفعيلها مجددًا.");
+    return;
+  }
+  if (cmd === "/analytics_off") {
+    await q(`UPDATE tg_subscribers SET analytics_opt_out=true WHERE chat_id=$1`, [chatId]);
+    await q(`DELETE FROM tg_student_activity WHERE chat_id=$1`, [chatId]);
+    await q(`DELETE FROM tg_student_section_changes WHERE chat_id=$1`, [chatId]);
+    await sendMessage(chatId, "✅ تم إيقاف تتبع استخدامك وحذف سجل التفاعل. اشتراكك والشعبة وإعدادات الإشعارات تظل شغالة بشكل طبيعي.");
+    return;
+  }
+  if (cmd === "/analytics_on") {
+    await q(`UPDATE tg_subscribers SET analytics_opt_out=false WHERE chat_id=$1`, [chatId]);
+    await sendMessage(chatId, "✅ تم تفعيل تحليلات الاستخدام من الآن، بدون استرجاع السجل المحذوف.");
+    return;
+  }
   if (cmd === "/section") {
     await sendMessage(chatId, "اختر شعبتك الدراسية:", {replyMarkup: sectionKeyboard()});
     return;
@@ -192,6 +212,7 @@ export async function POST(req: NextRequest) {
         await handleCallback(Number(callback.message.chat.id), data, callback.from);
       }
     }
+    await recordBotActivity(update);
     return NextResponse.json({ok: true});
   } catch (err) {
     console.error("telegram webhook error", err instanceof Error ? err.message : err);
