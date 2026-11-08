@@ -223,8 +223,11 @@ export function TelegramCenterTab() {
   const [links, setLinks] = useState<Row[] | null>(null);
   const [link, setLink] = useState("");
   const [notice, setNotice] = useState("");
+  const [botStatus, setBotStatus] = useState<{enabled: boolean; webhook?: {host: string | null; path: string | null; pending: number; lastErrorAt: number | null} | null} | null>(null);
+  const [hookBusy, setHookBusy] = useState(false);
 
   const load = useCallback(() => {
+    fetch("/api/telegram/admin", {cache: "no-store"}).then(r => r.ok ? r.json() : null).then(j => setBotStatus(j)).catch(() => setBotStatus(null));
     fetch("/api/admin/stats", {cache: "no-store"}).then(r => r.json()).then(j => setStats(j.counts || [])).catch(() => setStats([]));
     fetch("/api/telegram/link", {cache: "no-store"}).then(r => r.json()).then(j => setLink(j.linked ? `مرتبط (${j.telegram_user_id})` : "غير مربوط")).catch(() => setLink("—"));
   }, []);
@@ -245,6 +248,17 @@ export function TelegramCenterTab() {
     setNotice("تم إلغاء الربط.");
     load();
   };
+  const configureWebhook = async () => {
+    setHookBusy(true); setNotice("");
+    try {
+      const res = await fetch("/api/telegram/admin", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({action: "configure-webhook"})});
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result.ok) setNotice(`✅ تم ربط Telegram بالموقع الرسمي (${result.webhookHost}). التحديثات المعلقة: ${result.pendingUpdates ?? 0}.`);
+      else setNotice(`⚠️ تعذر تفعيل الربط: ${result.error || "تحقق من الإعدادات وحاول مجددًا"}`);
+      load();
+    } catch { setNotice("⚠️ تعذر الاتصال بالخادم، تحقق من الشبكة ثم أعد المحاولة."); }
+    finally { setHookBusy(false); }
+  };
 
   return <>
     <div className="panel"><div className="panel-heading"><h2>حالة البوت</h2></div><div className="panel-body">
@@ -252,10 +266,13 @@ export function TelegramCenterTab() {
         {stats?.filter(s => String(s.table).startsWith("tg_") || String(s.table).startsWith("portal_telegram")).map(s =>
           <div className="stat" key={String(s.table)}><SendIcon/><span>{String(s.table)}</span><strong>{String(s.count)}</strong></div>)}
       </div>
-      <p className="subtle small">الحالة: <Status tone="muted">معطّل (TELEGRAM_BOT_ENABLED=false)</Status> — الإشعارات لا تُرسل حتى التفعيل الصريح.</p>
+      <p className="subtle small">حالة البوت: <Status tone={botStatus?.enabled ? "success" : "muted"}>{botStatus?.enabled ? "مفعّل ✅" : "غير مفعّل أو لم يُتحقق منه"}</Status></p>
+      <p className="subtle small">عنوان Webhook: {botStatus?.webhook?.host || "غير محدد"} {botStatus?.webhook?.pending ? `— بانتظار المعالجة: ${botStatus.webhook.pending}` : ""}</p>
+      <p className="subtle small">يربط زر التفعيل Telegram بعنوان Production الرسمي ولا يغيّر أي بيانات للمستخدمين.</p>
     {notice && <p className="note" role="status">{notice}</p>}
       <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
-        <button className="action-button" onClick={createLink}><Link2 size={15}/> ربط حساب Telegram</button>
+        <button className="action-button" onClick={configureWebhook} disabled={hookBusy}><Link2 size={15}/> {hookBusy ? "جارٍ تفعيل الربط..." : "تفعيل Webhook على الموقع الرسمي"}</button>
+        <button className="action-button secondary" onClick={createLink}><Link2 size={15}/> ربط حساب Telegram</button>
         <button className="action-button secondary" onClick={unlink}><Unlink size={15}/> إلغاء Rabط</button>
       </div>
       <p className="subtle small" style={{marginTop: 8}}>حسابك الحالي: {link}</p>
