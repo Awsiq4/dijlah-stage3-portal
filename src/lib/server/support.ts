@@ -31,7 +31,11 @@ export async function telegramActor(id:number):Promise<Actor> {
  return a;
 }
 export async function anonymousIdentity(secret:string) {
- const row=await qOne<{id:string}>(`INSERT INTO support_identities(id,secret_hash) VALUES($1,$2) ON CONFLICT(secret_hash) DO UPDATE SET secret_hash=EXCLUDED.secret_hash RETURNING id`,[randomUUID(),hash(secret)]);return row!.id;
+ const digest=hash(secret);
+ const linked=await qOne<{identity_id:string}>(`SELECT identity_id FROM support_browser_links WHERE secret_hash=$1`,[digest]);
+ if(linked) return linked.identity_id;
+ const row=await qOne<{id:string}>(`INSERT INTO support_identities(id,secret_hash) VALUES($1,$2) ON CONFLICT(secret_hash) DO UPDATE SET secret_hash=EXCLUDED.secret_hash RETURNING id`,[randomUUID(),digest]);
+ return row!.id;
 }
 export function validateAttachment(file:Attachment):Buffer {
  const b=Buffer.from(file.base64||'', 'base64');
@@ -144,14 +148,26 @@ export async function grant(a:Actor,adminId:number,permissions:string[]){
 }
 export async function createLink(a:Actor){if(!a.identity)throw new SupportError('الجلسة غير متاحة.');const raw=randomBytes(24).toString('base64url');await q(`INSERT INTO support_links(token_hash,identity_id,expires_at) VALUES($1,$2,$3)`,[hash(raw),a.identity,new Date(Date.now()+15*60000).toISOString()]);return raw;}
 export async function bindLink(raw:string,telegramId:number){
+ if (!Number.isSafeInteger(telegramId) || telegramId<=0) throw new SupportError('حساب Telegram غير صالح.');
  await withTx(async db=>{
   const link=await db.qOne<{identity_id:string}>(`UPDATE support_links SET used_at=now() WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now() RETURNING identity_id`,[hash(raw)]);
   if(!link)throw new SupportError('رابط الربط منتهي أو مستخدم. اطلب رابطًا جديدًا من الموقع.');
-  const target=await db.qOne<{telegram_id:number|null}>(`SELECT telegram_id FROM support_identities WHERE id=$1 FOR UPDATE`,[link.identity_id]);
-  if(target?.telegram_id&&String(target.telegram_id)!==String(telegramId))throw new SupportError('الجلسة مرتبطة بحساب آخر.');
-  const existing=await db.qOne<{id:string}>(`SELECT id FROM support_identities WHERE telegram_id=$1`,[telegramId]);
-  if(existing&&existing.id!==link.identity_id)throw new SupportError('حسابك مرتبط بجلسة أخرى. استخدم طلباتك السابقة في البوت لهذه الجلسة.');
-  await db.q(`UPDATE support_identities SET telegram_id=$2 WHERE id=$1`,[link.identity_id,telegramId]);
+  const target=await db.qOne<{id:string;secret_hash:string|null;telegram_id:number|null}>(`SELECT id,secret_hash,telegram_id FROM support_identities WHERE id=$1 FOR UPDATE`,[link.identity_id]);
+  if(!target)throw new SupportError('جلسة الدعم لم تعد متاحة.');
+  if(target.telegram_id&&String(target.telegram_id)!==String(telegramId))throw new SupportError('هذه الجلسة مرتبطة بحساب Telegram مختلف.',403);
+  const existing=await db.qOne<{id:string}>(`SELECT id FROM support_identities WHERE telegram_id=$1 FOR UPDATE`,[telegramId]);
+  if(existing&&existing.id!==target.id){
+   // The student may already have sent tickets through Telegram. Preserve them
+   // and merge the browser tickets into that verified Telegram identity.
+   await db.q(`UPDATE support_tickets SET identity_id=$2 WHERE identity_id=$1`,[target.id,existing.id]);
+   await db.q(`UPDATE support_links SET identity_id=$2 WHERE identity_id=$1`,[target.id,existing.id]);
+   if(target.secret_hash){
+    await db.q(`UPDATE support_identities SET secret_hash=NULL WHERE id=$1`,[target.id]);
+    await db.q(`INSERT INTO support_browser_links(secret_hash,identity_id) VALUES($1,$2) ON CONFLICT(secret_hash) DO UPDATE SET identity_id=EXCLUDED.identity_id`,[target.secret_hash,existing.id]);
+   }
+  } else if (!existing) {
+   await db.q(`UPDATE support_identities SET telegram_id=$2 WHERE id=$1`,[target.id,telegramId]);
+  }
  });
 }
 export async function analytics(a:Actor){
