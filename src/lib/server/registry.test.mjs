@@ -131,7 +131,7 @@ test("owner section breakdown: zero-count sections, pagination and user details 
   await registerUser(424242, 424242, "owner", "Portal", "Owner", "A");
   const admin = await pool.query(
     "INSERT INTO portal_admins (email, password_hash, role, status, is_active, name) " +
-    "VALUES ('teacher@test.example','hash','teacher','active',true,'Teacher') RETURNING id"
+    "VALUES ('editor@test.example','hash','editor','active',true,'Editor') RETURNING id"
   );
   await registerUser(9001, 9001, "staff", "Teacher", "Account", "A");
   await pool.query("INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,$2)",
@@ -170,7 +170,7 @@ test("owner section breakdown: zero-count sections, pagination and user details 
 
   const roles = await getEffectiveRoleCounts(defaultQueryer);
   assert.equal(roles.owner, 1);
-  assert.equal(roles.teacher, 1);
+  assert.equal(roles.editor, 1);
   assert.equal(roles.student, 15);
   await assert.rejects(() => listSectionStudents("INVALID", 0, 8, defaultQueryer));
   await pool.end();
