@@ -10,10 +10,14 @@ CREATE TABLE IF NOT EXISTS tg_student_activity (
     'assignments','subjects','settings','section','help','other'
   )),
   action TEXT NOT NULL,
+  subject_id TEXT,
   language_code TEXT,
   section_at_event TEXT,
   occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE tg_student_activity ADD COLUMN IF NOT EXISTS subject_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_tg_student_activity_subject_time
+  ON tg_student_activity (subject_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tg_student_activity_user_time
   ON tg_student_activity (chat_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tg_student_activity_feature_time
