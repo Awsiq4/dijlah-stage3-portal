@@ -34,6 +34,12 @@ export async function POST(req:NextRequest){try{
  else if(body.action==='status')await S.changeStatus(c.a,Number(body.id),body.status);
  else if(body.action==='assign')await S.assign(c.a,Number(body.id),body.adminId?Number(body.adminId):null,body.priority);
  else if(body.action==='grant')await S.grant(c.a,Number(body.adminId),body.permissions||[]);
+ else if(body.action==='recovery_create')result={code:await S.issueRecoveryCode(c.a)};
+ else if(body.action==='recovery_use'){
+   const rateKey=S.hash((process.env.SESSION_SECRET||'')+new Date().toISOString().slice(0,10)+(req.headers.get('x-vercel-forwarded-for')||req.headers.get('x-forwarded-for')||'unknown'));
+   if(!await checkLoginRateLimit('support:recover:'+rateKey,5,3600000))throw new S.SupportError('محاولات كثيرة. حاول لاحقًا.',429);
+   result=await S.recoverBrowserIdentity(c.a.identity!,c.secret,String(body.code||''));
+ }
 
  else throw new S.SupportError('إجراء غير صالح.');
  return respond(result,c);
