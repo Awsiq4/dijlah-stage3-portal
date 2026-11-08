@@ -27,8 +27,7 @@ export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean, tele
       [{text: "👀 تصفح المحتوى (كطالب)", callback_data: "stu:home"}],
       [{text: "👤 حسابي", callback_data: "adm:me"}],
       ...(admin.role === "super_admin" ? [[{text: "⚙️ لوحة المالك والحسابات", url: PORTAL_BASE_URL + "/admin"}], [{text: "📊 ملخص الإدارة", callback_data: "nav:owner"}]] : []),
-      [{text: "📩 الدعم والاقتراحات", callback_data: "sup:home"}],
-      ...ownerBtn,
+        ...ownerBtn,
     ]};
   }
   return {inline_keyboard: [
@@ -38,7 +37,6 @@ export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean, tele
     [{text: "📝 الامتحانات والواجبات", callback_data: "stu:exams"}],
     [{text: "⚙️ إعدادات الإشعارات", callback_data: "stu:prefs"}],
     [{text: "❓ مساعدة", callback_data: "stu:help"}],
-    [{text: "📩 الدعم والاقتراحات", callback_data: "sup:home"}],
     ...ownerBtn,
   ]};
 }
