@@ -13,7 +13,8 @@ function authorized(req: NextRequest): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({error: "forbidden"}, {status: 403});
+  const caller = await requireAdmin(req);
+  if (!authorized(req) && caller?.role !== "super_admin") return NextResponse.json({error: "forbidden"}, {status: 403});
   const enabled = telegramServiceEnabled();
   const bot = botConfigured() ? await getMe() : null;
   let stats: unknown = null;
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
     databaseConfigured: dbConfigured(),
     bot: bot?.ok ? {username: bot.result?.username, isBot: bot.result?.is_bot} : bot?.error || null,
     stats,
+    webhook: botConfigured() ? await tgFetch<{url: string; pending_update_count: number; last_error_date?: number}>("getWebhookInfo", {}).then(r => r.ok ? {host: r.result?.url ? new URL(r.result.url).host : null, path: r.result?.url ? new URL(r.result.url).pathname : null, pending: r.result?.pending_update_count ?? 0, lastErrorAt: r.result?.last_error_date ?? null} : null) : null,
   });
 }
 
@@ -52,8 +54,13 @@ export async function POST(req: NextRequest) {
     if (!bot.ok) return NextResponse.json({error: "Telegram bot authentication failed"}, {status: 502});
     const before = await tgFetch<{url: string}>("getWebhookInfo", {});
     if (!before.ok) return NextResponse.json({error: "Unable to inspect Telegram webhook"}, {status: 502});
-    if (before.result?.url && new URL(before.result.url).origin !== url.origin) {
-      return NextResponse.json({error: "Bot is already connected to a different deployment"}, {status: 409});
+    if (before.result?.url) {
+      const previous = new URL(before.result.url);
+      const sameOrigin = previous.origin === url.origin;
+      const knownPreview = previous.protocol === "https:"
+        && previous.pathname === "/api/telegram/webhook"
+        && /^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\\.vercel\\.app$/i.test(previous.hostname);
+      if (!sameOrigin && !knownPreview) return NextResponse.json({error: "Bot is connected to an unknown deployment; manual verification required"}, {status: 409});
     }
     const configured = await setWebhook(url.toString(), WEBHOOK_SECRET);
     if (!configured.ok) return NextResponse.json({error: "Telegram webhook registration failed"}, {status: 502});
