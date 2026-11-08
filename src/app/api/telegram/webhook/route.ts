@@ -4,6 +4,7 @@ import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
 import {sendMessage, tgFetch} from "@/lib/server/telegram";
 import {getLinkedAdmin, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow, adminMenu} from "@/lib/server/bot";
+import {handleStudentCallback, handleManageCallback, handleNavCallback} from "@/lib/server/botx";
 
 export const dynamic = "force-dynamic";
 
@@ -135,12 +136,23 @@ export async function POST(req: NextRequest) {
       } else {
         // non-command message from a linked admin account -> publishing flow state machine
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
-        if (admin) await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
+        const doc = message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined;
+        if (admin && doc && !(await hasActiveFlow(Number(message.chat.id)))) {
+          await handleNavCallback(Number(message.chat.id), Number(message.from.id), "doc", doc); // Flow B offer
+        } else if (admin) {
+          await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, doc);
+        }
       }
     } else if (callback?.message?.chat?.id && callback.data) {
       const data = String(callback.data);
       const userId = Number(callback.from?.id || callback.message.chat.id);
-      if (data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
+      if (data.startsWith("stu:") ) {
+        await handleStudentCallback(Number(callback.message.chat.id), userId, data);
+      } else if (data.startsWith("it:") || data.startsWith("page:my:")) {
+        await handleManageCallback(Number(callback.message.chat.id), userId, data);
+      } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || data === "adm:new" || data === "pdf:new") {
+        await handleNavCallback(Number(callback.message.chat.id), userId, data);
+      } else if (data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
         await handleAdminCallback(Number(callback.message.chat.id), userId, data);
       } else {
         await handleCallback(Number(callback.message.chat.id), data);

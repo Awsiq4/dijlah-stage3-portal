@@ -75,3 +75,9 @@ CREATE TABLE IF NOT EXISTS portal_bot_state (
 -- single record, shared audience, one canonical URL; legacy rows default to all sections
 ALTER TABLE portal_lectures ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '["A","B","C","F"]'::jsonb
   CHECK (sections <@ '["A","B","C","F"]'::jsonb);
+
+-- ---------- soft archive (recoverable delete) ----------
+ALTER TABLE portal_announcements ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE portal_lectures ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE portal_exams ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE portal_assignments ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;

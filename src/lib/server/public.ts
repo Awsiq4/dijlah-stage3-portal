@@ -18,10 +18,10 @@ export type PublicContent = {
 
 const SELECTS: Record<Exclude<PublicType, "all">, string> = {
   subjects: "SELECT id,name,english_name,teacher,description,color FROM portal_subjects ORDER BY name",
-  lectures: `SELECT id,subject_id,number,title,description,file_url,file_name,sections,status,updated_at FROM portal_lectures WHERE status=$1 ORDER BY subject_id,number`,
-  announcements: `SELECT id,title,body,scope,section,subject_id,author,priority,published_at,pinned FROM portal_announcements WHERE scope='general' OR section='all' OR section=$1 ORDER BY pinned DESC, published_at DESC`,
-  exams: `SELECT id,subject_id,title,type,date,start_time,room,sections,topics,notes,status FROM portal_exams WHERE sections @> $1::jsonb ORDER BY date`,
-  assignments: `SELECT id,subject_id,title,instructions,assigned_at,due_at,sections,submission,status,attachment_url FROM portal_assignments WHERE sections @> $1::jsonb ORDER BY due_at`,
+  lectures: `SELECT id,subject_id,number,title,description,file_url,file_name,sections,status,archived_at,updated_at FROM portal_lectures WHERE status=$1 AND archived_at IS NULL ORDER BY subject_id,number`,
+  announcements: `SELECT id,title,body,scope,section,subject_id,author,priority,published_at,pinned,archived_at FROM portal_announcements WHERE archived_at IS NULL AND (scope='general' OR section='all' OR section=$1) ORDER BY pinned DESC, published_at DESC`,
+  exams: `SELECT id,subject_id,title,type,date,start_time,room,sections,topics,notes,status FROM portal_exams WHERE archived_at IS NULL AND sections @> $1::jsonb ORDER BY date`,
+  assignments: `SELECT id,subject_id,title,instructions,assigned_at,due_at,sections,submission,status,attachment_url FROM portal_assignments WHERE archived_at IS NULL AND sections @> $1::jsonb ORDER BY due_at`,
   schedule: `SELECT id,section,day,start,"end",subject_id,teacher,room,kind,status,note,periods FROM portal_schedule WHERE section=$1 ORDER BY day,start`,
   telegram: "SELECT kind,key,url FROM portal_telegram ORDER BY kind,key",
 };

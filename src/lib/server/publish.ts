@@ -1,6 +1,6 @@
 // Shared publishing service — the SAME code path used by the website dashboard
 // and by the Telegram bot. All permission checks are enforced here, server-side.
-import {withTx, defaultQueryer} from "./db.ts";
+import {withTx, defaultQueryer, type Queryer} from "./db.ts";
 import {buildUpsert, sanitizeRow, SCHEMAS, type WritableContentType} from "./content-schema.ts";
 import {audit} from "./content.ts";
 import {canPublishAnnouncement, canPublishSubjectContent, canPublishMaterial, canModifyContent, canManageAllContent, isActive, type AdminInfo} from "./rbac.ts";
@@ -168,3 +168,95 @@ export function canEditRow(admin: AdminInfo, row: {created_by?: number | null}):
 }
 
 export {defaultQueryer};
+
+// ================= content management (shared by dashboard API and bot) =================
+// Every mutation re-checks: account active, ownership, and (for writes) scope.
+
+async function loadOwnedRow(db: {qOne: Queryer["qOne"]}, admin: AdminInfo, type: WritableContentType, id: string): Promise<Record<string, unknown> | null> {
+  const table = SCHEMAS[type].table;
+  const row = await db.qOne<Record<string, unknown>>(`SELECT * FROM ${table} WHERE id=$1`, [id]);
+  if (!row) return null;
+  if (!canManageAllContent(admin.role) && row.created_by !== admin.id) return null; // ownership enforced
+  return row;
+}
+
+export async function listOwnContent(admin: AdminInfo, type: "announcements" | "lectures", page = 0, perPage = 5): Promise<{rows: Record<string, unknown>[]; total: number}> {
+  const table = SCHEMAS[type].table;
+  const privileged = canManageAllContent(admin.role);
+  const where = privileged ? "" : "WHERE created_by=$1";
+  const base: unknown[] = privileged ? [] : [admin.id];
+  const total = (await defaultQueryer.qOne<{c: number}>(`SELECT count(*)::int AS c FROM ${table} ${where}`, base))?.c || 0;
+  const rows = await defaultQueryer.q(
+    `SELECT * FROM ${table} ${where} ORDER BY id DESC LIMIT $${base.length + 1} OFFSET $${base.length + 2}`,
+    [...base, perPage, page * perPage]
+  );
+  return {rows, total};
+}
+
+export async function updateAnnouncementOwn(admin: AdminInfo, id: string, patch: {title?: string; body?: string}): Promise<PublishResult> {
+  if (!isActive(admin)) return fail("account is not active");
+  return withTx(async tx => {
+    const row = await loadOwnedRow(tx, admin, "announcements", id);
+    if (!row) return fail("forbidden: not found or not yours");
+    const title = patch.title ?? String(row.title || "");
+    const body = patch.body ?? String(row.body || "");
+    await tx.q(`UPDATE portal_announcements SET title=$2, body=$3 WHERE id=$1`, [id, title.slice(0, 200), body.slice(0, 4000)]);
+    await audit(admin.email || `admin#${admin.id}`, "content.edit.announcements", {id}, tx);
+    return {ok: true, id, inserted: true} as PublishOk;
+  });
+}
+
+export async function updateLectureMetaOwn(admin: AdminInfo, id: string, patch: {title?: string; description?: string}): Promise<PublishResult> {
+  if (!isActive(admin)) return fail("account is not active");
+  return withTx(async tx => {
+    const row = await loadOwnedRow(tx, admin, "lectures", id);
+    if (!row) return fail("forbidden: not found or not yours");
+    if (patch.title !== undefined) await tx.q(`UPDATE portal_lectures SET title=$2 WHERE id=$1`, [id, patch.title.slice(0, 200)]);
+    if (patch.description !== undefined) await tx.q(`UPDATE portal_lectures SET description=$2 WHERE id=$1`, [id, patch.description.slice(0, 2000)]);
+    await audit(admin.email || `admin#${admin.id}`, "content.edit.lectures", {id, fields: Object.keys(patch)}, tx);
+    return {ok: true, id, inserted: true} as PublishOk;
+  });
+}
+
+// Replace the PDF file but keep the same content id -> stable website link.
+export async function replaceLectureFileOwn(admin: AdminInfo, id: string, fileUrl: string, fileName: string): Promise<PublishResult> {
+  if (!isActive(admin)) return fail("account is not active");
+  if (!/^\/[A-Za-z0-9_\-./]+$/.test(fileUrl) && !/^https:\/\//.test(fileUrl)) return fail("invalid file url");
+  return withTx(async tx => {
+    const row = await loadOwnedRow(tx, admin, "lectures", id);
+    if (!row) return fail("forbidden: not found or not yours");
+    await tx.q(`UPDATE portal_lectures SET file_url=$2, file_name=$3, updated_at=$4 WHERE id=$1`, [id, fileUrl, fileName.slice(0, 120), new Date().toISOString().slice(0, 10)]);
+    await audit(admin.email || `admin#${admin.id}`, "content.replace_file.lectures", {id}, tx);
+    return {ok: true, id, inserted: true} as PublishOk;
+  });
+}
+
+export async function archiveContent(admin: AdminInfo, type: "announcements" | "lectures", id: string, archive: boolean): Promise<PublishResult> {
+  if (!isActive(admin)) return fail("account is not active");
+  return withTx(async tx => {
+    const row = await loadOwnedRow(tx, admin, type, id);
+    if (!row) return fail("forbidden: not found or not yours");
+    const table = SCHEMAS[type].table;
+    await tx.q(`UPDATE ${table} SET archived_at=$2 WHERE id=$1`, [id, archive ? new Date().toISOString() : null]);
+    await audit(admin.email || `admin#${admin.id}`, archive ? "content.archive" : "content.unarchive", {type, id}, tx);
+    return {ok: true, id, inserted: true} as PublishOk;
+  });
+}
+
+// Hard delete of the content ROW only — the stored file is never cascaded away.
+export async function deleteOwnContent(admin: AdminInfo, type: "announcements" | "lectures", id: string): Promise<PublishResult> {
+  if (!isActive(admin)) return fail("account is not active");
+  return withTx(async tx => {
+    const row = await loadOwnedRow(tx, admin, type, id);
+    if (!row) return fail("forbidden: not found or not yours");
+    const table = SCHEMAS[type].table;
+    await tx.q(`DELETE FROM ${table} WHERE id=$1`, [id]);
+    await audit(admin.email || `admin#${admin.id}`, "content.delete.own", {type, id, title: row.title}, tx);
+    return {ok: true, id, inserted: true} as PublishOk;
+  });
+}
+
+// schedule changes generate a notification event (type schedule)
+export async function notifyScheduleChange(subjectId: string, section: string): Promise<void> {
+  await notifyIfEnabled({type: "schedule", refId: `sched-${section}-${new Date().toISOString().slice(0, 10)}`, title: `تغيير في جدول شعبة ${section}`, url: "/schedule", scope: "section", section});
+}

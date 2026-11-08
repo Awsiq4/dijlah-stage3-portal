@@ -4,7 +4,7 @@
 import {q, qOne} from "./db.ts";
 import {sendMessage} from "./telegram.ts";
 import {hashToken, tokenUsable, isActive, canUseTelegramPublishing, teacherSections, type AdminInfo} from "./rbac.ts";
-import {publishAnnouncement, publishLecture} from "./publish.ts";
+import {publishAnnouncement, publishLecture, updateAnnouncementOwn, updateLectureMetaOwn, replaceLectureFileOwn} from "./publish.ts";
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {tgFetch} from "./telegram.ts";
 import {uploadLecturePdf, isPdf, MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
@@ -70,6 +70,12 @@ async function setState(chatId: number, flow: string | null, data: Record<string
     [chatId, flow, JSON.stringify(data)]
   );
 }
+export async function getFlowState(chatId: number): Promise<{flow: string | null; data: Record<string, unknown>} | null> {
+  return getState(chatId);
+}
+export async function setFlowState(chatId: number, flow: string, data: Record<string, unknown>): Promise<void> {
+  await setState(chatId, flow, data);
+}
 async function clearState(chatId: number): Promise<void> {
   await q(`UPDATE portal_bot_state SET flow=NULL, data='{}', updated_at=now() WHERE chat_id=$1`, [chatId]);
 }
@@ -119,6 +125,44 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
       await sendMessage(chatId, `👁️ معاينة التبليغ:\n\n<b>${d.title}</b>\n${text}\n\nالنطاق: ${scope}`, {parseMode: "HTML", replyMarkup: confirmKeyboard("ann")});
       return;
     }
+  }
+  if (state.flow === "editann") {
+    const d = state.data;
+    if (d.step === "title") { await setState(chatId, "editann", {...d, step: "body", title: text === "تخطَّ" ? undefined : text}); await sendMessage(chatId, "✏️ النص الجديد (أرسل «تخطَّ» للإبقاء على الحالي):"); return; }
+    if (d.step === "body") {
+      const r = await updateAnnouncementOwn(admin, String(d.id), {title: d.title as string | undefined, body: text === "تخطَّ" ? undefined : text});
+      await clearState(chatId);
+      await sendMessage(chatId, r.ok ? "✅ تم تعديل التبليغ." : `⛔ ${r.error}`, {replyMarkup: adminMenu()});
+      return;
+    }
+  }
+  if (state.flow === "editmeta") {
+    const d = state.data;
+    if (d.step === "title") { await setState(chatId, "editmeta", {...d, step: "desc", title: text === "تخطَّ" ? undefined : text}); await sendMessage(chatId, "✏️ الوصف الجديد (أرسل «تخطَّ» للإبقاء):"); return; }
+    if (d.step === "desc") {
+      const r = await updateLectureMetaOwn(admin, String(d.id), {title: d.title as string | undefined, description: text === "تخطَّ" ? undefined : text});
+      await clearState(chatId);
+      await sendMessage(chatId, r.ok ? "✅ تم تعديل بيانات المادة." : `⛔ ${r.error}`, {replyMarkup: adminMenu()});
+      return;
+    }
+  }
+  if (state.flow === "repfile") {
+    if (!document) { await sendMessage(chatId, "⚠️ أرسل ملف PDF."); return; }
+    if (document.mime_type !== "application/pdf") { await sendMessage(chatId, "⚠️ الملف ليس PDF."); return; }
+    if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ أكبر من 20MB — استبدله من لوحة الويب."); return; }
+    if (!storageConfigured()) { await sendMessage(chatId, "⚠️ التخزين غير مهيأ — استخدم لوحة الويب."); return; }
+    try {
+      const g = await tgFetch<{file_path: string}>("getFile", {file_id: document.file_id});
+      if (!g.ok || !g.result?.file_path) { await sendMessage(chatId, "⚠️ تعذر قراءة الملف."); return; }
+      const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${g.result.file_path}`);
+      const buf = Buffer.from(await dl.arrayBuffer());
+      if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ ليس PDF صالحًا."); return; }
+      const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
+      const r = await replaceLectureFileOwn(admin, String(state.data.id), url, document.file_name || "lecture.pdf");
+      await clearState(chatId);
+      await sendMessage(chatId, r.ok ? `✅ تم استبدال الملف — الرابط ثابت: ${PORTAL_BASE_URL}/subjects/` : `⛔ ${r.error}`, {replyMarkup: adminMenu()});
+    } catch { await sendMessage(chatId, "⚠️ فشل الاستبدال."); }
+    return;
   }
   if (state.flow === "lec") {
     const d = state.data;

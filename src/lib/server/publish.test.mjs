@@ -158,3 +158,68 @@ test("migration file is idempotent: applying portal-rbac.sql twice succeeds", as
   }
   await pool.end();
 });
+
+// ---------- content management services (ownership, archive, replace, delete) ----------
+test("manage: owner can edit/archive/delete own announcement; other rep cannot", async () => {
+  const {updateAnnouncementOwn, archiveContent, deleteOwnContent, listOwnContent} = await import("./publish.ts");
+  const pool = await makeDb();
+  const a = await publishAnnouncement(repA, {title: "mine", scope: "section", section: "A"});
+  assert.equal(a.ok, true);
+  const id = a.id;
+
+  const edit = await updateAnnouncementOwn(repA, id, {title: "mine v2"});
+  assert.equal(edit.ok, true);
+  assert.equal((await qOne(`SELECT title FROM portal_announcements WHERE id=$1`, [id])).title, "mine v2");
+
+  // repB cannot edit
+  const hack = await updateAnnouncementOwn(repB, id, {title: "hacked"});
+  assert.equal(hack.ok, false);
+  assert.equal((await qOne(`SELECT title FROM portal_announcements WHERE id=$1`, [id])).title, "mine v2");
+
+  // archive hides from public filter
+  const arch = await archiveContent(repA, "announcements", id, true);
+  assert.equal(arch.ok, true);
+  const {announcementsForSection} = await import("./public-filters.ts");
+  const rows = await q(`SELECT * FROM portal_announcements WHERE id=$1`, [id]);
+  assert.equal(announcementsForSection(rows.map(r => ({...r, archived_at: r.archived_at ? String(r.archived_at) : null})), "A").length, 0);
+
+  // unarchive restores
+  await archiveContent(repA, "announcements", id, false);
+  const rows2 = await q(`SELECT * FROM portal_announcements WHERE id=$1`, [id]);
+  assert.equal(announcementsForSection(rows2.map(r => ({...r, archived_at: r.archived_at ? String(r.archived_at) : null})), "A").length, 1);
+
+  // listOwnContent: repA sees own, repB doesn't
+  const mine = await listOwnContent(repA, "announcements", 0, 10);
+  assert.ok(mine.rows.some(r => r.id === id));
+  const theirs = await listOwnContent(repB, "announcements", 0, 10);
+  assert.ok(!theirs.rows.some(r => r.id === id));
+
+  // delete: owner only
+  const delOther = await deleteOwnContent(repB, "announcements", id);
+  assert.equal(delOther.ok, false);
+  const del = await deleteOwnContent(repA, "announcements", id);
+  assert.equal(del.ok, true);
+  assert.equal((await qOne(`SELECT 1 FROM portal_announcements WHERE id=$1`, [id])), null);
+  await pool.end();
+});
+
+test("manage: lecture meta edit + file replace keep the same id (stable link); ownership enforced", async () => {
+  const {publishLecture, updateLectureMetaOwn, replaceLectureFileOwn} = await import("./publish.ts");
+  const pool = await makeDb();
+  const a = await publishLecture(repA, {subjectId: "nonlinear-optics", number: 1, title: "old", fileUrl: "/lectures/old.pdf", sections: ["A", "B", "C", "F"]});
+  assert.equal(a.ok, true);
+  const id = a.id;
+  const meta = await updateLectureMetaOwn(repA, id, {title: "new title", description: "d"});
+  assert.equal(meta.ok, true);
+  const row = await qOne(`SELECT title, file_url FROM portal_lectures WHERE id=$1`, [id]);
+  assert.equal(row.title, "new title");
+  assert.equal(row.file_url, "/lectures/old.pdf");
+  const rep = await replaceLectureFileOwn(repA, id, "https://blob.vercel-storage.com/x-new.pdf", "new.pdf");
+  assert.equal(rep.ok, true);
+  const row2 = await qOne(`SELECT file_url, file_name FROM portal_lectures WHERE id=$1`, [id]);
+  assert.equal(row2.file_url, "https://blob.vercel-storage.com/x-new.pdf"); // same id, new file
+  // repB cannot replace
+  const hack = await replaceLectureFileOwn(repB, id, "/evil.pdf", "e.pdf");
+  assert.equal(hack.ok, false);
+  await pool.end();
+});

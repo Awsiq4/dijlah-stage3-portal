@@ -16,13 +16,13 @@ export function publishedLectures<T extends {status?: unknown}>(rows: T[]): T[] 
 }
 
 // lectures: only published; audience = sections array (missing => all sections, for legacy rows)
-export function lecturesForSection<T extends {status?: unknown; sections?: unknown}>(rows: T[], section: Section): T[] {
-  return rows.filter(r => r.status === "published" && (!Array.isArray(r.sections) || r.sections.includes(section)));
+export function lecturesForSection<T extends {status?: unknown; sections?: unknown; archived_at?: unknown}>(rows: T[], section: Section): T[] {
+  return rows.filter(r => r.status === "published" && !r.archived_at && (!Array.isArray(r.sections) || r.sections.includes(section)));
 }
 
 // announcements: general for everyone; section/teacher only for matching (or "all") section
-export function announcementsForSection<T extends {scope?: unknown; section?: unknown}>(rows: T[], section: Section): T[] {
-  return rows.filter(a => a.scope === "general" || a.section === "all" || a.section === section);
+export function announcementsForSection<T extends {scope?: unknown; section?: unknown; archived_at?: unknown}>(rows: T[], section: Section): T[] {
+  return rows.filter(a => !a.archived_at && (a.scope === "general" || a.section === "all" || a.section === section));
 }
 
 // exams/assignments: visible only when the sections array includes the section (client rule: e.sections.includes(section))

@@ -58,8 +58,8 @@
     },
     {
       "path": "database/portal-rbac.sql",
-      "bytes": 4339,
-      "sha256": "508aa569ff7bdb375458d3d3b7cfb1b83013796283956c4ea0d88a3ff5af7ae5"
+      "bytes": 4716,
+      "sha256": "10e84f88b943b86503a51594569db144133c088c3ee4a2121b4fac1eea4a8772"
     },
     {
       "path": "database/portal-schema.sql",
@@ -73,8 +73,8 @@
     },
     {
       "path": "docs/BOT_AUDIT_AND_PLAN.md",
-      "bytes": 10476,
-      "sha256": "6d658d8397e34f87fce6d855538ed8fec825670b5c0bbe36f6b9d39847e6a124"
+      "bytes": 11835,
+      "sha256": "40d1f658a77cbc5efa7ca804e9abf82a8b6772ba3d6cb31b3f707fcf20e4f26b"
     },
     {
       "path": "docs/HANDOFF_TO_OTHER_AI.md",
@@ -288,8 +288,8 @@
     },
     {
       "path": "scripts/verify-structure.mjs",
-      "bytes": 2925,
-      "sha256": "2dc77ee2016a2755fef3e74e8fe9a7ed4f348c5cb1fab2eddf14a19aa7d8128b"
+      "bytes": 2950,
+      "sha256": "5c8a769f4134f5bfb30c87985e57d2cefa4bc19b3ca4abdb70f0b21de43399d9"
     },
     {
       "path": "src/app/admin-legacy/page.tsx",
@@ -398,8 +398,8 @@
     },
     {
       "path": "src/app/api/telegram/webhook/route.ts",
-      "bytes": 9795,
-      "sha256": "a80f0c3447a4ef928f17e5027623ff3aa5b9e4fb8884b2b9e337a42c3f24c17b"
+      "bytes": 10649,
+      "sha256": "d4f19fe639ec0793b83168a77e92b364cc52935f25daba25a036613daabf3a7c"
     },
     {
       "path": "src/app/api/telegram/worker/route.ts",
@@ -553,8 +553,13 @@
     },
     {
       "path": "src/lib/server/bot.ts",
-      "bytes": 15643,
-      "sha256": "532af371c2e36cfcf2df805da6f8a6dd38859170f71addd7bd0ef43659ab4c81"
+      "bytes": 18947,
+      "sha256": "e5d8641fd2ef0044384de620e65e1055621437131d081dcd898cfc8ce9fa1bc8"
+    },
+    {
+      "path": "src/lib/server/botx.ts",
+      "bytes": 18109,
+      "sha256": "288eb133266a7ffde08cbef8366ce8c4b7f989a8d33b81f1284f371311db480e"
     },
     {
       "path": "src/lib/server/content-schema.test.mjs",
@@ -563,8 +568,8 @@
     },
     {
       "path": "src/lib/server/content-schema.ts",
-      "bytes": 7092,
-      "sha256": "71ff4905165bbf083924715c8b4a91e2e1f06b09a005ecb244721e6ad49ea99a"
+      "bytes": 7132,
+      "sha256": "deab7198ebf635f63846f673068409d031e74cfe8e6f3d8bde0898c0dc1729ce"
     },
     {
       "path": "src/lib/server/content.ts",
@@ -598,8 +603,8 @@
     },
     {
       "path": "src/lib/server/public-filters.ts",
-      "bytes": 1906,
-      "sha256": "f5a233cc904bf5ba8aff742dd6bd40a9e7be68bce93b14b72d43cf29b84658bb"
+      "bytes": 1990,
+      "sha256": "ff0fbbb5a438159c80fa9eb8cb3747099bb153638383c8bcff88c036d43248d3"
     },
     {
       "path": "src/lib/server/public.test.mjs",
@@ -608,18 +613,18 @@
     },
     {
       "path": "src/lib/server/public.ts",
-      "bytes": 3792,
-      "sha256": "338cecca9a4c8d42a2246b72962bf2833c5213916a1b747ce2666e6d20d60f01"
+      "bytes": 3914,
+      "sha256": "441c77b383e5c259446acbec0bdccc24aa90800804b8ff197e052358411ce343"
     },
     {
       "path": "src/lib/server/publish.test.mjs",
-      "bytes": 9394,
-      "sha256": "26a8421321be484252a6706caad76c020161d25364a8cd6b07d2ef52ba06abeb"
+      "bytes": 12928,
+      "sha256": "148fb472e94801fcb12a8e7821cd63cadb2b83308e89435c9f5e555d171ff98a"
     },
     {
       "path": "src/lib/server/publish.ts",
-      "bytes": 9905,
-      "sha256": "149ab8876987a9d8d921ad3ae0c021f2debb3c7aeb655d05bd82f6182c0ec7f9"
+      "bytes": 15500,
+      "sha256": "ae4ca85af884480294d33edf8c06ae4c2956a4797f980a00349a6cb74e17cf8e"
     },
     {
       "path": "src/lib/server/rbac.test.mjs",

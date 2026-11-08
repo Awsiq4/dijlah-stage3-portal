@@ -128,3 +128,24 @@ BOTFather → token → Vercel env → enable flag → setWebhook → /start م�
 ## أسئلة مفتوحة للتحقق
 
 - Real Telegram delivery على Preview (blocked config)،limits استضافة limits (20MB bot / 4.5MB function / 100MB direct)، pg-mem quirks (ON CONFLICT RETURNING) مقابل PG الحقيقي.
+
+
+---
+
+## ✅ Implementation status update (implemented after this audit)
+
+| Planned item | Status | Evidence |
+|---|---|---|
+| Role-aware home menus, /start recovery | ✅ Done | `botx.ts homeMenuFor`, live 23/23 |
+| Student browsing (announcements/materials/schedule/exams/prefs) | ✅ Done | `stu:*` callbacks, live PASS |
+| Back/Cancel/Main menu + silent acks | ✅ Done | `backHome`, `nav:home`, answerCallbackQuery |
+| Direct PDF from main menu (Flow B) | ✅ Done | `pendingpdf` + `pdf:new`, live PASS |
+| إدارة منشوراتي: list+pagination+view | ✅ Done | `adm:my`, `page:my:*`, `it:*`, live PASS |
+| Edit announcement/lecture meta | ✅ Done | `editann`/`editmeta` flows, live PASS |
+| Archive/restore (recoverable) | ✅ Done | `archived_at` migration + filters, live PASS |
+| Delete with explicit confirmation (exact title+audience) | ✅ Done | `it:del` → `it:delok`, live PASS |
+| Replace PDF keeping stable link | ✅ Done | `replaceLectureFileOwn` (same id), unit PASS |
+| Draft recovery (resume/discard) | ✅ Done | `flow:resume/discard`, live PASS |
+| Old buttons handled gracefully | ✅ Done | live PASS |
+| Schedule-change notifications | ✅ Done | `notifyScheduleChange` |
+| Real Telegram delivery | ⚠️ Blocked (owner config) | needs bot token on preview + webhook registered; owner confirmed bot already responding |
