@@ -1,0 +1,83 @@
+// Runs exclusively against an explicitly supplied isolated database. Never uses DATABASE_URL implicitly.
+import {readFileSync} from 'node:fs';
+import {createInterface} from 'node:readline';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+const memory=process.argv.includes('--memory');
+console.log(memory?'Using isolated in-memory PostgreSQL emulation':'Provide isolated test connection on stdin (hidden):');
+let url='postgres://test';
+if(!memory){const rl=createInterface({input:process.stdin});[url]=await new Promise(resolve=>rl.once('line',l=>resolve([l])));rl.close();}
+process.env.DATABASE_URL=url; process.env.SESSION_SECRET='isolated-support-test';
+process.env.BOT_OWNER_ID='999999999';process.env.TELEGRAM_BOT_TOKEN='mock-only';
+const {q,qOne}=await import('../src/lib/server/db.ts');
+const S=await import('../src/lib/server/support.ts');
+const {supportCallback,supportMessage}=await import('../src/lib/server/botsupport.ts');
+if(memory){
+ const {newDb,DataType}=await import('pg-mem'); const mem=newDb();
+ mem.public.registerFunction({name:'octet_length',args:[DataType.bytea],returns:DataType.integer,implementation:b=>b.length});
+ const {Pool}=mem.adapters.createPg(); (await import('../src/lib/server/db.ts')).setPoolForTests(new Pool());
+ await q(`CREATE TABLE portal_admins(id BIGSERIAL PRIMARY KEY,name TEXT,email TEXT,role TEXT,status TEXT,is_active BOOLEAN,assigned_section TEXT,assigned_subjects JSONB,perms JSONB);CREATE TABLE portal_telegram_links(id BIGSERIAL PRIMARY KEY,admin_id BIGINT,telegram_user_id BIGINT,revoked_at TIMESTAMPTZ);CREATE TABLE tg_subscribers(chat_id BIGINT PRIMARY KEY,first_name TEXT,last_name TEXT,username TEXT,reg_seq BIGINT,section TEXT);CREATE TABLE portal_login_attempts(key TEXT PRIMARY KEY,count INTEGER,reset_at TIMESTAMPTZ);`);
+}
+const sql=readFileSync(new URL('../database/support.sql',import.meta.url),'utf8');
+for(let i=0;i<(memory?1:2);i++)for(const part of sql.split(';').map(s=>s.trim()).filter(Boolean))await q(part);
+let passed=0;const ok=(v,label)=>{assert.ok(v,label);passed++;console.log('PASS '+label);};
+const owner={owner:true,permissions:[]},key=randomUUID();
+const identity=await S.anonymousIdentity(randomUUID());const student={owner:false,permissions:[],identity};
+const outsider={owner:false,permissions:[],identity:await S.anonymousIdentity(randomUUID())};
+const file={name:'safe.pdf',mime:'application/pdf',base64:Buffer.from('%PDF-1.4\nfixture\n%%EOF').toString('base64')};
+const t=await S.createTicket(student,{category:'problem',subject:'TEST support '+key,body:'اختبار طلب دعم خاص',key,source:'web',file,section:'B'});
+ok(t.id>0,'web ticket created');
+ok((await S.createTicket(student,{category:'problem',subject:'TEST repeat',body:'duplicate',key,source:'web'})).id===t.id,'idempotent creation');
+await assert.rejects(()=>S.getTicket(outsider,t.id));passed++;console.log('PASS anonymous IDOR denied');
+let detail=await S.getTicket(student,t.id);ok(detail.messages.length===1,'one initial message');
+ok(detail.attachments.length===1,'attachment saved');
+await assert.rejects(()=>S.attachment(outsider,detail.attachments[0].id));passed++;
+ok((await S.attachment(student,detail.attachments[0].id)).bytes.length>0,'attachment ownership');
+assert.throws(()=>S.validateAttachment({...file,mime:'image/png'}));passed++;
+assert.throws(()=>S.validateAttachment({...file,base64:Buffer.alloc(2097153).toString('base64')}));passed++;
+await S.reply(owner,t.id,'رد من المالك',randomUUID());await S.reply(owner,t.id,'ملاحظة داخلية خاصة',randomUUID(),true);
+detail=await S.getTicket(student,t.id);ok(detail.messages.length===2,'internal notes hidden from student');
+ok((await S.getTicket(owner,t.id)).messages.length===3,'owner sees internal notes');
+const replyKey=randomUUID();await S.reply(student,t.id,'رد الطالب',replyKey);await S.reply(student,t.id,'رد الطالب',replyKey);
+ok((await S.getTicket(student,t.id)).messages.length===3,'reply deduplicated');
+await S.changeStatus(owner,t.id,'resolved');await S.changeStatus(student,t.id,'progress');ok((await S.getTicket(student,t.id)).ticket.status==='progress','student reopens resolved ticket');
+await S.changeStatus(student,t.id,'closed');await assert.rejects(()=>S.reply(student,t.id,'blocked',randomUUID()));passed++;
+await S.changeStatus(owner,t.id,'progress');
+await assert.rejects(()=>S.changeStatus(outsider,t.id,'closed'));passed++;
+if(!memory) ok((await S.listTickets(owner,{q:key})).rows.some(x=>x.id===t.id),'search finds ticket');
+if(!memory) ok(!(await S.listTickets(outsider,{q:key})).rows.some(x=>x.id===t.id),'search respects ownership');
+if(!memory) ok((await S.listTickets(owner,{q:key,section:'A'})).rows.length===0,'section filter');
+await assert.rejects(()=>S.analytics(student));passed++;
+if(!memory) ok(Number((await S.analytics(owner)).summary.total)>0,'analytics from real records');
+const raw=await S.createLink(student);await S.bindLink(raw,888880001);await assert.rejects(()=>S.bindLink(raw,888880001));passed++;
+ok((await S.telegramActor(888880001)).identity===identity,'verified website and bot identity shared');
+
+const prelinkedTelegram = 888880005;
+const telegramExisting = await S.telegramActor(prelinkedTelegram);
+const webSecret = randomUUID();
+const websiteExisting = await S.anonymousIdentity(webSecret);
+const webActor = {owner:false,permissions:[],identity:websiteExisting};
+const oldBotTicket = await S.createTicket({...webActor,identity:telegramExisting.identity},
+  {category:'support',subject:'Existing Telegram conversation',body:'Old bot ticket retained',key:randomUUID(),source:'telegram'});
+const oldWebTicket = await S.createTicket(webActor,
+  {category:'idea',subject:'Existing browser conversation',body:'Old website ticket retained',key:randomUUID(),source:'web'});
+const mergeToken = await S.createLink(webActor);
+await S.bindLink(mergeToken,prelinkedTelegram);
+const mergedTelegram = await S.telegramActor(prelinkedTelegram);
+const mergedWeb = await S.anonymousIdentity(webSecret);
+ok(mergedTelegram.identity===telegramExisting.identity,'existing Telegram identity remains primary');
+ok(mergedWeb===telegramExisting.identity,'old browser session resolves to existing Telegram identity');
+ok((await S.listTickets(mergedTelegram)).rows.some(t=>t.id===oldBotTicket.id),'existing Telegram ticket preserved after linking');
+ok((await S.listTickets({...webActor,identity:mergedWeb})).rows.some(t=>t.id===oldWebTicket.id),'existing browser ticket preserved after linking');
+
+const sent=[];globalThis.fetch=async(_url,opts)=>{sent.push(JSON.parse(opts.body));return{ok:true,json:async()=>({ok:true,result:{message_id:1}})};};
+const chat=888880002;
+await supportCallback(chat,chat,'sup:new:idea');await supportMessage(chat,chat,{text:'TEST اقتراح من البوت'});await supportMessage(chat,chat,{text:'تفاصيل الاقتراح من تليجرام'});await supportCallback(chat,chat,'sup:skip');
+const draft=await qOne('SELECT data FROM support_drafts WHERE chat_id=$1',[chat]);
+await supportCallback(chat,chat,'sup:send:'+draft.data.key);
+const tg=await S.telegramActor(chat);const own=await S.listTickets(tg);
+ok(own.rows.some(t=>t.source==='telegram'),'Telegram flow creates shared ticket');
+await supportCallback(chat,chat,'sup:stats');ok(sent.at(-1).text.includes('للمالك'),'student denied owner analytics');
+if(!memory) {await S.drainSupport();ok(sent.some(x=>x.text?.includes('طلب دعم جديد')),'notification queued and delivered through mocked Telegram transport');}
+console.log(`Support integration: ${passed} PASS; ${memory?"pg-mem":"isolated real PostgreSQL"}; Telegram network mocked.`);
+const pool=(await import('../src/lib/server/db.ts')).getPool();await pool.end();

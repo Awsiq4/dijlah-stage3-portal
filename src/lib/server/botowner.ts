@@ -78,6 +78,7 @@ function sectionButtons(sectionStats: Record<SectionKey, SectionStats>): BotButt
 
 export function ownerMenu() {
   return {inline_keyboard: [
+    [{text: "🎫 إدارة الدعم والاقتراحات", callback_data: "sup:list:0"}],
     [{text: "📊 إحصائيات البوت", callback_data: "own:stats"}],
     [{text: "📉 تحليل التفاعل واستخدام الأقسام", callback_data: "own:insights"}],
     [{text: "📬 إحصائيات وصول الإشعارات", callback_data: "own:delivery"}],
