@@ -14,6 +14,7 @@ const {newDb} = await import("pg-mem");
 const {setPoolForTests, q, qOne, defaultQueryer} = await import("./db.ts");
 const {registerUser, isBotOwner, esc} = await import("./registry.ts");
 const {computeAnalytics, listUsers, setSetting, getSetting, ownerNotificationsEnabled, OWNER_NOTIFY_KEY} = await import("./analytics.ts");
+const {getSectionStats, listSectionStudents, getEffectiveRoleCounts} = await import("./owner-sections.ts");
 
 async function makeDb() {
   const mem = newDb();
@@ -121,5 +122,56 @@ test("notification preference persists and defaults to enabled; disabling keeps 
   assert.equal(await getSetting(defaultQueryer, OWNER_NOTIFY_KEY, true), false);
   const u = await registerUser(5001, 5001, "x", "X", "", "A");
   assert.equal(u.isNew, true); // registration unaffected by notif setting
+  await pool.end();
+});
+
+
+test("owner section breakdown: zero-count sections, pagination and user details list exclude owner and linked staff", async () => {
+  const pool = await makeDb();
+  await registerUser(424242, 424242, "owner", "Portal", "Owner", "A");
+  const admin = await pool.query(
+    "INSERT INTO portal_admins (email, password_hash, role, status, is_active, name) " +
+    "VALUES ('editor@test.example','hash','editor','active',true,'Editor') RETURNING id"
+  );
+  await registerUser(9001, 9001, "staff", "Teacher", "Account", "A");
+  await pool.query("INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,$2)",
+    [admin.rows[0].id, 9001]);
+
+  for (let i = 0; i < 10; i++)
+    await registerUser(1000 + i, 1000 + i, "student" + i, "Student", String(i), "A");
+  await registerUser(2001, 2001, "b1", "Student", "B", "B");
+  await registerUser(2002, 2002, "b2", "Student", "B2", "B");
+  await registerUser(3001, 3001, "c1", "Student", "C", "C");
+  await registerUser(4001, 4001, "f1", "Student", "F", "F");
+  await registerUser(5001, 5001, "unknown", "Unknown", "", null);
+  await pool.query("UPDATE tg_subscribers SET status='stopped' WHERE chat_id=1000");
+  await pool.query("UPDATE tg_subscribers SET last_activity_at=now()-interval '40 days' WHERE chat_id=1001");
+
+  const stats = await getSectionStats(defaultQueryer);
+  assert.equal(stats.A.total, 10); // neither Telegram owner nor linked instructor counts as student
+  assert.equal(stats.A.subscribed, 9);
+  assert.equal(stats.A.stopped, 1);
+  assert.equal(stats.A.active7d, 9);
+  assert.equal(stats.B.total, 2);
+  assert.equal(stats.C.total, 1);
+  assert.equal(stats.F.total, 1);
+  assert.equal(stats.NA.total, 1);
+
+  const page0 = await listSectionStudents("A", 0, 8, defaultQueryer);
+  const page1 = await listSectionStudents("A", 1, 8, defaultQueryer);
+  assert.equal(page0.total, 10);
+  assert.equal(page0.rows.length, 8);
+  assert.equal(page1.rows.length, 2);
+  assert.equal(new Set([...page0.rows, ...page1.rows].map(r => r.chat_id)).size, 10);
+  assert.ok(![...page0.rows, ...page1.rows].some(r => [424242, 9001].includes(Number(r.chat_id))));
+  const missing = await listSectionStudents("NA", 0, 8, defaultQueryer);
+  assert.equal(missing.total, 1);
+  assert.equal(Number(missing.rows[0].chat_id), 5001);
+
+  const roles = await getEffectiveRoleCounts(defaultQueryer);
+  assert.equal(roles.owner, 1);
+  assert.equal(roles.editor, 1);
+  assert.equal(roles.student, 15);
+  await assert.rejects(() => listSectionStudents("INVALID", 0, 8, defaultQueryer));
   await pool.end();
 });
