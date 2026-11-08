@@ -1,7 +1,8 @@
 import {NextRequest, NextResponse} from "next/server";
-import {ADMIN_SECRET, timingSafeEqual, telegramServiceEnabled, botConfigured, dbConfigured} from "@/lib/server/flags";
+import {ADMIN_SECRET, timingSafeEqual, telegramServiceEnabled, botConfigured, dbConfigured, PORTAL_BASE_URL, WEBHOOK_SECRET} from "@/lib/server/flags";
 import {q} from "@/lib/server/db";
-import {getMe} from "@/lib/server/telegram";
+import {getMe, setWebhook, tgFetch} from "@/lib/server/telegram";
+import {requireAdmin} from "@/lib/server/auth";
 import {publishAndDeliver} from "@/lib/server/notify";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +37,37 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
+  if (body?.action === "configure-webhook") {
+    const admin = await requireAdmin(req, {write: true});
+    if (admin?.role !== "super_admin") return NextResponse.json({error: "forbidden"}, {status: 403});
+    if (!telegramServiceEnabled() || !WEBHOOK_SECRET) {
+      return NextResponse.json({error: "bot configuration incomplete"}, {status: 503});
+    }
+    const url = new URL("/api/telegram/webhook", PORTAL_BASE_URL);
+    if (url.protocol !== "https:" || url.username || url.password) {
+      return NextResponse.json({error: "invalid portal base URL"}, {status: 503});
+    }
+    const bot = await getMe();
+    if (!bot.ok) return NextResponse.json({error: "Telegram bot authentication failed"}, {status: 502});
+    const before = await tgFetch<{url: string}>("getWebhookInfo", {});
+    if (!before.ok) return NextResponse.json({error: "Unable to inspect Telegram webhook"}, {status: 502});
+    if (before.result?.url && new URL(before.result.url).origin !== url.origin) {
+      return NextResponse.json({error: "Bot is already connected to a different deployment"}, {status: 409});
+    }
+    const configured = await setWebhook(url.toString(), WEBHOOK_SECRET);
+    if (!configured.ok) return NextResponse.json({error: "Telegram webhook registration failed"}, {status: 502});
+    const info = await tgFetch<{url: string; pending_update_count: number; last_error_date?: number}>("getWebhookInfo", {});
+    return NextResponse.json({
+      ok: info.ok && info.result?.url === url.toString(),
+      bot: bot.result?.username,
+      webhookHost: url.host,
+      pendingUpdates: info.result?.pending_update_count,
+      lastErrorAt: info.result?.last_error_date || null,
+    });
+  }
   if (!authorized(req)) return NextResponse.json({error: "forbidden"}, {status: 403});
   if (!telegramServiceEnabled()) return NextResponse.json({error: "service disabled (flag/db/bot missing)"}, {status: 503});
-  const body = await req.json().catch(() => ({}));
   if (body?.action !== "test") return NextResponse.json({error: "unknown action"}, {status: 400});
   const result = await publishAndDeliver({
     type: "test",
