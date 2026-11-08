@@ -1,48 +1,276 @@
 "use client";
-import React,{useRef,useState} from "react";
-import {Download,Plus,RotateCcw,ShieldAlert,Trash2,Upload} from "lucide-react";
-import {usePortal} from "@/lib/storage";
-import {SECTIONS,DAYS} from "@/lib/seed";
-import type {PortalData,Subject,Section,Announcement,ScheduleSlot,Exam,Assignment,Lecture} from "@/lib/types";
-import {Empty,PageHeading} from "@/components/UI";
-import TelegramAdmin from "@/components/TelegramAdmin";
-const tabNames={subjects:"التدريسيون والمواد",announcements:"التبليغات",lectures:"المحاضرات",schedule:"الجدول",exams:"الامتحانات",assignments:"الواجبات",telegram:"قنوات التليجرام",tgcenter:"مركز إشعارات التليجرام"} as const;
-type Tab=keyof typeof tabNames;
-const blank=()=>({title:"",body:"",author:"",subjectId:"digital-systems",scope:"general",section:"A",priority:"normal",day:"0",start:"08:30",end:"10:00",room:"",teacher:"",kind:"theory",status:"normal",note:"",number:"1",fileUrl:"",description:"",type:"كوز",date:"",startTime:"09:00",topics:"",dueAt:"",submission:"",pinned:false});
-function uuid(){return (typeof crypto!=="undefined"&&"randomUUID"in crypto)?crypto.randomUUID():`local-${Date.now()}`;}
-function validateImport(input:unknown):input is PortalData{if(!input||typeof input!=="object")return false;const o=input as Record<string,unknown>;return ["subjects","lectures","schedule","exams","announcements","assignments"].every(k=>Array.isArray(o[k]))&&typeof o.telegram==="object"&&o.telegram!==null;}
-export default function Admin(){
- const {data,setData,reset}=usePortal();const [tab,setTab]=useState<Tab>("subjects");const [f,setF]=useState(blank);const [feedback,setFeedback]=useState("");const fileRef=useRef<HTMLInputElement>(null);
- const field=(k:keyof ReturnType<typeof blank>)=>({value:String(f[k]),onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>)=>setF(v=>({...v,[k]:e.target.value}))});
- const subjectOpts=data.subjects.map(s=><option value={s.id} key={s.id}>{s.name}</option>);
- const sectionOpts=SECTIONS.map(s=><option key={s} value={s}>الشعبة {s}</option>);
- const select=(label:string,key:keyof ReturnType<typeof blank>,opts:React.ReactNode)=><label className="form-field"><span>{label}</span><select {...field(key)}>{opts}</select></label>;
- const input=(label:string,key:keyof ReturnType<typeof blank>,type="text",required=false)=><label className="form-field"><span>{label}</span><input type={type} required={required} {...field(key)}/></label>;
- const textarea=(label:string,key:keyof ReturnType<typeof blank>)=><label className="form-field wide"><span>{label}</span><textarea rows={3} {...field(key)}/></label>;
- function add(e:React.FormEvent){e.preventDefault();const id=uuid();const timestamp=new Date().toISOString();const sid=data.subjects.some(s=>s.id===f.subjectId)?f.subjectId:data.subjects[0]?.id;if(!sid){setFeedback("يجب إضافة مادة أولاً");return;}
-  if(tab==="announcements"){const item:Announcement={id,title:f.title.trim(),body:f.body,scope:f.scope as Announcement["scope"],section:f.scope==="general"?"all":f.section as Section,subjectId:f.scope==="teacher"?sid:"",author:f.author,priority:f.priority as Announcement["priority"],publishedAt:timestamp,pinned:f.pinned};setData(d=>({...d,announcements:[item,...d.announcements]}));}
-  if(tab==="lectures"){const item:Lecture={id,subjectId:sid,number:Number(f.number)||1,title:f.title.trim(),description:f.description,fileUrl:f.fileUrl,fileName:f.fileUrl.split("/").pop()||"",status:"published",updatedAt:timestamp};setData(d=>({...d,lectures:[item,...d.lectures]}));}
-  if(tab==="schedule"){const item:ScheduleSlot={id,section:f.section as Section,day:Number(f.day),start:f.start,end:f.end,subjectId:sid,teacher:f.teacher,room:f.room,kind:f.kind as ScheduleSlot["kind"],status:f.status as ScheduleSlot["status"],note:f.note};setData(d=>({...d,schedule:[...d.schedule,item]}));}
-  if(tab==="exams"){const item:Exam={id,subjectId:sid,title:f.title.trim(),type:f.type,date:f.date,startTime:f.startTime,room:f.room,sections:[f.section as Section],topics:f.topics,notes:f.note,status:"provisional"};setData(d=>({...d,exams:[...d.exams,item]}));}
-  if(tab==="assignments"){const item:Assignment={id,subjectId:sid,title:f.title.trim(),instructions:f.body,assignedAt:timestamp,dueAt:f.dueAt,sections:[f.section as Section],submission:f.submission,status:"active",attachmentUrl:f.fileUrl};setData(d=>({...d,assignments:[...d.assignments,item]}));}
-  setF(blank());setFeedback("انضاف المحتوى إلى تخزين المتصفح المحلي (مو إلى قاعدة بيانات الموقع الأصلي).");
- }
- function remove(key:"announcements"|"lectures"|"schedule"|"exams"|"assignments",id:string){if(confirm("حذف هذا السجل من النسخة التجريبية المحلية؟")){setData(d=>({...d,[key]:d[key].filter(row=>row.id!==id)}));}}
- function exportFile(){const blob=new Blob([JSON.stringify({...data,exportInfo:{source:"prototype-localStorage",exportedAt:new Date().toISOString()}},null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="portal-local-data.json";a.click();URL.revokeObjectURL(url);}
- async function importFile(e:React.ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];if(!file)return;try{if(file.size>5_000_000)throw new Error("الملف كبير جداً");const parsed:unknown=JSON.parse(await file.text());if(!validateImport(parsed))throw new Error("صيغة البيانات غير صحيحة");setData(()=>parsed);setFeedback("تم استيراد بيانات تجريبية إلى هذا المتصفح فقط.");}catch(err){setFeedback(`فشل الاستيراد: ${err instanceof Error?err.message:"خطأ غير معروف"}`);}finally{if(fileRef.current)fileRef.current.value="";}}
- return <><PageHeading title="لوحة الإدارة التجريبية" description="إدارة بيانات الواجهة محلياً لغرض إكمال المشروع وتطويره"/><div className="danger-note"><ShieldAlert size={22}/><div><strong>تنبيه أمني مهم</strong><p>هذه اللوحة بلا تسجيل دخول، تحفظ البيانات في localStorage على هذا الجهاز فقط. ليست الإدارة الأصلية، ولا تصلح للنشر العام قبل إضافة توثيق الخادم وصلاحيات الأدوار وقاعدة بيانات حقيقية.</p></div></div><div className="admin-actions"><button className="action-button" onClick={exportFile}><Download size={16}/> تصدير JSON</button><button className="action-button secondary" onClick={()=>fileRef.current?.click()}><Upload size={16}/> استيراد JSON</button><input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={importFile}/><button className="action-button secondary" onClick={()=>{if(confirm("إعادة تعيين كل التغييرات المحلية؟"))reset();}}><RotateCcw size={16}/> استعادة بيانات البداية</button></div>{feedback&&<p className="note" role="status">{feedback}</p>}
- <div className="tabs admin-tabs">{(Object.keys(tabNames) as Tab[]).map(t=><button key={t} className={tab===t?"selected":""} onClick={()=>{setTab(t);setFeedback("");setF(blank());}}>{tabNames[t]}</button>)}</div>
- {tab==="subjects"&&<div className="panel"><div className="panel-heading"><h2>أسماء التدريسيين لكل مادة</h2></div><div className="panel-body"><p className="subtle">الأسماء الظاهرة مستخرجة من جدول 2026-2027 الرقمي، وتحتاج مطابقتها مع أحدث صورة للمدرسين قبل اعتمادها نهائياً.</p>{data.subjects.map(s=><div key={s.id} className="admin-teacher-row"><div className="grow"><strong>{s.name}</strong><p className="subtle small">{s.englishName}</p></div><input aria-label={`تدريسي ${s.name}`} placeholder="اسم التدريسي" value={s.teacher} onChange={e=>setData(d=>({...d,subjects:d.subjects.map(x=>x.id===s.id?{...x,teacher:e.target.value}:x)}))}/></div>)}</div></div>}
- {tab==="tgcenter"&&<TelegramAdmin/>}
- {tab==="telegram"&&<div className="panel"><div className="panel-heading"><h2>روابط القنوات</h2></div><div className="panel-body"><label className="form-field"><span>القناة العامة</span><input placeholder="https://t.me/..." value={data.telegram.general} onChange={e=>setData(d=>({...d,telegram:{...d.telegram,general:e.target.value}}))}/></label>{SECTIONS.map(s=><label className="form-field" key={s}><span>قناة الشعبة {s}</span><input placeholder="https://t.me/..." value={data.telegram.sections[s]} onChange={e=>setData(d=>({...d,telegram:{...d.telegram,sections:{...d.telegram.sections,[s]:e.target.value}}}))}/></label>)}<h3>قنوات المواد</h3>{data.subjects.map(s=><label className="form-field" key={s.id}><span>{s.name}</span><input placeholder="https://t.me/..." value={data.telegram.subjects[s.id]||""} onChange={e=>setData(d=>({...d,telegram:{...d.telegram,subjects:{...d.telegram.subjects,[s.id]:e.target.value}}}))}/></label>)}</div></div>}
- {!["subjects","telegram","tgcenter"].includes(tab)&&<><div className="panel"><div className="panel-heading"><h2><Plus size={20}/> إضافة {tabNames[tab]}</h2></div><form className="admin-form panel-body" onSubmit={add}>
- {(["announcements","lectures","exams","assignments"] as Tab[]).includes(tab)&&input("العنوان","title","text",true)}
- {tab==="announcements"&&<>{textarea("محتوى التبليغ","body")}{input("اسم الناشر","author")}{select("جهة النشر","scope",<><option value="general">الممثل العام / تبليغ عام</option><option value="section">ممثل الشعبة</option><option value="teacher">تدريسي مادة</option></>)}{f.scope!=="general"&&select("الشعبة","section",sectionOpts)}{f.scope==="teacher"&&select("المادة","subjectId",subjectOpts)}{select("الأولوية","priority",<><option value="normal">عادي</option><option value="important">مهم</option><option value="urgent">عاجل</option></>)}<label className="form-field checkbox-field"><input type="checkbox" checked={f.pinned} onChange={e=>setF(v=>({...v,pinned:e.target.checked}))}/> تثبيت التبليغ</label></>}
- {tab==="lectures"&&<>{select("المادة","subjectId",subjectOpts)}{input("رقم المحاضرة","number","number")}{textarea("الوصف","description")}{input("رابط HTTPS لملف PDF","fileUrl","url")}</>}
- {tab==="schedule"&&<>{select("الشعبة","section",sectionOpts)}{select("اليوم","day",DAYS.map((day,i)=><option key={i} value={i}>{day}</option>))}{select("المادة","subjectId",subjectOpts)}{input("بداية المحاضرة","start","time")}{input("نهاية المحاضرة","end","time")}{input("اسم التدريسي","teacher")}{input("القاعة / المختبر","room")}{select("النوع","kind",<><option value="theory">نظري</option><option value="practical">عملي</option></>)}{select("الحالة","status",<><option value="normal">اعتيادي</option><option value="moved">تغيير</option><option value="cancelled">ملغاة</option><option value="extra">إضافية</option></>)}{textarea("ملاحظة","note")}</>}
- {tab==="exams"&&<>{select("المادة","subjectId",subjectOpts)}{select("الشعبة","section",sectionOpts)}{input("النوع","type")}{input("التاريخ","date","date",true)}{input("الوقت","startTime","time")}{input("القاعة","room")}{textarea("الموضوعات الداخلة","topics")}{textarea("ملاحظات","note")}</>}
- {tab==="assignments"&&<>{select("المادة","subjectId",subjectOpts)}{select("الشعبة","section",sectionOpts)}{textarea("التعليمات","body")}{input("موعد التسليم","dueAt","datetime-local",true)}{input("آلية التسليم","submission")}{input("رابط مرفق HTTPS","fileUrl","url")}</>}
- <button type="submit" className="action-button"><Plus size={17}/> حفظ محلي</button></form></div>
- <div className="panel"><div className="panel-heading"><h2>السجلات الحالية</h2></div><div className="panel-body">{(()=>{const key=tab as "announcements"|"lectures"|"schedule"|"exams"|"assignments";const list=data[key] as Array<{id:string;title?:string;day?:number;start?:string;subjectId?:string}>;return list.length?list.map(row=><div className="list-row" key={row.id}><div className="grow"><strong>{row.title|| (row.day!==undefined?`${DAYS[row.day]} · ${row.start}`:row.id)}</strong><p className="subtle small">{data.subjects.find(s=>s.id===row.subjectId)?.name}</p></div><button className="icon-button danger" aria-label="حذف السجل" onClick={()=>remove(key,row.id)}><Trash2 size={17}/></button></div>):<Empty/>;})()}</div></div></>}
- </>;
+import React,{useCallback,useEffect,useState} from "react";
+import {useRouter} from "next/navigation";
+import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogOut,ShieldCheck,Database,Send,Pencil,Plus,Trash2,X,GraduationCap,Users} from "lucide-react";
+import {Empty,PageHeading,Status} from "@/components/UI";
+import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./workspace";
+
+type Me = {authenticated: boolean; email?: string; role?: string};
+type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentAudit?: {actor: string; action: string; created_at: string}[]};
+type Row = Record<string, unknown>;
+
+const TABS = [
+  {id: "overview", label: "نظرة عامة", Icon: ShieldCheck},
+  {id: "subjects", label: "المواد", Icon: GraduationCap},
+  {id: "announcements", label: "التبليغات", Icon: Megaphone},
+  {id: "lectures", label: "المحاضرات", Icon: BookOpen},
+  {id: "exams", label: "الامتحانات", Icon: FileQuestion},
+  {id: "assignments", label: "الواجبات", Icon: ClipboardList},
+  {id: "schedule", label: "الجدول", Icon: CalendarDays},
+  {id: "telegram", label: "تليجرام", Icon: Send},
+] as const;
+type TabId = (typeof TABS)[number]["id"] | "users" | "tgcenter" | "audit";
+type WritableTab = "subjects" | "announcements" | "lectures" | "exams" | "assignments" | "schedule";
+
+type Field = {k: string; label: string; area?: boolean; select?: string[]; num?: boolean; json?: boolean; req?: boolean};
+const FIELDS: Record<WritableTab, Field[]> = {
+  subjects: [
+    {k: "id", label: "المعرّف (id)", req: true},
+    {k: "name", label: "اسم المادة", req: true},
+    {k: "english_name", label: "الاسم الإنجليزي"},
+    {k: "teacher", label: "التدريسي"},
+    {k: "description", label: "الوصف", area: true},
+    {k: "color", label: "اللون (مثل #3586d9)"},
+  ],
+  lectures: [
+    {k: "id", label: "المعرّف (id)", req: true},
+    {k: "subject_id", label: "معرّف المادة", req: true},
+    {k: "number", label: "رقم المحاضرة", num: true, req: true},
+    {k: "title", label: "العنوان", req: true},
+    {k: "description", label: "الوصف", area: true},
+    {k: "file_url", label: "رابط الملف"},
+    {k: "file_name", label: "اسم الملف"},
+    {k: "status", label: "الحالة", select: ["published", "draft"]},
+    {k: "updated_at", label: "تاريخ التحديث"},
+  ],
+  announcements: [
+    {k: "id", label: "المعرّف (id)", req: true},
+    {k: "title", label: "العنوان", req: true},
+    {k: "body", label: "المحتوى", area: true},
+    {k: "scope", label: "النطاق", select: ["general", "section", "teacher"]},
+    {k: "section", label: "الشعبة", select: ["all", "A", "B", "C", "F"]},
+    {k: "subject_id", label: "معرّف المادة (للتبليغ التدريسي)"},
+    {k: "author", label: "الجهة"},
+    {k: "priority", label: "الأولوية", select: ["normal", "important", "urgent"]},
+    {k: "published_at", label: "تاريخ النشر"},
+    {k: "pinned", label: "مثبّت", select: ["false", "true"]},
+  ],
+  exams: [
+    {k: "id", label: "المعرّف (id)", req: true},
+    {k: "subject_id", label: "معرّف المادة"},
+    {k: "title", label: "العنوان", req: true},
+    {k: "type", label: "النوع (كوز/نصف سنوي...)"},
+    {k: "date", label: "التاريخ"},
+    {k: "start_time", label: "وقت البدء"},
+    {k: "room", label: "القاعة"},
+    {k: "sections", label: "الشعب (JSON مثل [\"A\"])", json: true},
+    {k: "topics", label: "المواضيع", area: true},
+    {k: "notes", label: "ملاحظات", area: true},
+    {k: "status", label: "الحالة", select: ["confirmed", "provisional", "cancelled"]},
+  ],
+  assignments: [
+    {k: "id", label: "المعرّف (id)", req: true},
+    {k: "subject_id", label: "معرّف المادة"},
+    {k: "title", label: "العنوان", req: true},
+    {k: "instructions", label: "التعليمات", area: true},
+    {k: "assigned_at", label: "تاريخ التكليف"},
+    {k: "due_at", label: "موعد التسليم"},
+    {k: "sections", label: "الشعب (JSON)", json: true},
+    {k: "submission", label: "طريقة التسليم"},
+    {k: "status", label: "الحالة", select: ["active", "closed", "cancelled"]},
+    {k: "attachment_url", label: "رابط المرفق"},
+  ],
+  schedule: [
+    {k: "id", label: "المعرّف (id)", req: true},
+    {k: "section", label: "الشعبة", select: ["A", "B", "C", "F"], req: true},
+    {k: "day", label: "اليوم (0=الأحد … 6=السبت)", num: true, req: true},
+    {k: "start", label: "وقت البدء", req: true},
+    {k: "end", label: "وقت الانتهاء", req: true},
+    {k: "subject_id", label: "معرّف المادة"},
+    {k: "teacher", label: "التدريسي"},
+    {k: "room", label: "القاعة"},
+    {k: "kind", label: "النوع", select: ["theory", "practical"]},
+    {k: "status", label: "الحالة", select: ["normal", "moved", "cancelled", "extra"]},
+    {k: "note", label: "ملاحظة"},
+    {k: "periods", label: "الفترات (JSON)", json: true},
+  ],
+};
+
+const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"};
+
+export default function AdminDashboard(){
+  const router = useRouter();
+  const [me, setMe] = useState<Me | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<TabId>("overview");
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<Row | null>(null);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+
+  const loadTab = useCallback((t: TabId) => {
+    if (t === "users" || t === "tgcenter" || t === "audit") return;
+    if (t === "overview") {
+      fetch("/api/admin/stats", {cache: "no-store"}).then(r => r.json()).then(setStats).catch(() => setStats({databaseConfigured: false}));
+    } else {
+      setRows(null);
+      fetch(`/api/admin/content?type=${t}`, {cache: "no-store"}).then(r => r.json()).then(j => setRows(j.rows || [])).catch(() => setRows([]));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/admin/me", {cache: "no-store"})
+      .then(async r => { if (r.status === 401) { router.push("/admin/login"); return; } setMe(await r.json()); })
+      .catch(() => router.push("/admin/login"))
+      .finally(() => setLoading(false));
+  }, [router]);
+
+  useEffect(() => { if (me?.authenticated) loadTab(tab); }, [me, tab, loadTab]);
+
+  const logout = async () => {
+    await fetch("/api/admin/logout", {method: "POST", headers: WRITE_HEADERS});
+    router.push("/admin/login");
+  };
+
+  const startAdd = () => { setEditing({}); setForm({}); };
+  const startEdit = (row: Row) => {
+    setEditing(row);
+    const f: Record<string, string> = {};
+    for (const [k, v] of Object.entries(row)) f[k] = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "");
+    setForm(f);
+  };
+  const cancelEdit = () => { setEditing(null); setForm({}); };
+
+  const submit = async (e: React.FormEvent, type: WritableTab) => {
+    e.preventDefault();
+    setBusy(true); setNotice("");
+    try {
+      const row: Row = {};
+      for (const f of FIELDS[type]) {
+        const v = (form[f.k] ?? "").trim();
+        if (f.num) row[f.k] = v === "" ? null : Number(v);
+        else if (f.json) row[f.k] = v === "" ? null : JSON.parse(v);
+        else row[f.k] = v;
+      }
+      const res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setNotice(j.error || "فشل الحفظ"); return; }
+      setNotice("تم الحفظ بنجاح");
+      cancelEdit();
+      loadTab(tab);
+    } catch { setNotice("بيانات غير صالحة — راجع قيم JSON"); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (type: WritableTab, id: string) => {
+    if (!confirm("حذف هذا السجل نهائيًا من قاعدة البيانات؟")) return;
+    const res = await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(id)}`, {method: "DELETE", headers: WRITE_HEADERS});
+    if (res.ok) { setNotice("تم الحذف"); loadTab(tab); } else setNotice("فشل الحذف");
+  };
+
+  if (loading) return <PageHeading title="لوحة الإدارة" description="جارٍ التحقق من الجلسة…"/>;
+  if (!me?.authenticated) return <PageHeading title="لوحة الإدارة" description="غير مسجّل الدخول"/>;
+  const canWrite = me.role === "super_admin" || me.role === "editor";
+  // Role-specific workspaces: representatives and teachers get a focused UI, not the full admin panel
+  if (!canWrite) return <><RoleWorkspace me={me}/><div style={{marginTop:18}}><AccountPanel/></div></>;
+  const tabs = me.role === "super_admin"
+    ? [...TABS, {id: "users" as const, label: "إدارة الحسابات", Icon: Users}, {id: "tgcenter" as const, label: "مركز Telegram", Icon: Send}, {id: "audit" as const, label: "سجل الأحداث", Icon: ShieldCheck}]
+    : TABS;
+
+  return <>
+    <PageHeading title="لوحة الإدارة" description={`${me.email} · ${me.role}`} action={<button className="action-button secondary" onClick={logout}><LogOut size={16}/> خروج</button>}/>
+    <div className="tabs admin-tabs">
+      {tabs.map(t => <button key={t.id} className={tab === t.id ? "selected" : ""} onClick={() => { setTab(t.id); cancelEdit(); }}><t.Icon size={15}/> {t.label}</button>)}
+    </div>
+
+    {notice && <p className="note" role="status">{notice}</p>}
+
+    {tab === "overview" && <>
+      <div className="stats">
+        <div className="stat"><Database size={21}/><span>قاعدة البيانات</span><strong>{stats?.databaseConfigured ? "متصلة" : "غير مهيأة"}</strong></div>
+        {stats?.counts?.filter(c => c.table.startsWith("portal_")).map(c => (
+          <div className="stat" key={c.table}><ShieldCheck size={21}/><span>{c.table.replace("portal_", "")}</span><strong>{c.count}</strong></div>
+        ))}
+      </div>
+      <div className="two-col">
+        <div className="panel"><div className="panel-heading"><h2>آخر الإجراءات</h2></div><div className="panel-body">
+          {stats?.recentAudit?.length ? stats.recentAudit.map((a, i) => <div className="kv" key={i}><span>{a.action}</span><strong>{a.actor} · {new Date(a.created_at).toLocaleString("ar-IQ")}</strong></div>) : <Empty description="لا يوجد سجل بعد."/>}
+        </div></div>
+        <div className="panel"><div className="panel-heading"><h2>حالة الخدمات</h2></div><div className="panel-body">
+          <p className="subtle small">إشعارات (tg_*): {stats?.counts?.filter(c => c.table.startsWith("tg_")).map(c => `${c.table.replace("tg_", "")}: ${c.count}`).join(" · ") || "—"}</p>
+          <p className="subtle small">المستخدم الحالي: <Status tone="success">{me.role}</Status></p>
+          <p className="subtle small">الواجهة التجريبية القديمة: <a className="text-link" href="/admin-legacy">/admin-legacy</a> (محمية بنفس الجلسة)</p>
+        </div></div>
+      </div>
+    </>}
+
+    {tab === "telegram" && <TelegramPanel onChanged={() => loadTab("telegram")} canWrite={canWrite} rows={rows}/>}
+
+    {tab === "users" && me.role === "super_admin" && <UsersTab/>}
+    {tab === "tgcenter" && me.role === "super_admin" && <TelegramCenterTab/>}
+    {tab === "audit" && me.role === "super_admin" && <AuditTab/>}
+
+    {tab !== "overview" && tab !== "telegram" && tab !== "users" && tab !== "tgcenter" && tab !== "audit" && <div className="panel">
+      <div className="panel-heading"><h2>{TABS.find(t => t.id === tab)?.label}</h2>
+        <span className="subtle small">{rows ? `${rows.length} سجل` : "…"}</span>
+        {canWrite && (editing === null ? <button className="action-button" onClick={startAdd}><Plus size={15}/> إضافة جديد</button> : <button className="action-button secondary" onClick={cancelEdit}><X size={15}/> إلغاء</button>)}
+      </div>
+      <div className="panel-body">
+        {canWrite && editing !== null && <form className="admin-form" onSubmit={e => submit(e, tab as WritableTab)} style={{marginBottom: 18}}>
+          {FIELDS[tab as WritableTab].map(f => (
+            <label className={"form-field" + (f.area ? " wide" : "")} key={f.k}><span>{f.label}{f.req ? " *" : ""}</span>
+              {f.select ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
+                <option value="">—</option>
+                {f.select.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+              : f.area ? <textarea rows={3} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>
+              : <input type={f.num ? "number" : "text"} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>}
+            </label>
+          ))}
+          <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}} disabled={busy}><ShieldCheck size={15}/> {busy ? "جارٍ الحفظ…" : "حفظ"}</button>
+        </form>}
+        {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map((r, i) => <div className="list-row" key={String(r.id || i)}>
+          <div className="grow"><strong>{String(r.title || r.name || r.id)}</strong><p className="subtle small">{String(r.subject_id || r.section || "")}</p></div>
+          {canWrite && <button className="action-button secondary" title="تعديل" onClick={() => startEdit(r)}><Pencil size={14}/></button>}
+          {canWrite && <button className="action-button secondary" title="حذف" onClick={() => remove(tab as WritableTab, String(r.id))}><Trash2 size={14}/></button>}
+        </div>)}</div> : <Empty description="لا توجد بيانات بعد — استخدم «إضافة جديد»."/>}
+      </div>
+    </div>}
+  </>;
+}
+
+function TelegramPanel({onChanged, canWrite, rows}: {onChanged: () => void; canWrite: boolean; rows: Row[] | null}) {
+  const [kind, setKind] = useState("general");
+  const [key, setKey] = useState("general");
+  const [url, setUrl] = useState("");
+  const [notice, setNotice] = useState("");
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type: "telegram", kind, key, url})});
+    const j = await res.json().catch(() => ({}));
+    setNotice(res.ok ? "تم حفظ القناة" : (j.error || "فشل الحفظ"));
+    if (res.ok) onChanged();
+  };
+  return <div className="panel">
+    <div className="panel-heading"><h2><BellRing size={19}/> قنوات تليجرام</h2></div>
+    <div className="panel-body">
+      {notice && <p className="note" role="status">{notice}</p>}
+      {canWrite && <form className="admin-form" onSubmit={save} style={{marginBottom: 16}}>
+        <label className="form-field"><span>النوع</span>
+          <select value={kind} onChange={e => { setKind(e.target.value); setKey(e.target.value === "general" ? "general" : ""); }}>
+            <option value="general">قناة عامة</option><option value="section">قناة شعبة</option><option value="subject">قناة مادة</option>
+          </select></label>
+        <label className="form-field"><span>المفتاح (مثل A أو nonlinear-optics)</span><input value={key} onChange={e => setKey(e.target.value)} required/></label>
+        <label className="form-field wide"><span>الرابط (https://t.me/…)</span><input dir="ltr" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://t.me/…"/></label>
+        <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}}>حفظ القناة</button>
+      </form>}
+      {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map((r, i) => <div className="list-row" key={i}>
+        <div className="grow"><strong>{String(r.kind)} · {String(r.key)}</strong><p className="subtle small" dir="ltr">{String(r.url)}</p></div>
+        {canWrite && <button className="action-button secondary" title="تعديل" onClick={() => { setKind(String(r.kind)); setKey(String(r.key)); setUrl(String(r.url)); }}><Pencil size={14}/></button>}
+      </div>)}</div> : <Empty description="لا توجد قنوات بعد."/>}
+      <p className="subtle small" style={{marginTop: 12}}>مركز إشعارات البوت: <code>/api/telegram/admin</code> (x-admin-secret) — الحالة: <code>/api/telegram/health</code>. البوت معطّل افتراضيًا.</p>
+    </div>
+  </div>;
 }

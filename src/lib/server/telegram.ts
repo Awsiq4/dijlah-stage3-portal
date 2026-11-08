@@ -1,4 +1,4 @@
-import {BOT_TOKEN} from "./flags";
+import {BOT_TOKEN} from "./flags.ts";
 
 const API_BASE = "https://api.telegram.org";
 
