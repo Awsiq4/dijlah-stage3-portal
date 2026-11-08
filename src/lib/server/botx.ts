@@ -207,7 +207,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
   }
   if (data === "nav:home") {
     const subscriber = await qOne<{section: string; status: string}>(`SELECT section, status FROM tg_subscribers WHERE chat_id=$1`, [chatId]);
-    if (!admin && (!subscriber || !subscriber.section)) { await sendMessage(chatId, "أهلًا بك! اختر شعبتك لتفعيل الإشعارات وعرض محتواها:", {replyMarkup: {inline_keyboard: SECTIONS.map(x => [{text: "شعبة " + x, callback_data: "sec:" + x}])}}); return; }
+    if (!admin && !isBotOwner(userId) && (!subscriber || !subscriber.section)) { await sendMessage(chatId, "أهلًا بك! اختر شعبتك لتفعيل الإشعارات وعرض محتواها:", {replyMarkup: {inline_keyboard: SECTIONS.map(x => [{text: "شعبة " + x, callback_data: "sec:" + x}])}}); return; }
     if (!admin && subscriber?.status !== "active") { await sendMessage(chatId, "إشعاراتك متوقفة. تقدر تتصفح أو تعيد تفعيلها:", {replyMarkup: {inline_keyboard: [[{text: "🔔 إعادة تفعيل الإشعارات", callback_data: "sec:" + subscriber?.section}], ...homeMenuFor(null, false).inline_keyboard]}}); return; }
 
     if (admin && (await hasActiveFlow(chatId))) {
