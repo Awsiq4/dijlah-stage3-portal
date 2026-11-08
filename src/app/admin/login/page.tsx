@@ -45,6 +45,7 @@ function AdminLoginInner(){
         {error&&<p className="subtle small" style={{color:"var(--st-danger-text)"}} role="alert">{error}</p>}
         <button className="action-button" style={{justifySelf:"stretch",width:"100%"}} disabled={busy}><Lock size={16}/> {busy?"جارٍ التحقق…":"دخول"}</button>
       </form>
+      <p style={{marginTop:12}}><a className="text-link" href="/admin/forgot-password">نسيت كلمة المرور؟ استعدها عبر Telegram</a></p>
       <p className="subtle small" style={{marginTop:12,display:"flex",gap:6,alignItems:"center"}}><ShieldCheck size={15}/> الجلسة مخزنة في cookie httpOnly؛ تُتحقق من الخادم في كل طلب. القديم متاح في <a className="text-link" href="/admin-legacy">/admin-legacy</a>.</p>
     </div></div>
   </div>;

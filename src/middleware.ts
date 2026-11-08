@@ -10,14 +10,14 @@ export function middleware(req: NextRequest) {
   const {pathname} = req.nextUrl;
   const hasSession = Boolean(req.cookies.get("portal_session")?.value);
   if (pathname.startsWith("/api/admin/")) {
-    if (pathname === "/api/admin/login" || pathname === "/api/admin/health" || pathname === "/api/admin/setup" || pathname === "/api/admin/reset-password") return NextResponse.next();
+    if (pathname === "/api/admin/login" || pathname === "/api/admin/health" || pathname === "/api/admin/setup" || pathname === "/api/admin/reset-password" || pathname === "/api/admin/request-password-reset") return NextResponse.next();
     if (!hasSession && !req.headers.get("x-admin-secret")) {
       return NextResponse.json({error: "unauthorized"}, {status: 401});
     }
     return NextResponse.next();
   }
   if (isAdminPage(pathname)) {
-    if (pathname === "/admin/login" || pathname === "/admin/setup" || pathname === "/admin/reset-password") return NextResponse.next();
+    if (pathname === "/admin/login" || pathname === "/admin/setup" || pathname === "/admin/reset-password" || pathname === "/admin/forgot-password") return NextResponse.next();
     if (!hasSession) {
       const url = req.nextUrl.clone();
       url.pathname = "/admin/login";
