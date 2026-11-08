@@ -31,7 +31,7 @@ export default function SupportPage(){
  <div className="sup-choices">
    {Object.entries(cats).map(([c,n])=><button className="sup-choice" disabled={busy} key={c} onClick={()=>fresh(c)}><span>{n}</span><span aria-hidden="true">←</span></button>)}
  </div>
- {view!=='list'&&<button type="button" className="sup-back" onClick={()=>{setView('list');setPreview(false);setError('');}}>← رجوع للطلبات</button>}
+ {view!=='list'&&<button type="button" className="sup-back" onClick={()=>{setView('list');setError('');}}>← رجوع للطلبات</button>}
  {owner&&view==='list'&&<details className="sup-tools"><summary>⚙️ إدارة الدعم</summary><div className="sup-actions">
    <button onClick={()=>void task(async()=>{setStats(await request('/api/support?stats=1'));setView('stats');})}>📊 الإحصائيات</button>
    <button onClick={()=>void task(async()=>{setPeople(await request('/api/support?staff=1'));setView('staff');})}>👥 الفريق</button>
