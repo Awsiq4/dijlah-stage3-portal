@@ -8,10 +8,8 @@ console.log(memory?'Using isolated in-memory PostgreSQL emulation':'Provide isol
 let url='postgres://test';
 if(!memory){const rl=createInterface({input:process.stdin});[url]=await new Promise(resolve=>rl.once('line',l=>resolve([l])));rl.close();}
 process.env.DATABASE_URL=url; process.env.SESSION_SECRET='isolated-support-test';
-process.env.BOT_OWNER_ID='999999999';process.env.TELEGRAM_BOT_TOKEN='mock-only';
 const {q,qOne}=await import('../src/lib/server/db.ts');
 const S=await import('../src/lib/server/support.ts');
-const {supportCallback,supportMessage}=await import('../src/lib/server/botsupport.ts');
 if(memory){
  const {newDb,DataType}=await import('pg-mem'); const mem=newDb();
  mem.public.registerFunction({name:'octet_length',args:[DataType.bytea],returns:DataType.integer,implementation:b=>b.length});
@@ -49,35 +47,14 @@ if(!memory) ok(!(await S.listTickets(outsider,{q:key})).rows.some(x=>x.id===t.id
 if(!memory) ok((await S.listTickets(owner,{q:key,section:'A'})).rows.length===0,'section filter');
 await assert.rejects(()=>S.analytics(student));passed++;
 if(!memory) ok(Number((await S.analytics(owner)).summary.total)>0,'analytics from real records');
-const raw=await S.createLink(student);await S.bindLink(raw,888880001);await assert.rejects(()=>S.bindLink(raw,888880001));passed++;
-ok((await S.telegramActor(888880001)).identity===identity,'verified website and bot identity shared');
-
-const prelinkedTelegram = 888880005;
-const telegramExisting = await S.telegramActor(prelinkedTelegram);
-const webSecret = randomUUID();
-const websiteExisting = await S.anonymousIdentity(webSecret);
-const webActor = {owner:false,permissions:[],identity:websiteExisting};
-const oldBotTicket = await S.createTicket({...webActor,identity:telegramExisting.identity},
-  {category:'support',subject:'Existing Telegram conversation',body:'Old bot ticket retained',key:randomUUID(),source:'telegram'});
-const oldWebTicket = await S.createTicket(webActor,
-  {category:'idea',subject:'Existing browser conversation',body:'Old website ticket retained',key:randomUUID(),source:'web'});
-const mergeToken = await S.createLink(webActor);
-await S.bindLink(mergeToken,prelinkedTelegram);
-const mergedTelegram = await S.telegramActor(prelinkedTelegram);
-const mergedWeb = await S.anonymousIdentity(webSecret);
-ok(mergedTelegram.identity===telegramExisting.identity,'existing Telegram identity remains primary');
-ok(mergedWeb===telegramExisting.identity,'old browser session resolves to existing Telegram identity');
-ok((await S.listTickets(mergedTelegram)).rows.some(t=>t.id===oldBotTicket.id),'existing Telegram ticket preserved after linking');
-ok((await S.listTickets({...webActor,identity:mergedWeb})).rows.some(t=>t.id===oldWebTicket.id),'existing browser ticket preserved after linking');
-
-const sent=[];globalThis.fetch=async(_url,opts)=>{sent.push(JSON.parse(opts.body));return{ok:true,json:async()=>({ok:true,result:{message_id:1}})};};
-const chat=888880002;
-await supportCallback(chat,chat,'sup:new:idea');await supportMessage(chat,chat,{text:'TEST اقتراح من البوت'});await supportMessage(chat,chat,{text:'تفاصيل الاقتراح من تليجرام'});await supportCallback(chat,chat,'sup:skip');
-const draft=await qOne('SELECT data FROM support_drafts WHERE chat_id=$1',[chat]);
-await supportCallback(chat,chat,'sup:send:'+draft.data.key);
-const tg=await S.telegramActor(chat);const own=await S.listTickets(tg);
-ok(own.rows.some(t=>t.source==='telegram'),'Telegram flow creates shared ticket');
-await supportCallback(chat,chat,'sup:stats');ok(sent.at(-1).text.includes('للمالك'),'student denied owner analytics');
-if(!memory) {await S.drainSupport();ok(sent.some(x=>x.text?.includes('طلب دعم جديد')),'notification queued and delivered through mocked Telegram transport');}
-console.log(`Support integration: ${passed} PASS; ${memory?"pg-mem":"isolated real PostgreSQL"}; Telegram network mocked.`);
+await q("INSERT INTO portal_admins(id,name,email,role,status,is_active) VALUES(1,'Site Owner','owner@example.test','super_admin','active',true)");
+const siteOwner=await S.adminActor({id:1,email:'owner@example.test',role:'super_admin',is_active:true});
+ok(siteOwner.owner===true,'site super admin manages support without Telegram account linkage');
+ok(typeof S.createLink==='undefined'&&typeof S.bindLink==='undefined'&&typeof S.telegramActor==='undefined',
+  'Telegram support links and identity paths are removed');
+await assert.rejects(()=>S.createTicket(student,{category:'idea',subject:'Unallowed bot ticket',body:'Test only',key:randomUUID(),source:'telegram'}));passed++;
+console.log('PASS Telegram support submissions refused');
+const jobs=await qOne('SELECT count(*)::int AS total FROM support_jobs');
+ok(Number(jobs.total)===0,'ticket creation and replies do not enqueue Telegram notifications');
+console.log('Support integration: '+passed+' PASS; '+(memory?'pg-mem':'isolated real PostgreSQL')+'; website-only, no Telegram integration.');
 const pool=(await import('../src/lib/server/db.ts')).getPool();await pool.end();
