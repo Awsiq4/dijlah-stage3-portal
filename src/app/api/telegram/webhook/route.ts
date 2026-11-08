@@ -117,8 +117,8 @@ export async function POST(req: NextRequest) {
     if (!update || typeof update !== "object") return NextResponse.json({ok: true});
     const message = update.message;
     const callback = update.callback_query;
-    if (message?.chat?.id && message.text) {
-      const text = String(message.text);
+    if (message?.chat?.id && (message.text || message.document)) {
+      const text = String(message.text || message.caption || "");
       const arg = text.split(" ").slice(1).join(" ").trim();
       if (text.startsWith("/start") && arg.startsWith("link_")) {
         await handleLinkStart(Number(message.chat.id), Number(message.from?.id || message.chat.id), arg);
