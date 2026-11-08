@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       const sameOrigin = previous.origin === url.origin;
       const knownPreview = previous.protocol === "https:"
         && previous.pathname === "/api/telegram/webhook"
-        && /^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\\.vercel\\.app$/i.test(previous.hostname);
+        && /^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\.vercel\.app$/i.test(previous.hostname);
       if (!sameOrigin && !knownPreview) return NextResponse.json({error: "Bot is connected to an unknown deployment; manual verification required"}, {status: 409});
     }
     const configured = await setWebhook(url.toString(), WEBHOOK_SECRET);
