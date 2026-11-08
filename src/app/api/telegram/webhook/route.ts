@@ -57,11 +57,11 @@ async function handleCommand(chatId: number, text: string, arg: string, from?: {
       await sendMessage(chatId, "⚠️ رابط الاشتراك غير صالح أو منتهي الصلاحية. افتح صفحة «تفعيل الإشعارات» من البوابة مجددًا.");
       return;
     }
-    const section = payload?.section || "A";
+    const section = payload?.section ?? null;
     // register on every /start (idempotent; owner notified only for genuinely new users)
     const reg = await registerUser(chatId, from?.id, from?.username, from?.first_name, from?.last_name, section);
     if (reg.isNew) await notifyOwnerNewUser({...reg, section, username: from?.username, first_name: from?.first_name, last_name: from?.last_name});
-    await upsertSubscriber(chatId, from?.id, from?.username, section);
+    if (section) await upsertSubscriber(chatId, from?.id, from?.username, section);
     if (!payload) { await sendMessage(chatId, "اختر شعبتك لتفعيل الإشعارات:", {replyMarkup: sectionKeyboard()}); return; }
     await sendMessage(chatId, `✅ تم تفعيل إشعارات البوابة بنجاح!\nالشعبة: <b>${section}</b>\n\nسيصلك كل جديد: المحاضرات، الامتحانات، التبليغات، الواجبات، وتغييرات الجدول.\n\nلتغيير الشعبة استخدم /section، وللإعدادات /settings، وللعرض /status، وللإيقاف /stop.`, {parseMode: "HTML"});
     return;
