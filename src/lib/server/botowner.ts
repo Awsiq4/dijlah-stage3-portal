@@ -11,6 +11,7 @@ import {
   SECTION_KEYS, sectionLabel, getSectionStats, listSectionStudents,
   getEffectiveRoleCounts, getEffectiveRole, type SectionKey, type SectionStats,
 } from "./owner-sections.ts";
+import {FEATURE_LABELS, getEngagementOverview, getStudentUsage, getDeliveryOverview, getProfileQuality, getSectionEngagement} from "./owner-intelligence.ts";
 
 const PER_PAGE = 8;
 type BotButton = {text: string; callback_data: string};
@@ -78,6 +79,9 @@ function sectionButtons(sectionStats: Record<SectionKey, SectionStats>): BotButt
 export function ownerMenu() {
   return {inline_keyboard: [
     [{text: "📊 إحصائيات البوت", callback_data: "own:stats"}],
+    [{text: "📉 تحليل التفاعل واستخدام الأقسام", callback_data: "own:insights"}],
+    [{text: "📬 إحصائيات وصول الإشعارات", callback_data: "own:delivery"}],
+    [{text: "🧾 جودة بيانات الطلاب", callback_data: "own:quality"}],
     [{text: "🏫 إحصائيات الشعب وحسابات الطلاب", callback_data: "own:sections"}],
     [{text: "👥 جميع الحسابات", callback_data: "own:users:0"}],
     [{text: "🆕 أحدث المسجلين", callback_data: "own:recent:0"}],
@@ -96,6 +100,62 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
     await sendMessage(chatId, "👑 لوحة المالك:\nاختر الإحصائيات أو الشعبة لعرض حسابات الطلاب في أي وقت.", {replyMarkup: ownerMenu()});
     return;
   }
+  if (data === "own:insights") {
+    const stats = await getEngagementOverview();
+    const top = stats.byFeature.length
+      ? stats.byFeature.map(f => "• " + esc(FEATURE_LABELS[f.feature] || f.feature) +
+        ": " + f.interactions + " تفاعل (" + f.students + " طالب)").join("\n")
+      : "لا توجد أحداث مسجلة بعد.";
+    const daily = stats.daily.length
+      ? stats.daily.map(d => "• " + d.day + ": " + d.interactions +
+        " تفاعل / " + d.users + " طالب").join("\n")
+      : "لا توجد أحداث مسجلة خلال آخر 7 أيام.";
+    await sendMessage(chatId, [
+      "📉 <b>تحليلات الاستخدام</b>",
+      "⚡ التفاعلات خلال 7 أيام: " + stats.interactions7d,
+      "⚡ التفاعلات خلال 30 يومًا: " + stats.interactions30d,
+      "👥 طلاب تفاعلوا خلال 7 أيام: " + stats.engaged7d,
+      "👥 طلاب تفاعلوا خلال 30 يومًا: " + stats.engaged30d,
+      "🕒 بداية التسجيل التحليلي: " + (stats.firstRecordedAt ? esc(dateInBaghdad(stats.firstRecordedAt)) : "لا توجد بيانات بعد"),
+      "",
+      "📚 <b>أكثر أقسام البوت استخدامًا (30 يومًا)</b>",
+      top, "",
+      "📅 <b>النشاط اليومي (7 أيام، توقيت بغداد)</b>",
+      daily, "",
+      "ℹ️ هذه أحداث ضغط الأزرار والأوامر داخل البوت فقط، ولا تثبت قراءة المحاضرات أو تنزيل الملفات.",
+      "🔒 لا يتم تخزين نصوص رسائل الطلاب.",
+    ].join("\n"), {parseMode: "HTML", replyMarkup: backHome});
+    return;
+  }
+  if (data === "own:delivery") {
+    const d = await getDeliveryOverview();
+    await sendMessage(chatId, [
+      "📬 <b>إحصائيات إرسال الإشعارات</b>",
+      "📨 إجمالي محاولات التوصيل المسجلة: " + d.total,
+      "✅ تم إرسالها إلى Telegram: " + d.sent,
+      "⏳ قيد الإرسال: " + d.pending,
+      "❌ فشلت: " + d.failed,
+      "",
+      "ℹ️ نجاح الإرسال لا يعني أن الطالب فتح الرسالة أو قرأها. Telegram Bot API لا يوفّر إيصال قراءة للرسائل العادية.",
+    ].join("\n"), {parseMode: "HTML", replyMarkup: backHome});
+    return;
+  }
+  if (data === "own:quality") {
+    const q = await getProfileQuality();
+    await sendMessage(chatId, [
+      "🧾 <b>جودة بيانات الطلاب</b>",
+      "🎓 إجمالي حسابات الطلاب (دون الإدارة): " + q.studentTotal,
+      "🔗 بلا يوزر: " + q.noUsername,
+      "👤 بدون اسم أول مسجل: " + q.missingFirstName,
+      "🏫 بدون شعبة: " + q.missingSection,
+      "🔒 أوقفوا التحليلات: " + q.optedOut,
+      "",
+      "ℹ️ بيانات Telegram اختيارية ومتغيرة. عدم توفر معلومة لا يعني أن الطالب أخفاها عنا عمدًا.",
+      "لا نعتمد رقم الطالب الجامعي أو رقمه الهاتفي أو موقعه بدون أن يقدّمها بنفسه.",
+    ].join("\n"), {parseMode: "HTML", replyMarkup: backHome});
+    return;
+  }
+
   if (data === "own:stats") {
     const [a, stats, roles] = await Promise.all([
       computeAnalytics(), getSectionStats(), getEffectiveRoleCounts(),
@@ -147,9 +207,10 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
   if (sectionMatch) {
     const section = sectionMatch[1] as SectionKey;
     const requestedPage = Number(sectionMatch[2]);
-    const [{rows, total, page}, stats] = await Promise.all([
+    const [{rows, total, page}, stats, usage] = await Promise.all([
       listSectionStudents(section, requestedPage, PER_PAGE),
       getSectionStats(),
+      getSectionEngagement(section),
     ]);
     const x = stats[section];
     const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
@@ -165,6 +226,9 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
       "🆕 جدد (7 أيام): " + x.new7d + " · ⚡ متفاعلون (7 أيام): " + x.active7d,
       "🔔 إشعارات مفعّلة: " + x.subscribed + " · متوقفة: " + x.stopped,
       "⚡ تفاعل (30 يومًا): " + x.active30d,
+      "📊 أحداث الاستخدام: 7 أيام " + usage.interactions7d + " · 30 يومًا " + usage.interactions30d,
+      "📚 الأكثر تصفحًا: " + (usage.topFeatures.length ? usage.topFeatures.slice(0,3).map(f =>
+        esc(FEATURE_LABELS[f.feature] || f.feature) + " (" + f.interactions + ")").join(" · ") : "لا توجد بيانات بعد"),
       "",
       rows.length ? "اضغط على اسم أي طالب لعرض حسابه:" : "لا توجد حسابات في هذه الشعبة.",
     ].join("\n"), {parseMode: "HTML", replyMarkup: {inline_keyboard: keyboard}});
@@ -230,7 +294,32 @@ export async function handleOwnerCallback(chatId: number, userId: number, data: 
       ? {text: "⬅️ العودة لطلاب " + sectionLabel(userMatch[2] as SectionKey),
         callback_data: "own:sec:" + userMatch[2] + ":" + userMatch[3]}
       : {text: "👥 كل الحسابات", callback_data: "own:users:0"};
-    await sendMessage(chatId, u ? formatUser(u, role) : "⚠️ الحساب غير موجود.", {
+    const usage = u ? await getStudentUsage(uid) : null;
+    const activityLines = usage ? [
+      "",
+      "📊 <b>تحليل تفاعل الطالب</b>",
+      "⚡ عدد تفاعلات 7 أيام: " + usage.events7d,
+      "⚡ عدد تفاعلات 30 يومًا: " + usage.events30d,
+      "📅 أيام النشاط (30 يومًا): " + usage.activeDays30d,
+      "🌐 لغة واجهة Telegram المرسلة: " + esc(usage.languageCode || "غير متوفرة"),
+      "🔒 تسجيل التحليلات: " + (usage.optedOut ? "أوقفه الطالب" : "مفعّل"),
+      "🕒 أحدث حدث متاح: " + (usage.lastRecorded ? esc(dateInBaghdad(usage.lastRecorded)) : "لا توجد أحداث مسجلة"),
+      "📚 الأقسام المستخدمة: " + (usage.topFeatures.length
+        ? usage.topFeatures.map(f => esc(FEATURE_LABELS[f.feature] || f.feature) +
+          " (" + f.interactions + ")").join("، ") : "لا يوجد سجل بعد"),
+      "",
+      "📬 <b>الإشعارات</b>",
+      "✅ أُرسلت: " + usage.deliveries.sent + " · ❌ فشلت: " + usage.deliveries.failed +
+        " · ⏳ معلقة: " + usage.deliveries.pending,
+      "⚙️ تفضيلات التنبيه: " + (Object.entries(usage.preferences).map(([k,v]) =>
+        esc(FEATURE_LABELS[k] || k) + " " + (v === false ? "❌" : "✅")).join(" · ") || "الإعدادات الافتراضية"),
+      "🏫 تغييرات الشعبة المسجلة: " + (usage.sectionHistory.length
+        ? usage.sectionHistory.map(h => esc(h.old_section || "بلا شعبة") +
+          " ← " + esc(h.new_section || "بلا شعبة")).join("، ") : "لا توجد بعد"),
+      "",
+      "ℹ️ سجل التفاعل متاح فقط من بدء جمع الإحصائيات، ولا يحتوي نصوص الرسائل.",
+    ] : [];
+    await sendMessage(chatId, u ? formatUser(u, role) + "\n" + activityLines.join("\n") : "⚠️ الحساب غير موجود.", {
       parseMode: "HTML",
       replyMarkup: {inline_keyboard: [
         [returnButton],
