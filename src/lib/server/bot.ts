@@ -1,6 +1,8 @@
 // Telegram bot: account linking + direct publishing flows.
 // The bot uses the SAME publish service as the website (publish.ts) — one backend.
 // Conversation state is persisted in portal_bot_state (survives serverless restarts).
+import {randomBytes} from "node:crypto";
+import {homeMenuFor} from "./botx.ts";
 import {q, qOne} from "./db.ts";
 import {sendMessage} from "./telegram.ts";
 import {hashToken, tokenUsable, isActive, canUseTelegramPublishing, teacherSections, type AdminInfo} from "./rbac.ts";
@@ -50,7 +52,7 @@ export async function handleLinkStart(chatId: number, userId: number, arg: strin
   const admin = await qOne<AdminInfo>(`SELECT id, email, role, status, is_active, name, assigned_section, assigned_subjects, perms FROM portal_admins WHERE id=$1`, [tok.admin_id]);
   if (!admin || !canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ الحساب غير مخوّل للنشر عبر Telegram."); return; }
   await q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [admin.email, "telegram.link.bound", {telegram_user_id: userId}]);
-  await sendMessage(chatId, `✅ تم ربط حساب Telegram بنجاح.\nالحساب: <b>${admin.email}</b>\nالدور: <b>${admin.role}</b>\n\nاستخدم /start لعرض قائمة النشر.`, {parseMode: "HTML", replyMarkup: adminMenu()});
+  await sendMessage(chatId, `✅ تم ربط حساب Telegram بنجاح.\nالحساب: <b>${escapeHtml(admin.email)}</b>\nالدور: <b>${admin.role}</b>\n\nاستخدم /start لعرض قائمة النشر.`, {parseMode: "HTML", replyMarkup: adminMenu(admin)});
 }
 
 // ---- conversation state ----
@@ -65,8 +67,8 @@ export async function hasActiveFlow(chatId: number): Promise<boolean> {
 }
 async function setState(chatId: number, flow: string | null, data: Record<string, unknown>): Promise<void> {
   await q(
-    `INSERT INTO portal_bot_state (chat_id, flow, data, updated_at, expires_at) VALUES ($1,$2,$3,now(), now() + interval '30 minutes')
-     ON CONFLICT (chat_id) DO UPDATE SET flow=EXCLUDED.flow, data=EXCLUDED.data, updated_at=now(), expires_at=now() + interval '30 minutes'`,
+    `INSERT INTO portal_bot_state (chat_id, flow, data, updated_at, expires_at) VALUES ($1,$2,$3,now(), now() + interval '24 hours')
+     ON CONFLICT (chat_id) DO UPDATE SET flow=EXCLUDED.flow, data=EXCLUDED.data, updated_at=now(), expires_at=now() + interval '24 hours'`,
     [chatId, flow, JSON.stringify(data)]
   );
 }
@@ -81,11 +83,15 @@ async function clearState(chatId: number): Promise<void> {
 }
 
 // Audience choices per role (materials only; announcements keep the section policy)
-function audienceKeyboard(admin: AdminInfo) {
+function audienceKeyboard(admin: AdminInfo, subjectId = "") {
   const rows: {text: string; callback_data: string}[][] = [];
   if (admin.role === "section_representative") {
     rows.push([{text: `📌 شعبتي (${admin.assigned_section})`, callback_data: "lec:aud:own"}]);
     rows.push([{text: "🌐 جميع الشعب", callback_data: "lec:aud:all"}]);
+  } else if (admin.role === "teacher") {
+    const allowed = teacherSections(admin, subjectId) || ["A", "B", "C", "F"];
+    if (allowed.length === 4) rows.push([{text: "🌐 جميع الشعب", callback_data: "lec:aud:all"}]);
+    rows.push(...allowed.map(x => [{text: `شعبة ${x}`, callback_data: "lec:aud:sec:" + x}]));
   } else {
     rows.push([{text: "🌐 جميع الشعب", callback_data: "lec:aud:all"}]);
     rows.push(["A", "B", "C", "F"].map(x => ({text: `شعبة ${x}`, callback_data: "lec:aud:sec:" + x})));
@@ -97,16 +103,43 @@ function audienceLabel(sections: string[]): string {
   return `شعبة ${sections.join(", ")}`;
 }
 
-export function adminMenu() {
-  return {inline_keyboard: [
-    [{text: "📢 نشر تبليغ", callback_data: "adm:ann"}],
-    [{text: "📚 إضافة محاضرة", callback_data: "adm:lec"}],
-    [{text: "👤 حسابي", callback_data: "adm:me"}],
-  ]};
+export function adminMenu(admin?: AdminInfo) {
+  return admin ? homeMenuFor(admin, true) : {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]};
 }
-const confirmKeyboard = (kind: string) => ({inline_keyboard: [
-  [{text: "✅ نشر الآن", callback_data: `pub:${kind}`}, {text: "✏️ تعديل", callback_data: `adm:${kind}`}, {text: "❌ إلغاء", callback_data: "adm:cancel"}],
+const navigation = {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}, {text: "❌ إلغاء", callback_data: "adm:cancel"}]]};
+const confirmKeyboard = (kind: string, nonce: string) => ({inline_keyboard: [
+  [{text: "✅ نشر الآن", callback_data: `pub:${kind}:${nonce}`}],
+  [{text: "✏️ تعديل العنوان", callback_data: `draft:title:${nonce}`}, {text: kind === "ann" ? "✏️ تعديل النص" : "📎 تغيير الملف", callback_data: `draft:${kind === "ann" ? "body" : "file"}:${nonce}`}],
+  ...(kind === "lec" ? [[{text: "تغيير المادة", callback_data: `draft:subject:${nonce}`}, {text: "تغيير الجمهور", callback_data: `draft:audience:${nonce}`}]] : []),
+  [{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}, {text: "❌ إلغاء", callback_data: "adm:cancel"}],
 ]});
+export function escapeHtml(value: unknown): string { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+export async function resumeDraft(chatId: number, userId: number): Promise<void> {
+  const admin = await getLinkedAdmin(userId);
+  const state = await getState(chatId);
+  if (!admin || !state?.flow) { await sendMessage(chatId, "انتهت صلاحية المسودة. ابدأ نشرًا جديدًا.", {replyMarkup: adminMenu(admin || undefined)}); return; }
+  const d = state.data;
+  if (d.step === "publishing") { await sendMessage(chatId, "طلب النشر قيد المعالجة. لا تعِد النشر؛ تحقق من إدارة منشوراتي.", {replyMarkup: adminMenu(admin)}); return; }
+  if (d.step === "confirm") { await previewDraft(chatId, state.flow, d); return; }
+  if (d.step === "subject") { await askSubjects(chatId, admin, state.flow === "ann" ? "ann:subj:" : "lec:subj:"); return; }
+  if (d.step === "audience") { await sendMessage(chatId, "اختر الشعبة:", {replyMarkup: audienceKeyboard(admin, String(d.subjectId || ""))}); return; }
+  if (state.flow === "pendingpdf") { await sendMessage(chatId, "الملف محفوظ. هل نبدأ نشره؟", {replyMarkup: {inline_keyboard: [[{text: "إنشاء ملزمة", callback_data: "pdf:new"}], ...navigation.inline_keyboard]}}); return; }
+  const prompt = state.flow === "repfile" || d.step === "file" ? "أرسل ملف PDF." : d.step === "body" ? "اكتب نص التبليغ." : d.step === "desc" ? "اكتب الوصف الجديد، أو أرسل تخطي." : "اكتب العنوان.";
+  await sendMessage(chatId, prompt, {replyMarkup: navigation});
+}
+async function askSubjects(chatId: number, admin: AdminInfo, prefix: string) {
+  const all = await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
+  const subjects = admin.role === "teacher" ? all.filter(x => admin.assigned_subjects?.includes(x.id)) : all;
+  await sendMessage(chatId, subjects.length ? "اختر المادة:" : "لا توجد مواد مسندة لحسابك. تواصل مع إدارة البوابة.", {replyMarkup: {inline_keyboard: [...subjects.map(x => [{text: x.name, callback_data: prefix + x.id}]), ...navigation.inline_keyboard]}});
+}
+async function previewDraft(chatId: number, flow: string, d: Record<string, unknown>) {
+  const nonce = randomBytes(8).toString("hex");
+  await setState(chatId, flow, {...d, step: "confirm", nonce});
+  const subject = d.subjectId ? await qOne<{name: string}>(`SELECT name FROM portal_subjects WHERE id=$1`, [d.subjectId]) : null;
+  const scope = d.scope === "section" ? `شعبة ${d.section}` : d.scope === "teacher" ? `شعبة ${d.section === "all" ? "جميع الشعب" : d.section}` : "جميع الشعب";
+  const details = flow === "ann" ? `${d.body || ""}\nالجمهور: ${scope}` : `الجمهور: ${audienceLabel((d.sections as string[]) || [])}\nالملف محفوظ وجاهز للنشر.`;
+  await sendMessage(chatId, `معاينة قبل النشر\n${subject?.name || ""}\n${d.title || ""}\n\n${details}`, {replyMarkup: confirmKeyboard(flow, nonce)});
+}
 
 // ---- message handling (steps of the flows) ----
 export type TgDocument = {file_id: string; file_name?: string; mime_type?: string; file_size?: number};
@@ -114,35 +147,35 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
   const admin = await getLinkedAdmin(userId);
   if (!admin) return;
   const state = await getState(chatId);
-  if (!state?.flow) { await sendMessage(chatId, "مرحباً بك في بوابة المرحلة الثالثة 🌟", {replyMarkup: adminMenu()}); return; }
+  if (state?.data.step !== "file" && state?.flow !== "repfile" && document) { await sendMessage(chatId, "الخطوة الحالية تحتاج اختيارًا أو نصًا. أكملها أولًا، أو ألغِ المسودة.", {replyMarkup: navigation}); return; }
+  if (!state?.flow) { await sendMessage(chatId, "مرحباً بك في بوابة المرحلة الثالثة 🌟", {replyMarkup: adminMenu(admin)}); return; }
 
+  if (text.length > 3000 || ((state.data.step === "title") && (!text.trim() || text.length > 180))) { await sendMessage(chatId, "اكتب عنوانًا من 1 إلى 180 حرفًا، ونصًا لا يتجاوز 3000 حرف.", {replyMarkup: navigation}); return; }
   if (state.flow === "ann") {
     const d = state.data;
-    if (d.step === "title") { await setState(chatId, "ann", {...d, step: "body", title: text}); await sendMessage(chatId, "📝 اكتب الآن نص التبليغ:"); return; }
+    if (d.step === "title") { if (d.body) { await previewDraft(chatId, "ann", {...d, title: text}); return; } await setState(chatId, "ann", {...d, step: "body", title: text}); await sendMessage(chatId, "اكتب نص التبليغ:", {replyMarkup: navigation}); return; }
     if (d.step === "body") {
-      await setState(chatId, "ann", {...d, step: "confirm", body: text});
-      const scope = admin.role === "section_representative" ? `شعبة ${admin.assigned_section}` : "عام";
-      await sendMessage(chatId, `👁️ معاينة التبليغ:\n\n<b>${d.title}</b>\n${text}\n\nالنطاق: ${scope}`, {parseMode: "HTML", replyMarkup: confirmKeyboard("ann")});
+      await previewDraft(chatId, "ann", {...d, body: text});
       return;
     }
   }
   if (state.flow === "editann") {
     const d = state.data;
-    if (d.step === "title") { await setState(chatId, "editann", {...d, step: "body", title: text === "تخطَّ" ? undefined : text}); await sendMessage(chatId, "✏️ النص الجديد (أرسل «تخطَّ» للإبقاء على الحالي):"); return; }
+    if (d.step === "title") { await setState(chatId, "editann", {...d, step: "body", title: ["تخطَّ", "تخطي", "تخطى"].includes(text.trim()) ? undefined : text}); await sendMessage(chatId, "✏️ النص الجديد (أرسل «تخطَّ» للإبقاء على الحالي):"); return; }
     if (d.step === "body") {
-      const r = await updateAnnouncementOwn(admin, String(d.id), {title: d.title as string | undefined, body: text === "تخطَّ" ? undefined : text});
-      await clearState(chatId);
-      await sendMessage(chatId, r.ok ? "✅ تم تعديل التبليغ." : `⛔ ${r.error}`, {replyMarkup: adminMenu()});
+      const r = await updateAnnouncementOwn(admin, String(d.id), {title: d.title as string | undefined, body: ["تخطَّ", "تخطي", "تخطى"].includes(text.trim()) ? undefined : text});
+      if (r.ok) await clearState(chatId);
+      await sendMessage(chatId, r.ok ? "✅ تم تعديل التبليغ." : `⛔ ${r.error}`, {replyMarkup: adminMenu(admin)});
       return;
     }
   }
   if (state.flow === "editmeta") {
     const d = state.data;
-    if (d.step === "title") { await setState(chatId, "editmeta", {...d, step: "desc", title: text === "تخطَّ" ? undefined : text}); await sendMessage(chatId, "✏️ الوصف الجديد (أرسل «تخطَّ» للإبقاء):"); return; }
+    if (d.step === "title") { await setState(chatId, "editmeta", {...d, step: "desc", title: ["تخطَّ", "تخطي", "تخطى"].includes(text.trim()) ? undefined : text}); await sendMessage(chatId, "✏️ الوصف الجديد (أرسل «تخطَّ» للإبقاء):"); return; }
     if (d.step === "desc") {
-      const r = await updateLectureMetaOwn(admin, String(d.id), {title: d.title as string | undefined, description: text === "تخطَّ" ? undefined : text});
-      await clearState(chatId);
-      await sendMessage(chatId, r.ok ? "✅ تم تعديل بيانات المادة." : `⛔ ${r.error}`, {replyMarkup: adminMenu()});
+      const r = await updateLectureMetaOwn(admin, String(d.id), {title: d.title as string | undefined, description: ["تخطَّ", "تخطي", "تخطى"].includes(text.trim()) ? undefined : text});
+      if (r.ok) await clearState(chatId);
+      await sendMessage(chatId, r.ok ? "✅ تم تعديل بيانات المادة." : `⛔ ${r.error}`, {replyMarkup: adminMenu(admin)});
       return;
     }
   }
@@ -155,18 +188,27 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
       const g = await tgFetch<{file_path: string}>("getFile", {file_id: document.file_id});
       if (!g.ok || !g.result?.file_path) { await sendMessage(chatId, "⚠️ تعذر قراءة الملف."); return; }
       const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${g.result.file_path}`);
+      if (!dl.ok) throw new Error("download failed");
       const buf = Buffer.from(await dl.arrayBuffer());
+      if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "الملف أكبر من 20MB."); return; }
       if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ ليس PDF صالحًا."); return; }
       const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
       const r = await replaceLectureFileOwn(admin, String(state.data.id), url, document.file_name || "lecture.pdf");
-      await clearState(chatId);
-      await sendMessage(chatId, r.ok ? `✅ تم استبدال الملف — الرابط ثابت: ${PORTAL_BASE_URL}/subjects/` : `⛔ ${r.error}`, {replyMarkup: adminMenu()});
+      if (r.ok) await clearState(chatId);
+      const lecture = await qOne<{subject_id: string}>(`SELECT subject_id FROM portal_lectures WHERE id=$1`, [state.data.id]);
+      await sendMessage(chatId, r.ok ? `✅ تم استبدال الملف: ${PORTAL_BASE_URL}/subjects/${lecture?.subject_id || ""}` : `⛔ ${r.error}`, {replyMarkup: adminMenu(admin)});
     } catch { await sendMessage(chatId, "⚠️ فشل الاستبدال."); }
     return;
   }
   if (state.flow === "lec") {
     const d = state.data;
-    if (d.step === "title") { await setState(chatId, "lec", {...d, step: "file", title: text}); await sendMessage(chatId, "📎 أرسل ملف الملزمة بصيغة PDF هنا مباشرة (حتى 20MB). سأرفعه وأعرض لك معاينة قبل تأكيد النشر. يمكنك أيضًا إرسال رابط PDF محفوظ."); return; }
+    if (d.step === "title") {
+      const next = {...d, title: text, step: "file"};
+      if (d.fileUrl) { await previewDraft(chatId, "lec", next); return; }
+      await setState(chatId, "lec", next);
+      if (d.pendingDoc) { await handleAdminMessage(chatId, userId, "", d.pendingDoc as TgDocument); return; }
+      await sendMessage(chatId, "أرسل ملف PDF هنا (حتى 20MB).", {replyMarkup: navigation}); return;
+    }
     if (d.step === "file") {
       if (document) {
         if (document.mime_type !== "application/pdf") { await sendMessage(chatId, "⚠️ الملف ليس PDF. أرسل ملف PDF أو رابط ملف محفوظ."); return; }
@@ -181,14 +223,12 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
           if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
           if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ الملف ليس PDF صالحًا."); return; }
           const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
-          await setState(chatId, "lec", {...d, step: "confirm", fileUrl: url});
-          await sendMessage(chatId, `👁️ معاينة المحاضرة:\n\nالمادة: <b>${d.subjectId}</b>\nالعنوان: <b>${d.title}</b>\n🎯 الجمهور: <b>${audienceLabel((d.sections as string[]) || ["A","B","C","F"])}</b>\nالملف: ✅ محفوظ ${(buf.length / 1024).toFixed(0)} KB`, {parseMode: "HTML", replyMarkup: confirmKeyboard("lec")});
+          await previewDraft(chatId, "lec", {...d, fileUrl: url, pendingDoc: undefined});
         } catch { await sendMessage(chatId, "⚠️ فشل رفع الملف — جرّب من لوحة الويب."); }
         return;
       }
       if (!/^\/[A-Za-z0-9_\-./]+$/.test(text) && !/^https:\/\//.test(text)) { await sendMessage(chatId, "⚠️ الرابط غير صالح. أرسل رابطًا يبدأ بـ / أو https://"); return; }
-      await setState(chatId, "lec", {...d, step: "confirm", fileUrl: text});
-      await sendMessage(chatId, `👁️ معاينة المحاضرة:\n\nالمادة: <b>${d.subjectId}</b>\nالعنوان: <b>${d.title}</b>\n🎯 الجمهور: <b>${audienceLabel((d.sections as string[]) || ["A","B","C","F"])}</b>\nالملف: ${text}`, {parseMode: "HTML", replyMarkup: confirmKeyboard("lec")});
+      await previewDraft(chatId, "lec", {...d, fileUrl: text});
       return;
     }
   }
@@ -201,72 +241,88 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
 
   if (data === "adm:ann") {
     if (!canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ حسابك معلّق — تم سحب صلاحيات النشر فوراً."); return; }
-    await setState(chatId, "ann", {step: "title", draftId: `ann-tg-${chatId}-${Date.now()}`});
-    await sendMessage(chatId, "📢 عنوان التبليغ:");
+    await setState(chatId, "ann", {scope: admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general", section: admin.assigned_section || "all", step: admin.role === "teacher" ? "subject" : "title", draftId: `ann-tg-${chatId}-${Date.now()}`});
+    if (admin.role === "teacher") { await askSubjects(chatId, admin, "ann:subj:"); return; }
+    await sendMessage(chatId, "عنوان التبليغ:", {replyMarkup: navigation});
     return;
   }
   if (data === "adm:lec") {
-    // reps (general/section) may publish materials for ANY subject; teachers only their assigned subjects
-    let subjects: {id: string; name: string}[];
-    if (admin.role === "teacher") {
-      subjects = (admin.assigned_subjects || []).map(id => ({id, name: id}));
-    } else {
-      subjects = await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
-    }
-    if (!subjects.length) { await sendMessage(chatId, "⚠️ لا توجد مواد."); return; }
     await setState(chatId, "lec", {step: "subject", draftId: `lec-tg-${chatId}-${Date.now()}`});
-    const kb = {inline_keyboard: subjects.map(x => [{text: x.name, callback_data: "lec:subj:" + x.id}])};
-    await sendMessage(chatId, "📚 اختر المادة:", {replyMarkup: kb});
+    await askSubjects(chatId, admin, "lec:subj:");
     return;
   }
-  if (data.startsWith("lec:subj:")) {
+  if (data.startsWith("lec:subj:") || data.startsWith("ann:subj:")) {
     const subjectId = data.slice(9);
     const state = await getState(chatId);
-    await setState(chatId, "lec", {...(state?.data || {}), step: "audience", subjectId});
-    await sendMessage(chatId, "🎯 اختر الجمهور (الشعب):", {replyMarkup: audienceKeyboard(admin)});
+    if (!state || (state.flow !== "lec" && state.flow !== "ann") || (admin.role === "teacher" && !admin.assigned_subjects?.includes(subjectId))) { await sendMessage(chatId, "هذا الاختيار غير متاح. افتح القائمة مجددًا.", {replyMarkup: adminMenu(admin)}); return; }
+    await setState(chatId, state.flow, {...state.data, step: "audience", subjectId});
+    await sendMessage(chatId, "🎯 اختر الجمهور (الشعب):", {replyMarkup: audienceKeyboard(admin, subjectId)});
     return;
   }
   if (data.startsWith("lec:aud:")) {
     const aud = data.slice(8); // own | all | sec:X
     const sections = aud === "all" ? ["A", "B", "C", "F"] : aud === "own" ? [String(admin.assigned_section)] : [aud.slice(4)];
     const state = await getState(chatId);
-    await setState(chatId, "lec", {...(state?.data || {}), step: "title", sections});
-    await sendMessage(chatId, "✏️ عنوان المادة/الملزمة:");
+    if (!state || (state.flow !== "ann" && state.flow !== "lec")) return;
+    const allowed = admin.role === "teacher" ? teacherSections(admin, String(state.data.subjectId)) : null;
+    if (allowed && !sections.every(s => allowed.includes(s as never))) { await resumeDraft(chatId, userId); return; }
+    await setState(chatId, state.flow, {...state.data, step: "title", sections, section: aud === "all" ? "all" : sections[0]});
+    await sendMessage(chatId, "اكتب العنوان:", {replyMarkup: navigation});
     return;
   }
   if (data === "adm:me") {
-    await sendMessage(chatId, `👤 <b>${admin.name || admin.email}</b>\nالدور: ${admin.role}${admin.assigned_section ? `\nالشعبة: ${admin.assigned_section}` : ""}${admin.assigned_subjects?.length ? `\nالمواد: ${admin.assigned_subjects.join(", ")}` : ""}`, {parseMode: "HTML"});
+    const names = await q<{id:string;name:string}>(`SELECT id,name FROM portal_subjects`);
+    await sendMessage(chatId, `👤 <b>${escapeHtml(admin.name || admin.email)}</b>\nالدور: ${{super_admin:"مالك البوابة",general_representative:"ممثل عام",section_representative:"ممثل شعبة",teacher:"تدريسي",editor:"محرر"}[admin.role] || "ناشر"}${admin.assigned_section ? `\nالشعبة: ${admin.assigned_section}` : ""}${admin.assigned_subjects?.length ? `\nالمواد: ${escapeHtml(names.filter(x => admin.assigned_subjects?.includes(x.id)).map(x => x.name).join("، "))}` : ""}`, {parseMode: "HTML"});
     return;
   }
-  if (data === "adm:cancel") { await clearState(chatId); await sendMessage(chatId, "❌ تم الإلغاء.", {replyMarkup: adminMenu()}); return; }
+  if (data === "adm:cancel") { await clearState(chatId); await sendMessage(chatId, "❌ تم الإلغاء.", {replyMarkup: adminMenu(admin)}); return; }
 
-  if (data === "pub:ann" || data === "pub:lec") {
+  if (data.startsWith("draft:")) {
     const state = await getState(chatId);
-    if (!state?.flow) return;
+    if (!state || !["ann", "lec"].includes(state.flow || "")) return;
+    const [, field, nonce] = data.split(":");
+    if (state.data.step !== "confirm" || nonce !== state.data.nonce) { await sendMessage(chatId, "زر قديم. افتح المسودة مجددًا.", {replyMarkup: adminMenu(admin)}); return; }
+    if (!["title", "body", "file", "subject", "audience"].includes(field)) return;
+    await setState(chatId, state.flow!, {...state.data, nonce: undefined, step: field, ...(field === "file" ? {fileUrl: undefined, pendingDoc: undefined} : {})});
+    await resumeDraft(chatId, userId); return;
+  }
+  if (data.startsWith("pub:")) {
+    const state = await getState(chatId);
+    const [, kind, nonce] = data.split(":");
+    if (!state?.flow || state.flow !== kind || state.data.step !== "confirm" || !nonce || nonce !== state.data.nonce) {
+      await sendMessage(chatId, "هذا الزر قديم أو انتهت صلاحيته. افتح المسودة من القائمة الرئيسية.", {replyMarkup: adminMenu(admin)}); return;
+    }
+    const claimed = await q(`UPDATE portal_bot_state SET data=$3 WHERE chat_id=$1 AND data->>'nonce'=$2 AND data->>'step'='confirm' RETURNING chat_id`, [chatId, nonce, JSON.stringify({...state.data, step: "publishing"})]);
+    if (!claimed.length) return;
     const d = state.data;
-    if (data === "pub:ann") {
+    try {
+    if (kind === "ann") {
       // re-check permissions immediately before publishing
-      const scope = admin.role === "section_representative" ? "section" : "general";
-      const section = admin.role === "section_representative" ? String(admin.assigned_section) : "all";
-      const r = await publishAnnouncement(admin, {id: String(d.draftId || undefined), title: String(d.title || ""), body: String(d.body || ""), scope, section, priority: "normal", source: "telegram"});
-      await clearState(chatId);
+      const scope = admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general";
+      const section = admin.role === "section_representative" ? String(admin.assigned_section) : admin.role === "teacher" ? String(d.section) : "all";
+      const r = await publishAnnouncement(admin, {id: String(d.draftId || undefined), title: String(d.title || ""), body: String(d.body || ""), scope, section, subjectId: d.subjectId as string | undefined, priority: "normal", source: "telegram"});
+      if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
-        ? (r.inserted ? `✅ تم نشر التبليغ.\n🔗 /announcements` : "ℹ️ هذا التبليغ منشور مسبقًا (لا تكرار).")
-        : `⛔ تعذر النشر: ${r.error}`, {replyMarkup: adminMenu()});
+        ? (r.inserted ? `✅ تم نشر التبليغ.\n🔗 ${PORTAL_BASE_URL}/announcements` : "ℹ️ هذا التبليغ منشور مسبقًا (لا تكرار).")
+        : `⛔ تعذر النشر: ${r.error}`, {replyMarkup: adminMenu(admin)});
       return;
     }
-    if (data === "pub:lec") {
+    if (kind === "lec") {
       // re-check EVERYTHING on final confirmation: link, account status, role, subject, audience
       const fresh = await getLinkedAdmin(userId);
-      if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu()}); return; }
+      if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu(admin)}); return; }
       const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
       const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1`, [String(d.subjectId)]);
       const r = await publishLecture(fresh, {id: String(d.draftId || undefined), subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), sections, source: "telegram"});
-      await clearState(chatId);
+      if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
-        ? (r.inserted ? `✅ تم نشر المادة في <b>${d.subjectId}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/subjects/${d.subjectId}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
-        : `⛔ تعذر النشر: ${r.error}`, {parseMode: "HTML", replyMarkup: adminMenu()});
+        ? (r.inserted ? `✅ تم نشر المادة في <b>${escapeHtml(d.subjectId)}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/subjects/${escapeHtml(d.subjectId)}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
+        : `⛔ تعذر النشر: ${r.error}`, {parseMode: "HTML", replyMarkup: adminMenu(admin)});
       return;
+    }
+    } catch {
+      await previewDraft(chatId, state.flow, d);
+      await sendMessage(chatId, "تعذر حفظ النشر الآن. مسودتك محفوظة، ويمكنك إعادة المحاولة.");
     }
   }
 }
