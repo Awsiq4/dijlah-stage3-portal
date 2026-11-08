@@ -3,6 +3,13 @@ CREATE TABLE IF NOT EXISTS support_identities (
  id TEXT PRIMARY KEY, secret_hash TEXT UNIQUE, telegram_id BIGINT UNIQUE,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Multiple anonymous browsers can securely link to one existing Telegram identity.
+CREATE TABLE IF NOT EXISTS support_browser_links (
+ secret_hash TEXT PRIMARY KEY,
+ identity_id TEXT NOT NULL REFERENCES support_identities(id),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS support_browser_links_identity_idx ON support_browser_links(identity_id);
 CREATE TABLE IF NOT EXISTS support_links (
  token_hash TEXT PRIMARY KEY, identity_id TEXT NOT NULL REFERENCES support_identities(id),
  expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ
