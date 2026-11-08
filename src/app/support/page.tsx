@@ -9,6 +9,7 @@ type TicketRow = {
   first_name?: string; last_name?: string; username?: string; assigned_to?: number | null;
   telegram_id?: string | number | null; reg_seq?: number | null; section_from_telegram?: string | null;
   last_sender_type?: "student" | "admin" | null;
+  inbox_group?: "pending" | "waiting" | "done"; effective_section?: string | null; has_unread?: boolean;
 };
 type VerifiedStudent = {
   verified: true; telegram_id: string; first_name: string | null; last_name: string | null;
@@ -50,7 +51,7 @@ const metricNames: Record<string,string> = {
   first_response_minutes: "دقائق حتى أول رد",
   resolution_minutes: "دقائق حتى الحل",
 };
-const shortDate = (value: string) => new Date(value).toLocaleDateString("ar-IQ", {timeZone: "Asia/Baghdad"});
+const shortDate = (value: string) => new Date(value).toLocaleString("ar-IQ", {timeZone: "Asia/Baghdad", dateStyle: "medium",timeStyle: "short"});
 function statusLabel(status: string, isStaff: boolean, last?: "student" | "admin" | null) {
   if (status === "closed" || status === "resolved") return statuses[status];
   if (last === "admin") return isStaff ? "بانتظار الطالب" : "ردّت الإدارة";
@@ -63,6 +64,12 @@ export default function SupportPage() {
   const [rows, setRows] = useState<TicketRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
+  const [initialized, setInitialized] = useState(false);
+  const [inbox,setInbox] = useState<"pending" | "waiting" | "done">("pending");
+  const [inboxCounts,setInboxCounts] = useState({pending:0,waiting:0,done:0});
+  const [attachment,setAttachment] = useState<File|null>(null);
+  const [recoveryCode,setRecoveryCode] = useState("");
+  const [enterCode,setEnterCode] = useState("");
   const [owner, setOwner] = useState(false);
   const [staff, setStaff] = useState(false);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -103,8 +110,8 @@ export default function SupportPage() {
     finally { setBusy(false); }
   }
 
-  async function load(nextPage = 0) {
-    const params = new URLSearchParams({...filters, page: String(nextPage)});
+  async function load(nextPage = 0, filterInbox = inbox) {
+    const params = new URLSearchParams({...filters, inbox: filterInbox, page: String(nextPage)});
     const response = await api("/api/support?" + params);
     setRows(response.rows || []);
     setTotal(Number(response.total) || 0);
@@ -112,6 +119,8 @@ export default function SupportPage() {
     setOwner(Boolean(response.owner));
     setStaff(Boolean(response.staff));
     setPermissions(response.permissions || []);
+    setInboxCounts(response.inboxCounts || {pending:0,waiting:0,done:0});
+    setInitialized(true);
   }
 
   useEffect(() => {
@@ -125,10 +134,45 @@ export default function SupportPage() {
     setDetail(response);
     setAssignedTo(response.ticket.assigned_to ? String(response.ticket.assigned_to) : "");
     setPriority(response.ticket.priority);
+    if(can("assign")){
+      const members:Member[]=await api("/api/support?staff=1");
+      setPeople(members);
+    }
     setReplyBody("");
     setInternal(false);
     setReplyKey(crypto.randomUUID());
     setView("ticket");
+  }
+
+  async function filePayload():Promise<{name:string;mime:string;base64:string}|undefined>{
+    if(!attachment)return undefined;
+    if(!["image/jpeg","image/png"].includes(attachment.type))throw new Error("المسموح صورة JPG أو PNG فقط.");
+    if(!attachment.size||attachment.size>2*1024*1024)throw new Error("الصورة لازم تكون أقل من 2MB.");
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onerror=()=>reject(new Error("تعذّر قراءة الصورة."));
+      reader.onload=()=>{
+        const value=String(reader.result||"");
+        resolve({name:attachment.name,mime:attachment.type,base64:value.split(",")[1]||""});
+      };
+      reader.readAsDataURL(attachment);
+    });
+  }
+  async function issueRecovery(){
+    const result=await api("/api/support",{action:"recovery_create"});
+    setRecoveryCode(result.code);
+  }
+  async function recover(){
+    if(!enterCode.trim())throw new Error("أدخل رمز الاستعادة.");
+    await api("/api/support",{action:"recovery_use",code:enterCode.trim()});
+    setEnterCode("");
+    setRecoveryCode("");
+    setNotice("تمت استعادة طلباتك على هذا المتصفح.");
+    await load(0);
+  }
+  async function changeInbox(next:"pending"|"waiting"|"done"){
+    setInbox(next);
+    await load(0,next);
   }
 
   async function sendTicket() {
@@ -136,8 +180,10 @@ export default function SupportPage() {
     if (body.length < 3) {setError("اكتب رسالتك أولاً."); return;}
     const subject = body.replace(/\s+/g, " ").slice(0, 90);
     const key = requestKey || crypto.randomUUID();
-    const result = await api("/api/support", {action: "create", category, body, subject, key});
+    const file=await filePayload();
+    const result = await api("/api/support", {action: "create", category, body, subject, key,...(file?{file}:{})});
     setMessage("");
+    setAttachment(null);
     setRequestKey(crypto.randomUUID());
     setNotice("✅ تم إرسال طلبك. تگدر تتابع الرد هنا.");
     await load(0);
@@ -186,9 +232,10 @@ export default function SupportPage() {
 
     {view !== "main" && <button className="sup-back" onClick={back} type="button">→ رجوع</button>}
     {error && <div role="alert" className="sup-error">{error}</div>}
+    {!initialized && <div className="sup-empty">{busy ? "جارٍ تحميل الدعم…" : <button onClick={()=>void run(()=>load(0))}>إعادة المحاولة</button>}</div>}
     {notice && <div role="status" className="sup-success">{notice}</div>}
 
-    {view === "main" && <>
+    {view === "main" && initialized && <>
       {!staff && <form className="sup-compose" onSubmit={event => {event.preventDefault();void run(sendTicket);}}>
         <div className="sup-category" role="group" aria-label="نوع الطلب">
           {Object.entries(categories).map(([key, label]) =>
