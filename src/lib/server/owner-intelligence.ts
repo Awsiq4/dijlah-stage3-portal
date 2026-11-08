@@ -161,11 +161,11 @@ export async function getEngagementOverview(db: Queryer = defaultQueryer): Promi
     [ownerId()]
   );
   const daily = await db.q<{day: string; interactions: string | number; users: string | number}>(
-    "SELECT to_char(e.occurred_at AT TIME ZONE 'Asia/Baghdad','YYYY-MM-DD') AS day, " +
+    "SELECT to_char(e.occurred_at AT TIME ZONE 'Asia/Baghdad','YYYY-MM-DD') AS \"day\", " +
     "COUNT(*)::int AS interactions, COUNT(DISTINCT e.chat_id)::int AS users " +
     FROM_EVENTS + " WHERE " + STUDENTS_ONLY +
     " AND e.occurred_at>=now()-interval '7 days' " +
-    "GROUP BY day ORDER BY day DESC",
+    "GROUP BY \"day\" ORDER BY \"day\" DESC",
     [ownerId()]
   );
   return {
