@@ -127,7 +127,9 @@ export async function POST(req: NextRequest) {
         // a linked admin mid-flow may send a file URL starting with "/" — route by active flow first
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
         if (admin && ["/start", "/menu"].includes(text.trim().split("@")[0])) {
-          await sendMessage(Number(message.chat.id), "اختر ما تريد نشره:", {replyMarkup: adminMenu()});
+          await handleNavCallback(Number(message.chat.id), Number(message.from.id), "nav:home");
+        } else if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
+          await handleNavCallback(Number(message.chat.id), Number(message.from?.id || message.chat.id), "nav:home");
         } else if (admin && (await hasActiveFlow(Number(message.chat.id)))) {
           await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
         } else {
@@ -148,7 +150,7 @@ export async function POST(req: NextRequest) {
       const userId = Number(callback.from?.id || callback.message.chat.id);
       if (data.startsWith("stu:") ) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data.startsWith("it:") || data.startsWith("page:my:")) {
+      } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("page:my:")) {
         await handleManageCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || data === "adm:new" || data === "pdf:new") {
         await handleNavCallback(Number(callback.message.chat.id), userId, data);
