@@ -14,6 +14,7 @@ const {newDb} = await import("pg-mem");
 const {setPoolForTests, q, qOne, defaultQueryer} = await import("./db.ts");
 const {registerUser, isBotOwner, esc} = await import("./registry.ts");
 const {computeAnalytics, listUsers, setSetting, getSetting, ownerNotificationsEnabled, OWNER_NOTIFY_KEY} = await import("./analytics.ts");
+const {classifyBotActivity} = await import("./owner-intelligence.ts");
 const {getSectionStats, listSectionStudents, getEffectiveRoleCounts} = await import("./owner-sections.ts");
 
 async function makeDb() {
@@ -174,4 +175,24 @@ test("owner section breakdown: zero-count sections, pagination and user details 
   assert.equal(roles.student, 15);
   await assert.rejects(() => listSectionStudents("INVALID", 0, 8, defaultQueryer));
   await pool.end();
+});
+
+
+test("owner analytics logs only safe classified interactions, never message contents or owner actions", () => {
+  const privateChat = {type: "private", id: 1001};
+  const makeMessage = (text) => ({update_id: 1, message: {chat: privateChat, text, from: {id: 1001}}});
+  assert.deepEqual(classifyBotActivity(makeMessage("/start")), {feature: "start", action: "start"});
+  assert.deepEqual(classifyBotActivity(makeMessage("/settings")), {feature: "settings", action: "open_preferences"});
+  assert.equal(classifyBotActivity(makeMessage("my private diary notes")), null);
+  assert.equal(classifyBotActivity(makeMessage("/analytics_off")), null);
+  assert.equal(classifyBotActivity(makeMessage("/privacy")), null);
+  const makeCallback = data => ({
+    update_id: 2, callback_query: {from: {id: 1001}, message: {chat: privateChat}, data},
+  });
+  assert.deepEqual(classifyBotActivity(makeCallback("stu:lec")), {feature: "lectures", action: "browse_lectures"});
+  assert.deepEqual(classifyBotActivity(makeCallback("sec:B")), {feature: "section", action: "select_section"});
+  assert.equal(classifyBotActivity(makeCallback("own:users:0")), null);
+  assert.equal(classifyBotActivity(makeCallback("adm:my")), null);
+  assert.equal(classifyBotActivity(makeCallback("leak-private-id-token")), null);
+  assert.equal(classifyBotActivity({message: {chat: {id: -1001, type: "group"}, text: "/start"}}), null);
 });
