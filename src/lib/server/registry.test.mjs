@@ -189,7 +189,9 @@ test("owner analytics logs only safe classified interactions, never message cont
   const makeCallback = data => ({
     update_id: 2, callback_query: {from: {id: 1001}, message: {chat: privateChat}, data},
   });
-  assert.deepEqual(classifyBotActivity(makeCallback("stu:lec")), {feature: "lectures", action: "browse_lectures"});
+  assert.deepEqual(classifyBotActivity(makeCallback("stu:lec")), {feature: "lectures", action: "open_subject_list"});
+  assert.deepEqual(classifyBotActivity(makeCallback("stu:lec:quantum_mechanics")), {feature: "lectures", action: "select_subject", subjectId: "quantum_mechanics"});
+  assert.deepEqual(classifyBotActivity(makeCallback("stu:lec:unsafe<token>")), {feature: "lectures", action: "browse_lectures"});
   assert.deepEqual(classifyBotActivity(makeCallback("sec:B")), {feature: "section", action: "select_section"});
   assert.equal(classifyBotActivity(makeCallback("own:users:0")), null);
   assert.equal(classifyBotActivity(makeCallback("adm:my")), null);
