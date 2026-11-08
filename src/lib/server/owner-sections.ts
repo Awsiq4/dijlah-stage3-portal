@@ -17,10 +17,10 @@ export type SectionStats = {
 
 // This predicate is used identically for counts and paginated user listings.
 // "status=stopped" means notifications were stopped, not deletion of registration.
-const ELIGIBLE = "s.role='student' AND s.chat_id <> $1 AND NOT EXISTS (" +
-  "SELECT 1 FROM portal_telegram_links l JOIN portal_admins a ON a.id=l.admin_id " +
-  "WHERE l.telegram_user_id=COALESCE(s.user_id,s.chat_id) " +
-  "AND l.revoked_at IS NULL AND a.is_active=true AND a.status='active')";
+const STUDENT_FROM = "FROM tg_subscribers s " +
+  "LEFT JOIN portal_telegram_links l ON l.telegram_user_id=s.chat_id AND l.revoked_at IS NULL " +
+  "LEFT JOIN portal_admins a ON a.id=l.admin_id AND a.is_active=true AND a.status='active'";
+const ELIGIBLE = "s.role='student' AND s.chat_id <> $1 AND a.id IS NULL";
 
 function ownerId(): string {
   return /^[0-9]+$/.test(BOT_OWNER_ID) ? BOT_OWNER_ID : "0";
@@ -42,7 +42,7 @@ export async function getSectionStats(db: Queryer = defaultQueryer, now = new Da
     "SUM(CASE WHEN s.last_activity_at >= $2 THEN 1 ELSE 0 END)::int AS active7d,",
     "SUM(CASE WHEN s.last_activity_at >= $3 THEN 1 ELSE 0 END)::int AS active30d,",
     "SUM(CASE WHEN s.registered_at >= $2 THEN 1 ELSE 0 END)::int AS new7d",
-    "FROM tg_subscribers s WHERE " + ELIGIBLE + " GROUP BY s.section",
+    STUDENT_FROM + " WHERE " + ELIGIBLE + " GROUP BY s.section",
   ].join(" ");
   const rows = await db.q<SectionStats & {section: string | null}>(sql, [ownerId(), weekAgo, monthAgo]);
   const result: Record<SectionKey, SectionStats> = {A: emptyStats(), B: emptyStats(), C: emptyStats(), F: emptyStats(), NA: emptyStats()};
@@ -74,13 +74,13 @@ export async function listSectionStudents(
   const predicate = ELIGIBLE + (isUnassigned ? " AND (s.section IS NULL OR s.section='')" : " AND s.section=$2");
   const args = isUnassigned ? [ownerId()] : [ownerId(), section];
   const count = await db.qOne<{total: number | string}>(
-    "SELECT COUNT(*)::int AS total FROM tg_subscribers s WHERE " + predicate, args
+    "SELECT COUNT(*)::int AS total " + STUDENT_FROM + " WHERE " + predicate, args
   );
   const total = Number(count?.total || 0);
   const select = [
     "SELECT s.chat_id, s.reg_seq, s.first_name, s.last_name, s.username, s.role,",
     "s.section, s.status, s.registered_at, s.last_activity_at",
-    "FROM tg_subscribers s WHERE " + predicate,
+    STUDENT_FROM + " WHERE " + predicate,
     "ORDER BY s.registered_at DESC, s.chat_id DESC",
     "LIMIT $" + (args.length + 1) + " OFFSET $" + (args.length + 2),
   ].join(" ");
