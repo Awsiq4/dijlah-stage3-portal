@@ -1,9 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {randomBytes} from 'node:crypto';
-import {after} from 'next/server';
 import {requireAdmin,checkLoginRateLimit} from '@/lib/server/auth';
 import {q,qOne} from '@/lib/server/db';
-import {BOT_USERNAME} from '@/lib/server/flags';
 import * as S from '@/lib/server/support';
 export const dynamic='force-dynamic';
 const COOKIE='portal_support';
@@ -20,7 +18,7 @@ export async function GET(req:NextRequest){try{
  if(p.get('id'))return respond(await S.getTicket(c.a,Number(p.get('id'))),c);
  if(p.get('stats'))return respond(await S.analytics(c.a),c);
  if(p.get('staff')){if(!S.permission(c.a,'assign')&&!c.a.owner)throw new S.SupportError('غير مخول.',403);return respond(await q(`SELECT a.id,a.name,g.permissions FROM portal_admins a LEFT JOIN support_grants g ON a.id=g.admin_id WHERE a.is_active=true AND a.status='active' ORDER BY a.id`),c);}
- const data=await S.listTickets(c.a,Object.fromEntries(p));return respond({...data,owner:c.a.owner,staff:S.permission(c.a,'view'),permissions:c.a.permissions,bot:BOT_USERNAME},c);
+ const data=await S.listTickets(c.a,Object.fromEntries(p));return respond({...data,owner:c.a.owner,staff:S.permission(c.a,'view'),permissions:c.a.permissions},c);
 }catch(e){return fail(e);}}
 export async function POST(req:NextRequest){try{
  const origin=req.headers.get('origin');if(origin!==req.nextUrl.origin||req.headers.get('x-support')!=='1')throw new S.SupportError('طلب غير مسموح.',403);
@@ -36,7 +34,7 @@ export async function POST(req:NextRequest){try{
  else if(body.action==='status')await S.changeStatus(c.a,Number(body.id),body.status);
  else if(body.action==='assign')await S.assign(c.a,Number(body.id),body.adminId?Number(body.adminId):null,body.priority);
  else if(body.action==='grant')await S.grant(c.a,Number(body.adminId),body.permissions||[]);
- else if(body.action==='link')result={url:`https://t.me/${BOT_USERNAME}?start=sup_${await S.createLink(c.a)}`};
+
  else throw new S.SupportError('إجراء غير صالح.');
- after(()=>S.drainSupport().catch(()=>undefined));return respond(result,c);
+ return respond(result,c);
 }catch(e){return fail(e);}}
