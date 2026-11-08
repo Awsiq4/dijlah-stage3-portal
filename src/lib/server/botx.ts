@@ -22,7 +22,7 @@ export function homeMenuFor(admin: LinkedAdmin | null, isSubscriber: boolean) {
     return {inline_keyboard: [
       [{text: "✍️ نشر جديد", callback_data: "adm:new"}],
       [{text: "🗂 إدارة منشوراتي", callback_data: "adm:my"}],
-      [{text: "👀 تصفح المحتوى (كطالطالب)", callback_data: "stu:home"}],
+      [{text: "👀 تصفح المحتوى (كطالب)", callback_data: "stu:home"}],
       [{text: "👤 حسابي", callback_data: "adm:me"}],
     ]};
   }
@@ -46,7 +46,7 @@ export async function handleStudentCallback(chatId: number, userId: number, data
   const sec = await subscriberSection(chatId);
   if (data === "stu:home") {
     const admin = await getLinkedAdmin(userId);
-    await sendMessage(chatId, "مرحبًا بك في بوابة المرحلة الثالثة 🌟\nاختر من القائمة:", {replyMarkup: homeMenuFor(admin, true)});
+    await sendMessage(chatId, "مرحبًا بك في بوابة المرحلة الثالثة 🌟\nاختر من القائمة:", {replyMarkup: homeMenuFor(null, true)});
     return;
   }
   if (data === "stu:ann") {
