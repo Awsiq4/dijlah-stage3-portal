@@ -50,7 +50,7 @@ export async function handleLinkStart(chatId: number, userId: number, arg: strin
   const admin = await qOne<AdminInfo>(`SELECT id, email, role, status, is_active, name, assigned_section, assigned_subjects, perms FROM portal_admins WHERE id=$1`, [tok.admin_id]);
   if (!admin || !canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ الحساب غير مخوّل للنشر عبر Telegram."); return; }
   await q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [admin.email, "telegram.link.bound", {telegram_user_id: userId}]);
-  await sendMessage(chatId, `✅ تم ربط حساب Telegram بنجاح.\nالحساب: <b>${admin.email}</b>\nالدور: <b>${admin.role}</b>\n\nاستخدم /start لعرض قائمة النشر.`, {parseMode: "HTML"});
+  await sendMessage(chatId, `✅ تم ربط حساب Telegram بنجاح.\nالحساب: <b>${admin.email}</b>\nالدور: <b>${admin.role}</b>\n\nاستخدم /start لعرض قائمة النشر.`, {parseMode: "HTML", replyMarkup: adminMenu()});
 }
 
 // ---- conversation state ----
