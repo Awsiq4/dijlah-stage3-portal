@@ -39,24 +39,24 @@ export async function anonymousIdentity(secret:string) {
 export async function issueRecoveryCode(a:Actor): Promise<string> {
  if(!a.identity||permission(a,'view'))throw new SupportError('هذا الخيار مخصص للطالب.',403);
  const secret=randomBytes(32).toString('hex');
- await q(\`INSERT INTO support_recovery_codes(identity_id,token_hash)
+ await q(`INSERT INTO support_recovery_codes(identity_id,token_hash)
            VALUES($1,$2) ON CONFLICT(identity_id)
-           DO UPDATE SET token_hash=EXCLUDED.token_hash,created_at=now()\`,[a.identity,hash(secret)]);
+           DO UPDATE SET token_hash=EXCLUDED.token_hash,created_at=now()`,[a.identity,hash(secret)]);
  return secret;
 }
 export async function recoverBrowserIdentity(currentIdentity:string,browserSecret:string,code:string) {
  if(!/^[a-f0-9]{64}$/i.test(code||''))throw new SupportError('رمز الاستعادة غير صحيح.',400);
  return withTx(async db=>{
-  const match=await db.qOne<{identity_id:string}>(\`SELECT identity_id FROM support_recovery_codes
-       WHERE token_hash=$1 FOR UPDATE\`,[hash(code.toLowerCase())]);
+  const match=await db.qOne<{identity_id:string}>(`SELECT identity_id FROM support_recovery_codes
+       WHERE token_hash=$1 FOR UPDATE`,[hash(code.toLowerCase())]);
   if(!match)throw new SupportError('رمز الاستعادة غير صالح أو مستخدم.',400);
   if(match.identity_id!==currentIdentity){
-   const check=await db.qOne<{n:number}>(\`SELECT count(*)::int AS n FROM support_tickets WHERE identity_id=$1\`,[currentIdentity]);
+   const check=await db.qOne<{n:number}>(`SELECT count(*)::int AS n FROM support_tickets WHERE identity_id=$1`,[currentIdentity]);
    if((check?.n||0)>0)throw new SupportError('هذا المتصفح يحتوي طلبات مختلفة. افتح صفحة الدعم في متصفح جديد قبل الاستعادة.',409);
-   await db.q(\`INSERT INTO support_browser_links(secret_hash,identity_id) VALUES($1,$2)
-     ON CONFLICT(secret_hash) DO UPDATE SET identity_id=EXCLUDED.identity_id\`,[hash(browserSecret),match.identity_id]);
+   await db.q(`INSERT INTO support_browser_links(secret_hash,identity_id) VALUES($1,$2)
+     ON CONFLICT(secret_hash) DO UPDATE SET identity_id=EXCLUDED.identity_id`,[hash(browserSecret),match.identity_id]);
   }
-  await db.q(\`DELETE FROM support_recovery_codes WHERE identity_id=$1\`,[match.identity_id]);
+  await db.q(`DELETE FROM support_recovery_codes WHERE identity_id=$1`,[match.identity_id]);
   return {ok:true};
  });
 }
@@ -147,53 +147,53 @@ export async function getTicket(a:Actor,id:number) {
  return {ticket:t,messages,attachments,history,...(staff?{studentProfile}:{})};
 }
 function supportInboxSql() {
- const lastSender=\`(SELECT CASE WHEN m.author LIKE 'student:%' THEN 'student' ELSE 'admin' END
-   FROM support_messages m WHERE m.ticket_id=t.id AND m.internal=false ORDER BY m.id DESC LIMIT 1)\`;
- const inbox=\`CASE WHEN t.status IN ('closed','resolved') THEN 'done'
-   WHEN \${lastSender}='student' THEN 'pending' ELSE 'waiting' END\`;
+ const lastSender=`(SELECT CASE WHEN m.author LIKE 'student:%' THEN 'student' ELSE 'admin' END
+   FROM support_messages m WHERE m.ticket_id=t.id AND m.internal=false ORDER BY m.id DESC LIMIT 1)`;
+ const inbox=`CASE WHEN t.status IN ('closed','resolved') THEN 'done'
+   WHEN ${lastSender}='student' THEN 'pending' ELSE 'waiting' END`;
  return {lastSender,inbox};
 }
 export async function listTickets(a:Actor,filters:Record<string,string>={}) {
  const staff=permission(a,'view'),params:unknown[]=[staff?'admin:'+String(a.adminId||'owner'):'student:'+a.identity];
  const conditions:string[]=[];
- const add=(sql:string,v:unknown)=>{params.push(v);conditions.push(sql.replace('?',\`$\${params.length}\`));};
+ const add=(sql:string,v:unknown)=>{params.push(v);conditions.push(sql.replace('?',`$${params.length}`));};
  if(!staff)add('t.identity_id=?',a.identity||'none');
  const {lastSender,inbox}=supportInboxSql();
- for(const k of ['category','status','priority'])if(filters[k])add(\`t.\${k}=?\`,filters[k]);
+ for(const k of ['category','status','priority'])if(filters[k])add(`t.${k}=?`,filters[k]);
  if(filters.section&&['A','B','C','F'].includes(filters.section))add('COALESCE(t.section,s.section)=?',filters.section);
- if(filters.from&&/^\\d{4}-\\d{2}-\\d{2}$/.test(filters.from))add('t.created_at>=?::date',filters.from);
- if(filters.to&&/^\\d{4}-\\d{2}-\\d{2}$/.test(filters.to))add("t.created_at < ?::date + interval '1 day'",filters.to);
+ if(filters.from&&/^\d{4}-\d{2}-\d{2}$/.test(filters.from))add('t.created_at>=?::date',filters.from);
+ if(filters.to&&/^\d{4}-\d{2}-\d{2}$/.test(filters.to))add("t.created_at < ?::date + interval '1 day'",filters.to);
  if(filters.q){
   params.push('%'+filters.q.slice(0,100)+'%');const p='$'+params.length;
-  conditions.push(\`(t.subject ILIKE \${p} OR ('SUP-'||lpad(t.id::text,6,'0')) ILIKE \${p}
-    OR s.first_name ILIKE \${p} OR s.username ILIKE \${p} OR i.telegram_id::text ILIKE \${p})\`);
+  conditions.push(`(t.subject ILIKE ${p} OR ('SUP-'||lpad(t.id::text,6,'0')) ILIKE ${p}
+    OR s.first_name ILIKE ${p} OR s.username ILIKE ${p} OR i.telegram_id::text ILIKE ${p})`);
  }
- if(staff&&['pending','waiting','done'].includes(filters.inbox||''))conditions.push(\`(\${inbox})='\${filters.inbox}'\`);
- const join=\`FROM support_tickets t JOIN support_identities i ON i.id=t.identity_id
+ if(staff&&['pending','waiting','done'].includes(filters.inbox||''))conditions.push(`(${inbox})='${filters.inbox}'`);
+ const join=`FROM support_tickets t JOIN support_identities i ON i.id=t.identity_id
    LEFT JOIN tg_subscribers s ON s.chat_id=i.telegram_id
-   LEFT JOIN support_read_states r ON r.ticket_id=t.id AND r.reader_key=$1\`;
+   LEFT JOIN support_read_states r ON r.ticket_id=t.id AND r.reader_key=$1`;
  const where=conditions.length?'WHERE '+conditions.join(' AND '):'';
- const total=await qOne<{n:number}>(\`SELECT count(*)::int AS n \${join} \${where}\`,params);
+ const total=await qOne<{n:number}>(`SELECT count(*)::int AS n ${join} ${where}`,params);
  const requestedPage=Number(filters.page??0);
  const page=Number.isSafeInteger(requestedPage)&&requestedPage>=0?Math.min(10000,requestedPage):0;
- const unread=\`EXISTS (SELECT 1 FROM support_messages um WHERE um.ticket_id=t.id AND um.internal=false
+ const unread=`EXISTS (SELECT 1 FROM support_messages um WHERE um.ticket_id=t.id AND um.internal=false
     AND um.id>COALESCE(r.last_read_id,0)
-    AND \${staff?"um.author LIKE 'student:%'":"um.author NOT LIKE 'student:%'"})\`;
- const rows=await q<Ticket>(\`SELECT t.*,
-   \${staff?'s.first_name,s.last_name,s.username,s.reg_seq,i.telegram_id,':''}
+    AND ${staff?"um.author LIKE 'student:%'":"um.author NOT LIKE 'student:%'"})`;
+ const rows=await q<Ticket>(`SELECT t.*,
+   ${staff?'s.first_name,s.last_name,s.username,s.reg_seq,i.telegram_id,':''}
    COALESCE(t.section,s.section) AS effective_section,
-   \${lastSender} AS last_sender_type,
-   \${inbox} AS inbox_group,
-   \${unread} AS has_unread
-   \${join} \${where} ORDER BY t.updated_at DESC,t.id DESC
-   LIMIT $\${params.length+1} OFFSET $\${params.length+2}\`,[...params,10,page*10]);
+   ${lastSender} AS last_sender_type,
+   ${inbox} AS inbox_group,
+   ${unread} AS has_unread
+   ${join} ${where} ORDER BY t.updated_at DESC,t.id DESC
+   LIMIT $${params.length+1} OFFSET $${params.length+2}`,[...params,10,page*10]);
  let inboxCounts:Record<string,number>|undefined;
  if(staff){
-  const totals=await qOne<{pending:number;waiting:number;done:number}>(\`SELECT
-    count(*) FILTER (WHERE \${inbox}='pending')::int AS pending,
-    count(*) FILTER (WHERE \${inbox}='waiting')::int AS waiting,
-    count(*) FILTER (WHERE \${inbox}='done')::int AS done
-    FROM support_tickets t\`);
+  const totals=await qOne<{pending:number;waiting:number;done:number}>(`SELECT
+    count(*) FILTER (WHERE ${inbox}='pending')::int AS pending,
+    count(*) FILTER (WHERE ${inbox}='waiting')::int AS waiting,
+    count(*) FILTER (WHERE ${inbox}='done')::int AS done
+    FROM support_tickets t`);
   inboxCounts={pending:totals?.pending||0,waiting:totals?.waiting||0,done:totals?.done||0};
  }
  return {rows,total:total?.n||0,page,...(inboxCounts?{inboxCounts}:{})};
