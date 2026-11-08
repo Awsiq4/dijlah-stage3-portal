@@ -51,6 +51,25 @@ await assert.rejects(()=>S.analytics(student));passed++;
 if(!memory) ok(Number((await S.analytics(owner)).summary.total)>0,'analytics from real records');
 const raw=await S.createLink(student);await S.bindLink(raw,888880001);await assert.rejects(()=>S.bindLink(raw,888880001));passed++;
 ok((await S.telegramActor(888880001)).identity===identity,'verified website and bot identity shared');
+
+const prelinkedTelegram = 888880005;
+const telegramExisting = await S.telegramActor(prelinkedTelegram);
+const webSecret = randomUUID();
+const websiteExisting = await S.anonymousIdentity(webSecret);
+const webActor = {owner:false,permissions:[],identity:websiteExisting};
+const oldBotTicket = await S.createTicket({...webActor,identity:telegramExisting.identity},
+  {category:'support',subject:'Existing Telegram conversation',body:'Old bot ticket retained',key:randomUUID(),source:'telegram'});
+const oldWebTicket = await S.createTicket(webActor,
+  {category:'idea',subject:'Existing browser conversation',body:'Old website ticket retained',key:randomUUID(),source:'web'});
+const mergeToken = await S.createLink(webActor);
+await S.bindLink(mergeToken,prelinkedTelegram);
+const mergedTelegram = await S.telegramActor(prelinkedTelegram);
+const mergedWeb = await S.anonymousIdentity(webSecret);
+ok(mergedTelegram.identity===telegramExisting.identity,'existing Telegram identity remains primary');
+ok(mergedWeb===telegramExisting.identity,'old browser session resolves to existing Telegram identity');
+ok((await S.listTickets(mergedTelegram)).rows.some(t=>t.id===oldBotTicket.id),'existing Telegram ticket preserved after linking');
+ok((await S.listTickets({...webActor,identity:mergedWeb})).rows.some(t=>t.id===oldWebTicket.id),'existing browser ticket preserved after linking');
+
 const sent=[];globalThis.fetch=async(_url,opts)=>{sent.push(JSON.parse(opts.body));return{ok:true,json:async()=>({ok:true,result:{message_id:1}})};};
 const chat=888880002;
 await supportCallback(chat,chat,'sup:new:idea');await supportMessage(chat,chat,{text:'TEST اقتراح من البوت'});await supportMessage(chat,chat,{text:'تفاصيل الاقتراح من تليجرام'});await supportCallback(chat,chat,'sup:skip');
