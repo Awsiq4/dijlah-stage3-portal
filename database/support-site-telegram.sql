@@ -12,6 +12,8 @@ CREATE INDEX IF NOT EXISTS support_site_entries_expiry
   ON support_site_entries (expires_at);
 
 ALTER TABLE support_jobs ADD COLUMN IF NOT EXISTS reply_markup JSONB;
+ALTER TABLE support_jobs ADD COLUMN IF NOT EXISTS media_file_id TEXT;
+ALTER TABLE support_attachments ADD COLUMN IF NOT EXISTS telegram_file_id TEXT;
 CREATE INDEX IF NOT EXISTS support_jobs_claimable
   ON support_jobs (next_at, id)
   WHERE sent_at IS NULL AND failed = false;
