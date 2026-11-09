@@ -273,14 +273,44 @@ async function showOwnerList(chatId:number,group:string,page:number,search=""){
    (search?"🔍 نتائج البحث":group==="pending"?"📥 بانتظار ردّك":group==="waiting"?"💬 بانتظار الطالب":"✅ الطلبات المكتملة")+
    " — "+data.total+" طلب", {replyMarkup:buttons(items)});
 }
+async function showOwnerFilterList(chatId:number,kind:"section"|"category",value:string,page:number){
+ if(!Number.isSafeInteger(page)||page<0||page>999)return;
+ if(kind==="section"&&!["A","B","C","F","NA"].includes(value))return;
+ if(kind==="category"&&!Object.hasOwn(categories,value))return;
+ const data=await listTickets({owner:true,permissions:[]},{[kind]:value,page:String(page)});
+ const title=kind==="section"?(value==="NA"?"بدون شعبة":"شعبة "+value):categories[value];
+ const rows=data.rows.map(t=>[{text:ticketNumber(t.id)+" · "+
+   safeName([t.first_name,t.last_name].filter(Boolean).join(" ")||t.username||"طالب"),
+   callback_data:"sup:o:open:"+t.id}]);
+ const nav:Array<{text:string;callback_data:string}>=[];
+ if(page>0)nav.push({text:"⬅️",callback_data:"sup:o:filter:"+kind+":"+value+":"+(page-1)});
+ if((page+1)*10<data.total)nav.push({text:"➡️",callback_data:"sup:o:filter:"+kind+":"+value+":"+(page+1)});
+ if(nav.length)rows.push(nav);
+ rows.push([{text:"⬅️ اختيار آخر",callback_data:"sup:o:choose:"+kind}]);
+ await sendMessage(chatId,"📋 "+title+" — "+data.total+" طلب",{replyMarkup:buttons(rows)});
+}
+async function showOwnerFilterChoices(chatId:number,kind:"section"|"category"){
+ const options=kind==="section"
+   ?[...["A","B","C","F"].map(v=>({value:v,label:"شعبة "+v})),{value:"NA",label:"بدون شعبة"}]
+   :Object.entries(categories).map(([value,label])=>({value,label}));
+ await sendMessage(chatId,kind==="section"?"🏫 اختر الشعبة:":"📂 اختر نوع الطلب:",{
+   replyMarkup:buttons([
+    ...options.map(x=>[{text:x.label,callback_data:"sup:o:filter:"+kind+":"+x.value+":0"}]),
+    [{text:"🎫 لوحة الدعم",callback_data:"sup:o:home"}],
+   ]),
+ });
+}
 async function showOwnerDashboard(chatId:number){
  const r=await listTickets({owner:true,permissions:[]},{inbox:"pending",page:"0"});
  const counts=r.inboxCounts||{pending:0,waiting:0,done:0};
- await sendMessage(chatId,"🎫 إدارة الدعم\nاختر القسم:",{
+ const fresh=await qOne<{n:number}>("SELECT count(*)::int AS n FROM support_tickets WHERE status='new'");
+ await sendMessage(chatId,"🎫 إدارة الدعم\n🆕 الطلبات الجديدة: "+(fresh?.n||0)+"\nاختر القسم:",{
   replyMarkup:buttons([
    [{text:"📥 بانتظار ردي ("+counts.pending+")",callback_data:"sup:o:list:pending:0"}],
    [{text:"💬 بانتظار الطالب ("+counts.waiting+")",callback_data:"sup:o:list:waiting:0"}],
    [{text:"✅ المكتملة ("+counts.done+")",callback_data:"sup:o:list:done:0"}],
+   [{text:"🏫 حسب الشعبة",callback_data:"sup:o:choose:section"},
+    {text:"📂 حسب النوع",callback_data:"sup:o:choose:category"}],
    [{text:"🔍 البحث عن طلب",callback_data:"sup:o:search"}],
    [{text:"👑 لوحة المالك",callback_data:"own:home"}],
   ]),
@@ -330,6 +360,10 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
    return;
  }
  if(data==="sup:o:home"){await showOwnerDashboard(chatId);return;}
+ const filterChoices=/^sup:o:choose:(section|category)$/.exec(data);
+ if(filterChoices){await showOwnerFilterChoices(chatId,filterChoices[1] as "section"|"category");return;}
+ const filterList=/^sup:o:filter:(section|category):([A-Za-z_]{1,15}):([0-9]{1,3})$/.exec(data);
+ if(filterList){await showOwnerFilterList(chatId,filterList[1] as "section"|"category",filterList[2],Number(filterList[3]));return;}
  if(data==="sup:o:search"){
    await putDraft(chatId,{mode:"owner_search"},20);
    await sendMessage(chatId,"🔍 اكتب اسم الطالب أو يوزره أو رقم التذكرة:",{replyMarkup:cancelButtons()});
