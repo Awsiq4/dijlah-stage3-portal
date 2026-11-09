@@ -361,7 +361,32 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
    await sendMessage(chatId,"🔍 اكتب اسم الطالب أو يوزره أو رقم التذكرة:",{replyMarkup:cancelButtons()});
    return;
  }
- const ownerList=/^sup:o:list:(pending|waiting|done):([0-9]{1,3})$/.exec(data);
+ if(data==="sup:o:filters"){await showOwnerFilters(chatId);return;}
+ const sectionMatch=/^sup:o:section:(A|B|C|F):([0-9]{1,3})$/.exec(data);
+ if(sectionMatch){await showOwnerList(chatId,"pending",Number(sectionMatch[2]),"",{section:sectionMatch[1]});return;}
+ const categoryMatch=/^sup:o:category:(support|idea|problem):([0-9]{1,3})$/.exec(data);
+ if(categoryMatch){await showOwnerList(chatId,"pending",Number(categoryMatch[2]),"",{category:categoryMatch[1]});return;}
+ const historyMatch=/^sup:(o|s):history:([0-9]{1,12}):([0-9]{1,3})$/.exec(data);
+ if(historyMatch){
+   const owner=historyMatch[1]==="o",id=Number(historyMatch[2]);
+   if(!validTicket(id))return;
+   await showTicket(chatId,userId,id,owner,Number(historyMatch[3]));
+   return;
+ }
+ const messageMatch=/^sup:(o|s):message:([0-9]{1,12}):([0-9]{1,12})$/.exec(data);
+ if(messageMatch){
+   const owner=messageMatch[1]==="o",id=Number(messageMatch[2]),messageId=Number(messageMatch[3]);
+   if(!validTicket(id)||!validTicket(messageId))return;
+   const actor:Actor=owner?{owner:true,permissions:[]}:await telegramActor(userId);
+   const details=await getTicket(actor,id);
+   const msg=details.messages.find(item=>Number(item.id)===messageId);
+   if(!msg){await sendMessage(chatId,"الرسالة غير موجودة أو غير متاحة.");return;}
+   await sendMessage(chatId,"🎫 "+ticketNumber(id)+" — "+(msg.internal?"ملاحظة داخلية":msg.sender_type==="student"?"رسالة الطالب":"رد الإدارة")+
+     "\n🕒 "+displayTime(msg.created_at)+"\n\n"+msg.body.slice(0,3500),
+     {replyMarkup:buttons([[{text:"📖 العودة للمحادثة",callback_data:(owner?"sup:o:open:":"sup:s:open:")+id}]])});
+   return;
+ }
+  const ownerList=/^sup:o:list:(pending|waiting|done):([0-9]{1,3})$/.exec(data);
  if(ownerList){await showOwnerList(chatId,ownerList[1],Number(ownerList[2]));return;}
  const studentList=/^sup:s:list:([0-9]{1,3})$/.exec(data);
  if(studentList){await showStudentList(chatId,userId,Number(studentList[1]));return;}
