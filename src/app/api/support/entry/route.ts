@@ -27,7 +27,8 @@ async function ensureOfficialWebhook():Promise<boolean> {
     try{previous=new URL(info.result.url);}catch{return false;}
     const knownPreview=previous.protocol==="https:"
       &&previous.pathname==="/api/telegram/webhook"
-      &&/^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\.vercel\.app$/i.test(previous.hostname);
+      &&(previous.hostname==="dijlah-stage3-portal-awsiq4.vercel.app"
+        || /^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\.vercel\.app$/i.test(previous.hostname));
     // Never override an unknown external webhook without owner approval.
     if(!knownPreview)return false;
   }
