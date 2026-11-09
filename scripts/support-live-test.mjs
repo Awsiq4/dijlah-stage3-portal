@@ -176,6 +176,18 @@ try{
    'non-owner cannot open the Telegram owner support dashboard');
  const ticketCount=await qOne("SELECT count(*)::int AS n FROM support_tickets WHERE request_key='tg:update:703'");
  ok(Number(ticketCount?.n)===1,'one Telegram update creates only one ticket');
+ await B.handleSupportCallback(999999999,999999999,'sup:o:status:'+siteTicket.id+':resolved');
+ await B.handleSupportCallback(999999999,999999999,'sup:o:status:'+siteTicket.id+':resolved');
+ const statusesQueued=await qOne("SELECT count(*)::int AS n FROM support_jobs WHERE event_key LIKE $1",
+   ['status:'+siteTicket.id+':resolved:%']);
+ ok(Number(statusesQueued?.n)===1,'repeating owner status callback does not queue duplicate student alerts');
+ await B.handleSupportCallback(999999999,999999999,'sup:o:filters');
+ ok(sentMessages.some(m=>m.payload.chat_id===999999999&&String(m.payload.text||'').includes('تصفية طلبات الدعم')),
+   'owner can open section/category filtering');
+ await B.handleSupportCallback(999999999,999999999,'sup:o:history:'+siteTicket.id+':0');
+ ok(sentMessages.some(m=>m.payload.chat_id===999999999&&String(m.payload.text||'').includes('المحادثة: صفحة')),
+   'owner can page through a persistent ticket history');
+
 
  const tokenForNew='C'.repeat(27);
  await q("INSERT INTO support_site_entries(token_hash,category,expires_at) VALUES($1,'problem',now()+interval '10 minutes')",
