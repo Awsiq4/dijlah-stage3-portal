@@ -164,6 +164,14 @@ try{
  const ownerAlert=await qOne("SELECT recipient,text FROM support_jobs WHERE event_key=$1",['new:'+siteTicket.id]);
  ok(ownerAlert&&Number(ownerAlert.recipient)===999999999&&ownerAlert.text.includes('طلب دعم جديد'),
    'every new Telegram ticket immediately queues a verified owner notification');
+ await q("DELETE FROM support_jobs WHERE event_key=$1",["new:"+siteTicket.id]);
+ ok((await B.reconcileMissingOwnerAlerts(10))>=1,
+   'missing new-ticket alerts are reconstructed from saved Telegram tickets');
+ const restoredAlert=await qOne("SELECT recipient,text FROM support_jobs WHERE event_key=$1",['new:'+siteTicket.id]);
+ ok(Number(restoredAlert?.recipient)===999999999&&restoredAlert?.text.includes('فكرة جديدة'),
+   'recovered alert preserves original ticket message and owner destination');
+ ok((await B.reconcileMissingOwnerAlerts(10))===0,
+   'rechecking a delivered or queued new-ticket event does not duplicate it');
  const sender=await S.telegramActor(88776655);
  await B.clearSupportDraft(88776655); // /start cancels only the typing state.
  ok((await S.getTicket(sender,siteTicket.id)).messages.length===1,
@@ -200,6 +208,10 @@ try{
    'new user can submit an optional photo with a support request');
  const photo=await qOne("SELECT a.telegram_file_id FROM support_attachments a JOIN support_messages m ON m.id=a.message_id WHERE m.request_key='tg:update:705'");
  ok(photo?.telegram_file_id==='file_photo_1','support image is stored in the existing private attachment table');
+ const photoTicket=await qOne("SELECT id FROM support_tickets WHERE request_key='tg:update:705'");
+ const photoAlert=await qOne("SELECT media_file_id,text FROM support_jobs WHERE event_key=$1",["new:"+photoTicket.id]);
+ ok(photoAlert&&photoAlert.media_file_id==null&&photoAlert.text.includes('طلب دعم جديد'),
+   'image tickets still generate a regular text notification for the owner');
 
 }finally{globalThis.fetch=originalFetch;}
 
