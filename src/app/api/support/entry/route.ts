@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from "next/server";
 import {randomBytes} from "node:crypto";
-import {BOT_USERNAME,telegramServiceEnabled} from "@/lib/server/flags";
+import {BOT_USERNAME,PORTAL_BASE_URL,WEBHOOK_SECRET,telegramServiceEnabled} from "@/lib/server/flags";
+import {setWebhook,tgFetch} from "@/lib/server/telegram";
 import {checkLoginRateLimit} from "@/lib/server/auth";
 import {q} from "@/lib/server/db";
 import {hash} from "@/lib/server/support";
@@ -9,6 +10,32 @@ export const dynamic="force-dynamic";
 const types = ["support","idea","problem"];
 const respond=(body:unknown,status=200)=>
   NextResponse.json(body,{status,headers:{"Cache-Control":"no-store, no-cache, must-revalidate","Pragma":"no-cache"}});
+
+// A preview deployment must never steal the single Telegram webhook from production.
+// If a previous Preview owned it, the first legitimate production support click
+// repairs the webhook to this portal's official host, never to a user-provided URL.
+async function ensureOfficialWebhook():Promise<boolean> {
+  if(process.env.VERCEL_ENV==="preview") return false;
+  if(!WEBHOOK_SECRET) return false;
+  const expected=new URL("/api/telegram/webhook",PORTAL_BASE_URL);
+  if(expected.origin!=="https://dijlah-stage3-portal.vercel.app")return false;
+  const info=await tgFetch<{url:string}>("getWebhookInfo",{});
+  if(!info.ok)return false;
+  if(info.result?.url===expected.toString())return true;
+  if(info.result?.url){
+    let previous:URL;
+    try{previous=new URL(info.result.url);}catch{return false;}
+    const knownPreview=previous.protocol==="https:"
+      &&previous.pathname==="/api/telegram/webhook"
+      &&/^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\.vercel\.app$/i.test(previous.hostname);
+    // Never override an unknown external webhook without owner approval.
+    if(!knownPreview)return false;
+  }
+  const changed=await setWebhook(expected.toString(),WEBHOOK_SECRET);
+  if(!changed.ok)return false;
+  const verify=await tgFetch<{url:string}>("getWebhookInfo",{});
+  return verify.ok&&verify.result?.url===expected.toString();
+}
 
 export async function POST(req:NextRequest) {
   try {
@@ -23,6 +50,8 @@ export async function POST(req:NextRequest) {
     const rateKey=hash((process.env.SESSION_SECRET||"support")+new Date().toISOString().slice(0,10)+source);
     if(!await checkLoginRateLimit("support:site-entry:"+rateKey,20,3600000))
       return respond({error:"محاولات كثيرة. جرّب بعد فترة."},429);
+    if(!await ensureOfficialWebhook())
+      return respond({error:"ربط البوت بالموقع الرسمي غير مكتمل. راجع مركز Telegram من لوحة الإدارة."},503);
     // 160 bits, 27 characters base64url, plus 'sd_' fits Telegram's 64-char start payload.
     const token=randomBytes(20).toString("base64url");
     await q(
