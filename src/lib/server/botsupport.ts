@@ -184,6 +184,7 @@ export async function recoverUnqueuedOwnerAlerts(limit=10):Promise<number>{
    SELECT t.id,t.category FROM support_tickets t
    LEFT JOIN support_jobs j ON j.event_key='new:'||t.id::text
    WHERE t.source='telegram' AND t.created_at>=now()-interval '7 days'
+     AND t.status NOT IN ('resolved','closed')
      AND j.id IS NULL ORDER BY t.id ASC LIMIT $1`,
    [Math.min(Math.max(limit,1),20)]);
  let repaired=0;
