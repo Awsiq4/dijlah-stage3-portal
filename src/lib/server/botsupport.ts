@@ -256,22 +256,35 @@ async function showStudentList(chatId:number,userId:number,page:number){
    replyMarkup:buttons(kb.length?kb:[[{text:"🏠 الرئيسية",callback_data:"nav:home"}]]),
  });
 }
-async function showOwnerList(chatId:number,group:string,page:number,search=""){
+type OwnerFilter={section?:string;category?:string};
+async function showOwnerList(chatId:number,group:string,page:number,search="",filter:OwnerFilter={}){
  if(!["pending","waiting","done"].includes(group))group="pending";
  if(!Number.isSafeInteger(page)||page<0||page>999)page=0;
- const data=await listTickets({owner:true,permissions:[]},{page:String(page),...(search?{q:search}:{inbox:group})});
+ const section=filter.section&&["A","B","C","F"].includes(filter.section)?filter.section:undefined;
+ const category=filter.category&&Object.hasOwn(categories,filter.category)?filter.category:undefined;
+ const data=await listTickets({owner:true,permissions:[]},{page:String(page),...(search?{q:search}:{}),
+   ...(section?{section}:{}),...(category?{category}:{}),...(!search&&!section&&!category?{inbox:group}:{})});
  const items=data.rows.map(t=>[{
    text:ticketNumber(t.id)+" · "+safeName([t.first_name,t.last_name].filter(Boolean).join(" ")||t.username||"طالب")+" · "+(t.effective_section||"—"),
    callback_data:"sup:o:open:"+t.id,
  }]);
+ const prefix=section?"sup:o:section:"+section+":":category?"sup:o:category:"+category+":":"sup:o:list:"+group+":";
  const nav:Array<{text:string;callback_data:string}>=[];
- if(page>0)nav.push({text:"⬅️ السابقة",callback_data:"sup:o:list:"+group+":"+(page-1)});
- if(!search&&(page+1)*10<data.total)nav.push({text:"التالية ➡️",callback_data:"sup:o:list:"+group+":"+(page+1)});
+ if(page>0&&!search)nav.push({text:"⬅️ السابقة",callback_data:prefix+(page-1)});
+ if(!search&&(page+1)*10<data.total)nav.push({text:"التالية ➡️",callback_data:prefix+(page+1)});
  if(nav.length)items.push(nav);
- items.push([{text:"🎫 لوحة الدعم",callback_data:"sup:o:home"}]);
- await sendMessage(chatId,
-   (search?"🔍 نتائج البحث":group==="pending"?"📥 بانتظار ردّك":group==="waiting"?"💬 بانتظار الطالب":"✅ الطلبات المكتملة")+
-   " — "+data.total+" طلب", {replyMarkup:buttons(items)});
+ items.push([{text:"🏫 تصفية الشعب والأنواع",callback_data:"sup:o:filters"},
+   {text:"🎫 لوحة الدعم",callback_data:"sup:o:home"}]);
+ const label=search?"🔍 نتائج البحث":section?"🏫 شعبة "+section+" (كل الحالات)":category?"📂 "+categories[category]+" (كل الحالات)":
+   group==="pending"?"📥 بانتظار ردّك":group==="waiting"?"💬 بانتظار الطالب":"✅ الطلبات المكتملة";
+ await sendMessage(chatId,label+" — "+data.total+" طلب",{replyMarkup:buttons(items)});
+}
+async function showOwnerFilters(chatId:number){
+ await sendMessage(chatId,"🔍 تصفية طلبات الدعم — جميع الحالات:",{replyMarkup:buttons([
+  ...["A","B","C","F"].map(section=>[{text:"🏫 شعبة "+section,callback_data:"sup:o:section:"+section+":0"}]),
+  ...Object.entries(categories).map(([category,label])=>[{text:"📂 "+label,callback_data:"sup:o:category:"+category+":0"}]),
+  [{text:"🎫 لوحة الدعم",callback_data:"sup:o:home"}],
+ ])});
 }
 async function showOwnerDashboard(chatId:number){
  const r=await listTickets({owner:true,permissions:[]},{inbox:"pending",page:"0"});
@@ -282,6 +295,7 @@ async function showOwnerDashboard(chatId:number){
    [{text:"💬 بانتظار الطالب ("+counts.waiting+")",callback_data:"sup:o:list:waiting:0"}],
    [{text:"✅ المكتملة ("+counts.done+")",callback_data:"sup:o:list:done:0"}],
    [{text:"🔍 البحث عن طلب",callback_data:"sup:o:search"}],
+   [{text:"🏫 الشعب وأنواع الطلبات",callback_data:"sup:o:filters"}],
    [{text:"👑 لوحة المالك",callback_data:"own:home"}],
   ]),
  });
