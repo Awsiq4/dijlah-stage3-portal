@@ -12,5 +12,6 @@ export async function POST(req: NextRequest) {
   if (!telegramServiceEnabled()) return NextResponse.json({enabled: false}, {status: 503});
   const limit = Math.min(Number(new URL(req.url).searchParams.get("limit")) || 100, 500);
   const result = await drainQueue(limit);
-  return NextResponse.json({ok: true, ...result});
+  const support = await drainSupportQueue(Math.min(limit,30));
+  return NextResponse.json({ok: true, ...result, support});
 }
