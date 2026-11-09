@@ -161,6 +161,9 @@ try{
  const siteTicket=await qOne("SELECT t.id,t.category,t.source,i.telegram_id FROM support_tickets t JOIN support_identities i ON i.id=t.identity_id WHERE t.request_key='tg:update:703'");
  ok(siteTicket?.category==='idea'&&siteTicket?.source==='telegram'&&Number(siteTicket?.telegram_id)===88776655,
    'site category and authenticated Telegram sender are retained');
+ const newTicketAlert=await qOne("SELECT recipient,text FROM support_jobs WHERE event_key=$1",["new:"+siteTicket.id]);
+ ok(Number(newTicketAlert?.recipient)===999999999&&newTicketAlert?.text.includes("رقم التسجيل"),
+   'owner gets a durable new-ticket notification including sender identity');
  const sender=await S.telegramActor(88776655);
  await B.clearSupportDraft(88776655); // /start cancels only the typing state.
  ok((await S.getTicket(sender,siteTicket.id)).messages.length===1,
@@ -176,6 +179,12 @@ try{
    'non-owner cannot open the Telegram owner support dashboard');
  const ticketCount=await qOne("SELECT count(*)::int AS n FROM support_tickets WHERE request_key='tg:update:703'");
  ok(Number(ticketCount?.n)===1,'one Telegram update creates only one ticket');
+ await q("DELETE FROM support_jobs WHERE event_key=$1",["new:"+siteTicket.id]);
+ const backfilled=await B.recoverUnqueuedOwnerAlerts(10);
+ ok(backfilled>=1,'missed owner notification can be requeued from a committed Telegram ticket');
+ const repairedAlert=await qOne("SELECT recipient FROM support_jobs WHERE event_key=$1",["new:"+siteTicket.id]);
+ ok(Number(repairedAlert?.recipient)===999999999,'recovered new ticket alert targets Telegram owner');
+ ok((await B.recoverUnqueuedOwnerAlerts(10))===0,'already enqueued owner alerts are not duplicated');
 
  const tokenForNew='C'.repeat(27);
  await q("INSERT INTO support_site_entries(token_hash,category,expires_at) VALUES($1,'problem',now()+interval '10 minutes')",
