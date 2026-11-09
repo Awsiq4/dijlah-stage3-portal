@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import {WORKER_SECRET, timingSafeEqual, telegramServiceEnabled} from "@/lib/server/flags";
 import {drainQueue} from "@/lib/server/notify";
+import {drainSupportQueue} from "@/lib/server/botsupport";
 
 export const dynamic = "force-dynamic";
 
