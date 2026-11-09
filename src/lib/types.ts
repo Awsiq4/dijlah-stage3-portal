@@ -78,6 +78,7 @@ export interface Assignment {
 export interface PortalData {
   subjects: Subject[];
   lectures: Lecture[];
+  summaries?: Lecture[];
   schedule: ScheduleSlot[];
   exams: Exam[];
   announcements: Announcement[];

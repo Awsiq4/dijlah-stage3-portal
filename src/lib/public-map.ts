@@ -54,6 +54,7 @@ export function mapTelegram(rows: Record<string, unknown>[]): PortalData["telegr
 export type PublicContentPayload = {
   subjects?: Record<string, unknown>[];
   lectures?: Record<string, unknown>[];
+  summaries?: Record<string, unknown>[];
   announcements?: Record<string, unknown>[];
   exams?: Record<string, unknown>[];
   assignments?: Record<string, unknown>[];
@@ -67,6 +68,7 @@ export function mapPublicContent(c: PublicContentPayload): Partial<PortalData> {
   const out: Partial<PortalData> = {};
   if (c.subjects) out.subjects = c.subjects.map(mapSubject);
   if (c.lectures) out.lectures = c.lectures.map(mapLecture);
+  if (c.summaries) out.summaries = c.summaries.map(mapLecture);
   if (c.announcements) out.announcements = c.announcements.map(mapAnnouncement);
   if (c.exams) out.exams = c.exams.map(mapExam);
   if (c.assignments) out.assignments = c.assignments.map(mapAssignment);

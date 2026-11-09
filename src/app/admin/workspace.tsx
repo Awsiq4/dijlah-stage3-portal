@@ -4,7 +4,7 @@ import {BookOpen,ClipboardList,FileQuestion,Megaphone,Paperclip,Plus,Send,Trash2
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {upload} from "@vercel/blob/client";
 
-type Me = {authenticated: boolean; email?: string; role?: string; name?: string; assigned_section?: string | null; assigned_subjects?: string[] | null};
+type Me = {authenticated: boolean; email?: string; role?: string; name?: string; assigned_section?: string | null; assigned_subjects?: string[] | null; perms?: {teacher_sections?: Record<string, string[]>}};
 type Row = Record<string, unknown>;
 const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"};
 
@@ -16,6 +16,7 @@ export function RoleWorkspace({me}: {me: Me}) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [subjectId, setSubjectId] = useState("");
+  const [materialKind, setMaterialKind] = useState<"lecture" | "summary">("lecture");
   const [number, setNumber] = useState("1");
   const [fileUrl, setFileUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -38,7 +39,14 @@ export function RoleWorkspace({me}: {me: Me}) {
   const publish = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setNotice("");
-    const sections = audience === "all" ? ["A", "B", "C", "F"] : [me.assigned_section || "A"];
+    const sections = isTeacher && materialKind === "summary"
+      ? (me.perms?.teacher_sections?.[subjectId] ?? ["A", "B", "C", "F"])
+      : audience === "all" ? ["A", "B", "C", "F"] : [me.assigned_section || "A"];
+    if (isTeacher && materialKind === "summary" && !sections.length) {
+      setNotice("لا توجد شعب مسموح بالنشر لها في هذه المادة.");
+      setBusy(false);
+      return;
+    }
     try {
       let url = fileUrl;
       if (kind === "mat" && file) {
@@ -61,7 +69,7 @@ export function RoleWorkspace({me}: {me: Me}) {
       if (kind === "mat" && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); return; }
       const row = isRep && kind === "ann"
         ? {id: `web-${Date.now()}`, title, body, scope: me.role === "section_representative" ? "section" : "general", section: me.role === "section_representative" ? me.assigned_section : "all", priority: "normal", published_at: new Date().toISOString(), pinned: "false"}
-        : {id: `web-${Date.now()}`, subject_id: subjectId, number: Number(number) || 1, title, description: body, file_url: url, file_name: (file?.name || url.split("/").pop() || ""), sections, status: "published", updated_at: new Date().toISOString().slice(0, 10)};
+        : {id: `web-${Date.now()}`, subject_id: subjectId, number: materialKind === "summary" ? 1 : Number(number) || 1, ...(materialKind === "summary" ? {material_kind: "summary"} : {}), title, description: body, file_url: url, file_name: (file?.name || url.split("/").pop() || ""), sections, status: "published", updated_at: new Date().toISOString().slice(0, 10)};
       let res;
       try {
         res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
@@ -76,7 +84,7 @@ export function RoleWorkspace({me}: {me: Me}) {
         return;
       }
       // success only after the content record is saved — include a link to the published item
-      const link = kind === "ann" ? "/announcements" : `/subjects/${subjectId}`;
+      const link = kind === "ann" ? "/announcements" : materialKind === "summary" ? `/lectures/${row.id}` : `/subjects/${subjectId}`;
       setNotice(`✅ تم نشر المحتوى بنجاح — سيصل إشعار Telegram عند تفعيل الخدمة. 🔗 عرض المنشور: ${link}`);
       setLastLink(link);
       setTitle(""); setBody(""); setFileUrl(""); setFile(null);
@@ -103,9 +111,15 @@ export function RoleWorkspace({me}: {me: Me}) {
           <label className="form-field"><span>المادة *</span>
             <select value={subjectId} onChange={e => setSubjectId(e.target.value)} required>
               <option value="">— اختر المادة —</option>
-              {(isTeacher ? (me.assigned_subjects || []).map(s => ({id: s, name: s})) : subjects.map(s => ({id: String(s.id), name: String(s.name)}))).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {(isTeacher ? (me.assigned_subjects || []).map(id => ({id, name: String(subjects.find(s => s.id === id)?.name || id)})) : subjects.map(s => ({id: String(s.id), name: String(s.name)}))).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select></label>
-          <label className="form-field"><span>رقم المحاضرة/الملزمة</span><input type="number" min={1} value={number} onChange={e => setNumber(e.target.value)}/></label>
+          <label className="form-field"><span>نوع المحتوى</span>
+            <select value={materialKind} onChange={e => setMaterialKind(e.target.value as "lecture" | "summary")}>
+              <option value="lecture">محاضرة / ملزمة</option>
+              <option value="summary">ملخص</option>
+            </select>
+          </label>
+          {materialKind === "lecture" && <label className="form-field"><span>رقم المحاضرة/الملزمة</span><input type="number" min={1} value={number} onChange={e => setNumber(e.target.value)}/></label>}
           {isRep && <label className="form-field"><span>الجمهور *</span>
             <select value={audience} onChange={e => setAudience(e.target.value as "own" | "all")}>
               <option value="own">📌 شعبتي ({me.assigned_section})</option>
@@ -113,7 +127,7 @@ export function RoleWorkspace({me}: {me: Me}) {
             </select></label>}
         </>}
         <label className="form-field wide"><span>العنوان *</span><input value={title} onChange={e => setTitle(e.target.value)} required/></label>
-        <label className="form-field wide"><span>{isRep ? "نص التبليغ" : "الوصف"}</span><textarea rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
+        <label className="form-field wide"><span>{kind === "ann" ? "نص التبليغ" : "الوصف"}</span><textarea rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
         {kind === "mat" && <>
           <label className="form-field wide"><span>ملف PDF (رفع من الجهاز)</span><input type="file" accept="application/pdf,.pdf" onChange={e => { setFile(e.target.files?.[0] || null); setFileUrl(""); }}/></label>
           <label className="form-field wide"><span>…أو رابط ملف محفوظ</span><input dir="ltr" placeholder="https://…pdf" value={fileUrl} onChange={e => { setFileUrl(e.target.value); setFile(null); }}/></label>
@@ -123,7 +137,7 @@ export function RoleWorkspace({me}: {me: Me}) {
     </div></div>
     <div className="panel"><div className="panel-heading"><h2>{kind === "ann" ? "تبليغاتي" : "موادي المنشورة"}</h2></div><div className="panel-body">
       {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map((r, i) => <div className="list-row" key={String(r.id || i)}>
-        <div className="grow"><strong>{String(r.title || r.id)}</strong><p className="subtle small">{String(r.section || r.subject_id || "")}</p></div>
+        <div className="grow"><strong>{r.material_kind === "summary" ? "ملخص · " : ""}{String(r.title || r.id)}</strong><p className="subtle small">{String(r.section || r.subject_id || "")}</p></div>
         <button className="action-button secondary" title="حذف" onClick={() => remove(String(r.id))}><Trash2 size={14}/></button>
       </div>)}</div> : <Empty description="لا يوجد محتوى بعد."/>}
     </div></div>

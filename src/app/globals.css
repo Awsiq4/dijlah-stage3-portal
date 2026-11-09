@@ -406,15 +406,19 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 
 /* ---------- PDF viewer ---------- */
-.pdf-viewer-wrap{border:1px solid var(--border);border-radius:14px;background:var(--surface2);overflow:hidden;display:flex;flex-direction:column;max-height:82vh}
-.pdf-viewer-wrap:fullscreen{max-height:none;border-radius:0}
-.icon-button.sm{width:34px;height:34px;border-radius:10px}
+.pdf-viewer-wrap{margin-top:14px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.pdf-viewer-wrap.pdf-expanded{position:fixed;inset:0;z-index:1000;border-radius:0;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.pdf-reader-tools{padding:10px 12px;border-bottom:1px solid var(--border);flex:none}
+.pdf-tool-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pdf-tool-row + .pdf-tool-row{margin-top:8px}
+.pdf-filename{flex:1 1 130px;min-width:0;overflow-wrap:anywhere;font-size:.85rem}
+.pdf-controls .icon-button{width:38px;height:38px}
 .pdf-page-ind{font-size:.74rem;font-weight:800;color:var(--muted);white-space:nowrap}
-.pdf-zoom{font-size:.74rem;font-weight:800;min-width:42px;text-align:center;color:var(--muted)}
-.pdf-pages{overflow-y:auto;overflow-x:hidden;padding:14px;display:flex;flex-direction:column;align-items:center;gap:14px;padding-bottom:96px;overscroll-behavior:contain;touch-action:pan-y}
-.pdf-viewer-wrap:fullscreen .pdf-pages{padding-bottom:24px}
-.pdf-page{background:#fff;border:1px solid var(--border-strong);border-radius:6px;box-shadow:var(--shadow);overflow:hidden;line-height:0;max-width:100%}
-.pdf-canvas{display:block;max-width:none}
+.pdf-pages{height: min(68vh, 850px);height:min(68dvh,850px);min-height:0;overflow:auto;padding:14px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;overscroll-behavior:contain}
+.pdf-expanded .pdf-pages{flex:1;height:auto}
+.pdf-page{flex:0 0 auto;max-width:none;background:#fff;box-shadow:var(--shadow);overflow:hidden}
+.pdf-canvas{display:block;width:100%;height:100%}
+.pdf-page{margin-inline:auto}
 .pdf-state{display:flex;flex-direction:column;align-items:center;gap:10px;padding:44px 16px;color:var(--muted);font-size:.8rem;text-align:center}
 .pdf-state.error{color:var(--st-danger-text)}
 .spin{animation:spin 1s linear infinite}
