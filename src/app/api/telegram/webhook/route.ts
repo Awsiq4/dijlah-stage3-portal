@@ -29,7 +29,7 @@ const HELP = `🤖 بوت بوابة طلبة المرحلة الثالثة
 /analytics_off — إيقاف تتبع الاستخدام وحذف سجله
 /analytics_on — تفعيل تتبع الاستخدام من جديد
 
-🔒 الخصوصية: نحفظ معلومات الحساب التي تصلنا من Telegram والشعبة وإعدادات التنبيه وتواريخ النشاط. نسجل فقط نوع التفاعل مع أقسام البوت لتحسين الخدمة وإعداد إحصائيات مجمّعة ولوحة المالك. لا نسجل نصوص الرسائل أو محادثاتك الأخرى. نستخدم سجلًا تحليليًا لآخر 90 يومًا وننظّف السجلات الأقدم دوريًا خلال تشغيل البوت، ويمكن إيقافه وحذف سجله في أي وقت باستخدام /analytics_off.`;
+🔒 الخصوصية: نحفظ معلومات الحساب التي تصلنا من Telegram والشعبة وإعدادات التنبيه وتواريخ النشاط. نسجل فقط نوع التفاعل مع أقسام البوت لتحسين الخدمة وإعداد إحصائيات مجمّعة ولوحة المالك. لا نسجل نصوص المحادثات الدراسية العادية. عند تقديم طلب دعم نحفظ رسائل الطلب والصور المرفقة حتى نتمكن من الرد عليها، وتظهر فقط لصاحب الطلب والمالك. نستخدم سجلًا تحليليًا لآخر 90 يومًا وننظّف السجلات الأقدم دوريًا خلال تشغيل البوت، ويمكن إيقافه وحذف سجله في أي وقت باستخدام /analytics_off.`;
 
 function sectionKeyboard() {
   return {inline_keyboard: SECTIONS.map(s => [{text: `شعبة ${s}`, callback_data: `sec:${s}`}]), one_time_keyboard: true};
@@ -73,7 +73,7 @@ async function handleCommand(chatId: number, text: string, arg: string, from?: {
   if (cmd === "/help") { await sendMessage(chatId, HELP); return; }
   if (cmd === "/privacy") {
     const me = await qOne<{analytics_opt_out: boolean}>(`SELECT analytics_opt_out FROM tg_subscribers WHERE chat_id=$1`, [chatId]);
-    await sendMessage(chatId, "🔒 بياناتك في البوت تشمل اسم حساب Telegram واليوزر والآيدي والشعبة وإعدادات الإشعارات وتواريخ التسجيل والنشاط. نسجل أنواع الأزرار والأقسام المستخدمة فقط، بدون نص الرسائل أو محادثاتك الخاصة. نحتفظ بسجل تفاعل محدود وننظّف الأحداث الأقدم من 90 يومًا دوريًا أثناء تشغيل البوت.\n\nحالة التتبع: " + (me?.analytics_opt_out ? "متوقف" : "مفعّل") + "\n\n/analytics_off — حذف بيانات التفاعل وإيقاف تسجيلها\n/analytics_on — تفعيلها مجددًا.");
+    await sendMessage(chatId, "🔒 بياناتك في البوت تشمل اسم حساب Telegram واليوزر والآيدي والشعبة وإعدادات الإشعارات وتواريخ التسجيل والنشاط. نسجل أنواع الأزرار والأقسام المستخدمة في التحليلات، بدون نص المحادثات الدراسية العادية. عند فتح طلب دعم من الموقع، نحفظ رسائلك وصورك داخل التذكرة لعرضها على المالك والرد عليها. إيقاف التحليلات لا يحذف تذاكر الدعم. نحتفظ بسجل تفاعل محدود وننظّف الأحداث الأقدم من 90 يومًا دوريًا أثناء تشغيل البوت.\n\nحالة التتبع: " + (me?.analytics_opt_out ? "متوقف" : "مفعّل") + "\n\n/analytics_off — حذف بيانات التفاعل وإيقاف تسجيلها\n/analytics_on — تفعيلها مجددًا.");
     return;
   }
   if (cmd === "/analytics_off") {
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
           const reg = await registerUser(Number(message.chat.id), Number(message.from?.id || message.chat.id), message.from?.username, message.from?.first_name, message.from?.last_name, null);
           if (reg.isNew) {
             await notifyOwnerNewUser({...reg, username: message.from?.username, first_name: message.from?.first_name, last_name: message.from?.last_name});
-            await sendMessage(Number(message.chat.id), "🔒 خصوصيتك مهمة: البوت يحتفظ ببيانات حسابك والشعبة ونوع استخدام أقسام البوت لغرض تحسين الخدمة وإحصائيات الإدارة فقط، بدون تخزين نصوص الرسائل. تعرض التحليلات آخر 90 يومًا، ويُنظّف السجل الأقدم دوريًا، ويمكنك إيقافه وحذفه في أي وقت عبر /analytics_off. التفاصيل: /privacy");
+            await sendMessage(Number(message.chat.id), "🔒 خصوصيتك مهمة: البوت يحتفظ ببيانات حسابك والشعبة ونوع استخدام أقسام البوت لغرض تحسين الخدمة وإحصائيات الإدارة فقط، بدون تخزين نصوص المحادثات الدراسية العادية. رسائل الدعم المرسلة من رابط الموقع تُحفظ داخل التذكرة ليتمكن المالك من الرد. تعرض التحليلات آخر 90 يومًا، ويُنظّف السجل الأقدم دوريًا، ويمكنك إيقافه وحذفه في أي وقت عبر /analytics_off. التفاصيل: /privacy");
           }
           await handleNavCallback(Number(message.chat.id), Number(message.from?.id || message.chat.id), "nav:home");
         } else if (admin && (await hasActiveFlow(Number(message.chat.id)))) {
