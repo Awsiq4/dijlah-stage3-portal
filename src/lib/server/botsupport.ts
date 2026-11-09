@@ -343,7 +343,11 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
  if(ownerStatus){
    const id=Number(ownerStatus[1]);
    if(!validTicket(id))return;
-   await changeStatus({owner:true,permissions:[]},id,ownerStatus[2]);
+   const changed=await changeStatus({owner:true,permissions:[]},id,ownerStatus[2]);
+   if(!changed){
+     await sendMessage(chatId,"ℹ️ حالة "+ticketNumber(id)+" محدّثة مسبقاً.",{replyMarkup:ticketButtons(id,true)});
+     return;
+   }
    const recipient=await ticketRecipient(id);
    if(recipient)await queue("status:"+id+":"+ownerStatus[2]+":"+Date.now(),id,recipient,
      "🎫 "+ticketNumber(id)+"\nحالة الطلب: "+statuses[ownerStatus[2]],
