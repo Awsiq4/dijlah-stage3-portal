@@ -316,7 +316,7 @@ async function showOwnerDashboard(chatId:number){
   ]),
  });
 }
-async function showTicket(chatId:number,userId:number,id:number,owner:boolean){
+async function showTicket(chatId:number,userId:number,id:number,owner:boolean,page=0){
  const actor:Actor=owner?{owner:true,permissions:[]}:await telegramActor(userId);
  const data=await getTicket(actor,id);
  const t=data.ticket;
@@ -332,16 +332,27 @@ async function showTicket(chatId:number,userId:number,id:number,owner:boolean){
    "🔢 "+(student?.reg_seq==null?"غير متوفر":"#"+String(student.reg_seq).padStart(6,"0")),
    "🏫 "+(student?.section||t.section||"غير محددة")
  );
- const last=data.messages.filter(m=>!m.internal).slice(-8);
- for(const m of last){
-   lines.push("","— "+(m.sender_type==="student"?"الطالب":"الإدارة")+" · "+displayTime(m.created_at)+" —",m.body.slice(0,550));
+ const history=owner?data.messages:data.messages.filter(m=>!m.internal);
+ const size=4;
+ const safePage=Number.isSafeInteger(page)?Math.min(999,Math.max(0,page)):0;
+ const to=Math.max(0,history.length-safePage*size);
+ const from=Math.max(0,to-size);
+ const visible=history.slice(from,to);
+ lines.push("📜 الرسائل "+(history.length?from+1:0)+"–"+to+" من "+history.length);
+ for(const m of visible){
+   const role=m.sender_type==="internal"?"ملاحظة داخلية":m.sender_type==="student"?"الطالب":"الإدارة";
+   lines.push("","— "+role+" · "+displayTime(m.created_at)+" —",m.body.slice(0,650));
  }
- if(data.messages.filter(m=>!m.internal).length>8)lines.push("… عرضت آخر 8 رسائل فقط.");
  const media=await q<{id:string}>(`SELECT a.id FROM support_attachments a
    JOIN support_messages m ON m.id=a.message_id
    WHERE m.ticket_id=$1 AND a.telegram_file_id IS NOT NULL
    ORDER BY m.id DESC LIMIT 3`,[id]);
  const kb=ticketButtons(id,owner,t.status==="closed"||t.status==="resolved").inline_keyboard;
+ const controls:Array<{text:string;callback_data:string}>=[];
+ const prefix="sup:"+(owner?"o":"s")+":history:"+id+":";
+ if(from>0)controls.push({text:"⬅️ الرسائل الأقدم",callback_data:prefix+(safePage+1)});
+ if(safePage>0)controls.push({text:"الأحدث ➡️",callback_data:prefix+(safePage-1)});
+ if(controls.length)kb.unshift(controls);
  if(media.length)kb.unshift(...media.map((row,i)=>[{text:"🖼️ عرض صورة "+(i+1),callback_data:"sup:f:"+row.id}]));
  await sendMessage(chatId,lines.join("\n").slice(0,3800),{replyMarkup:buttons(kb)});
 }
@@ -383,6 +394,14 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
      "🎫 "+ticketNumber(id)+"\nحالة الطلب: "+statuses[ownerStatus[2]],
      ticketButtons(id,false,["closed","resolved"].includes(ownerStatus[2])));
    await sendMessage(chatId,"✅ تم تحديث حالة "+ticketNumber(id)+".",{replyMarkup:ticketButtons(id,true)});
+   return;
+ }
+ const historyMatch=/^sup:(o|s):history:([0-9]{1,12}):([0-9]{1,3})$/.exec(data);
+ if(historyMatch){
+   const owner=historyMatch[1]==="o";
+   if(owner&&!isBotOwner(userId))return;
+   const id=Number(historyMatch[2]),page=Number(historyMatch[3]);
+   if(validTicket(id))await showTicket(chatId,userId,id,owner,page);
    return;
  }
  const idMatch=/^sup:(o:open|o:reply|s:open|s:reply|s:reopen):([0-9]{1,12})$/.exec(data);
