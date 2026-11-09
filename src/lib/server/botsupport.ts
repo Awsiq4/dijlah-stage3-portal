@@ -300,33 +300,45 @@ async function showOwnerDashboard(chatId:number){
   ]),
  });
 }
-async function showTicket(chatId:number,userId:number,id:number,owner:boolean){
+async function showTicket(chatId:number,userId:number,id:number,owner:boolean,requestedPage=0){
  const actor:Actor=owner?{owner:true,permissions:[]}:await telegramActor(userId);
  const data=await getTicket(actor,id);
- const t=data.ticket;
- const student=data.studentProfile;
- const lines=[
-  "🎫 "+ticketNumber(id)+" · "+(statuses[t.status]||t.status),
+ const t=data.ticket,student=data.studentProfile;
+ const messages=data.messages.filter(m=>owner||!m.internal);
+ const perPage=4,totalPages=Math.max(1,Math.ceil(messages.length/perPage));
+ const page=Number.isSafeInteger(requestedPage)?Math.max(0,Math.min(999,requestedPage,totalPages-1)):0;
+ const part=messages.slice(Math.max(0,messages.length-(page+1)*perPage),messages.length-page*perPage);
+ const lines=["🎫 "+ticketNumber(id)+" · "+(statuses[t.status]||t.status),
   "📂 "+(categories[t.category]||"طلب دعم"),
- ];
+  "💬 المحادثة: صفحة "+(page+1)+"/"+totalPages+" ("+messages.length+" رسالة)"];
  if(owner)lines.push(
-   "👤 "+(student?[student.first_name,student.last_name].filter(Boolean).join(" ")||"غير متوفر":"زائر غير معروف"),
-   "🔗 "+(student?.username?"@"+safeName(student.username):"غير متوفر"),
-   "🆔 "+(student?.telegram_id||"غير مرتبط"),
-   "🔢 "+(student?.reg_seq==null?"غير متوفر":"#"+String(student.reg_seq).padStart(6,"0")),
-   "🏫 "+(student?.section||t.section||"غير محددة")
+  "👤 "+(student?[student.first_name,student.last_name].filter(Boolean).join(" ")||"غير متوفر":"زائر غير معروف"),
+  "🔗 "+(student?.username?"@"+safeName(student.username):"غير متوفر"),
+  "🆔 "+(student?.telegram_id||"غير مرتبط"),
+  "🔢 "+(student?.reg_seq==null?"غير متوفر":"#"+String(student.reg_seq).padStart(6,"0")),
+  "🏫 "+(student?.section||t.section||"غير محددة")
  );
- const last=data.messages.filter(m=>!m.internal).slice(-8);
- for(const m of last){
-   lines.push("","— "+(m.sender_type==="student"?"الطالب":"الإدارة")+" · "+displayTime(m.created_at)+" —",m.body.slice(0,550));
- }
- if(data.messages.filter(m=>!m.internal).length>8)lines.push("… عرضت آخر 8 رسائل فقط.");
- const media=await q<{id:string}>(`SELECT a.id FROM support_attachments a
-   JOIN support_messages m ON m.id=a.message_id
-   WHERE m.ticket_id=$1 AND a.telegram_file_id IS NOT NULL
-   ORDER BY m.id DESC LIMIT 3`,[id]);
  const kb=ticketButtons(id,owner,t.status==="closed"||t.status==="resolved").inline_keyboard;
- if(media.length)kb.unshift(...media.map((row,i)=>[{text:"🖼️ عرض صورة "+(i+1),callback_data:"sup:f:"+row.id}]));
+ const historyButtons:Array<{text:string;callback_data:string}>=[];
+ const historyPrefix=owner?"sup:o:history:":"sup:s:history:";
+ if(page+1<totalPages)historyButtons.push({text:"⬅️ رسائل أقدم",callback_data:historyPrefix+id+":"+(page+1)});
+ if(page>0)historyButtons.push({text:"رسائل أحدث ➡️",callback_data:historyPrefix+id+":"+(page-1)});
+ if(historyButtons.length)kb.unshift(historyButtons);
+ const first=part[0]?.id||0,last=part.at(-1)?.id||0;
+ if(first&&last){
+  const media=await q<{id:string;message_id:number}>(`SELECT a.id,a.message_id FROM support_attachments a
+    JOIN support_messages m ON m.id=a.message_id
+    WHERE m.ticket_id=$1 AND m.id BETWEEN $2 AND $3 AND a.telegram_file_id IS NOT NULL
+    ORDER BY m.id DESC LIMIT 6`,[id,first,last]);
+  for(const item of media){kb.unshift([{text:"🖼️ صورة الرسالة #"+item.message_id,callback_data:"sup:f:"+item.id}]);}
+ }
+ for(const m of part){
+  lines.push("","— "+(m.internal?"🔒 ملاحظة داخلية":m.sender_type==="student"?"الطالب":"الإدارة")+" · "+displayTime(m.created_at)+" —",
+    m.body.slice(0,650)+(m.body.length>650?"…":""));
+  if(m.body.length>650){
+   kb.unshift([{text:"📄 عرض نص الرسالة #"+m.id,callback_data:(owner?"sup:o:message:":"sup:s:message:")+id+":"+m.id}]);
+  }
+ }
  await sendMessage(chatId,lines.join("\n").slice(0,3800),{replyMarkup:buttons(kb)});
 }
 export async function handleSupportCallback(chatId:number,userId:number,data:string){
