@@ -28,6 +28,14 @@ export async function adminActor(admin:AdminRow|null):Promise<Actor> {
  const grants=await qOne<{permissions:string[]}>(`SELECT permissions FROM support_grants WHERE admin_id=$1`,[admin.id]);
  return {owner:admin.role==='super_admin' && admin.is_active===true,adminId:admin.id,permissions:grants?.permissions||[]};
 }
+// Identity comes exclusively from Telegram's authenticated webhook sender (not from the website).
+export async function telegramActor(userId:number):Promise<Actor> {
+ if(!Number.isSafeInteger(userId)||userId<=0)throw new SupportError('معرّف Telegram غير صالح.',400);
+ const row=await qOne<{id:string}>(`INSERT INTO support_identities(id,telegram_id)
+   VALUES($1,$2) ON CONFLICT(telegram_id) DO UPDATE
+   SET telegram_id=EXCLUDED.telegram_id RETURNING id`,[randomUUID(),userId]);
+ return {identity:row!.id,telegramId:userId,owner:false,permissions:[]};
+}
 export async function anonymousIdentity(secret:string) {
  const digest=hash(secret);
  const linked=await qOne<{identity_id:string}>(`SELECT identity_id FROM support_browser_links WHERE secret_hash=$1`,[digest]);
@@ -83,11 +91,11 @@ async function addMessage(db:Queryer,a:Actor,id:number,body:string,key:string,in
  if(m&&file&&bytes)await db.q(`INSERT INTO support_attachments(id,message_id,name,mime,bytes) VALUES($1,$2,$3,$4,$5)`,[randomUUID(),m.id,file.name.replace(/[\r\n"/\\]/g,'_').slice(0,100),file.mime,bytes]);
  return m;
 }
-export async function createTicket(a:Actor,input:{category:string;subject:string;body:string;section?:string;key:string;file?:Attachment;source:'web'}) {
+export async function createTicket(a:Actor,input:{category:string;subject:string;body:string;section?:string;key:string;file?:Attachment;source:'web'|'telegram'}) {
  if(!a.identity)throw new SupportError('أعد فتح صفحة الدعم.',401);
  const subject=text(input.subject,3,160),body=text(input.body,3,3000),key=text(input.key,8,100);
  if(!categories[input.category])throw new SupportError('اختر نوع الطلب.');
- if(input.source!=='web')throw new SupportError('طلبات الدعم متاحة عبر الموقع فقط.');
+ if(input.source!=='web' && (input.source!=='telegram'||!a.telegramId))throw new SupportError('مصدر الطلب غير موثوق.',403);
  if(input.file)validateAttachment(input.file);
  const section=['A','B','C','F'].includes(input.section||'')?input.section:null;
  const old=await qOne<{id:number}>(`SELECT id FROM support_tickets WHERE identity_id=$1 AND request_key=$2`,[a.identity,key]);if(old)return old;

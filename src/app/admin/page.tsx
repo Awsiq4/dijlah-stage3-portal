@@ -1,7 +1,6 @@
 "use client";
 import React,{useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import Link from "next/link";
 import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogOut,ShieldCheck,Database,Send,Pencil,Plus,Trash2,X,GraduationCap,Users} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./workspace";
@@ -110,7 +109,6 @@ export default function AdminDashboard(){
   const [editing, setEditing] = useState<Row | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [pendingSupport,setPendingSupport] = useState<number|null>(null);
 
   const loadTab = useCallback((t: TabId) => {
     if (t === "users" || t === "tgcenter" || t === "audit") return;
@@ -130,17 +128,6 @@ export default function AdminDashboard(){
   }, [router]);
 
   useEffect(() => { if (me?.authenticated) loadTab(tab); }, [me, tab, loadTab]);
-  useEffect(() => {
-    if (!me?.authenticated || me.role !== "super_admin") return;
-    let active=true;
-    const update=()=>fetch("/api/support?inbox=pending",{cache:"no-store"})
-      .then(r=>r.ok?r.json():null)
-      .then(data=>{if(active&&data?.inboxCounts)setPendingSupport(Number(data.inboxCounts.pending)||0);})
-      .catch(()=>undefined);
-    void update();
-    const handle=setInterval(update,60_000);
-    return ()=>{active=false;clearInterval(handle);};
-  },[me?.authenticated,me?.role]);
 
   const logout = async () => {
     await fetch("/api/admin/logout", {method: "POST", headers: WRITE_HEADERS});
@@ -194,7 +181,7 @@ export default function AdminDashboard(){
 
   return <>
     <PageHeading title="لوحة الإدارة" description={`${me.email} · ${me.role}`} action={<button className="action-button secondary" onClick={logout}><LogOut size={16}/> خروج</button>}/>
-    {me.role === "super_admin" && <div style={{marginBottom:16}}><Link href="/support" className="action-button"><FileQuestion size={16}/> 🎫 إدارة الدعم والاقتراحات{pendingSupport!==null&&<span aria-live="polite" style={{marginInlineStart:8,borderRadius:20,background:"var(--surface2)",color:"var(--text)",padding:"3px 9px",fontSize:12}}>بانتظار ردك: {pendingSupport}</span>}</Link></div>}
+    {me.role === "super_admin" && <div className="note" style={{marginBottom:16}}>🎫 إدارة طلبات الدعم والردود صارت داخل <strong>👑 لوحة المالك في بوت Telegram</strong> حصراً.</div>}
     <div className="tabs admin-tabs">
       {tabs.map(t => <button key={t.id} className={tab === t.id ? "selected" : ""} onClick={() => { setTab(t.id); cancelEdit(); }}><t.Icon size={15}/> {t.label}</button>)}
     </div>
