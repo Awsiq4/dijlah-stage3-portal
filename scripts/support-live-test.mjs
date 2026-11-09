@@ -18,6 +18,8 @@ if(memory){
 }
 const sql=readFileSync(new URL('../database/support.sql',import.meta.url),'utf8');
 for(let i=0;i<(memory?1:2);i++)for(const part of sql.split(';').map(s=>s.trim()).filter(Boolean))await q(part);
+const experienceSql=readFileSync(new URL('../database/support-experience.sql',import.meta.url),'utf8');
+for(let i=0;i<(memory?1:2);i++)for(const part of experienceSql.split(';').map(s=>s.trim()).filter(Boolean))await q(part);
 let passed=0;const ok=(v,label)=>{assert.ok(v,label);passed++;console.log('PASS '+label);};
 const owner={owner:true,permissions:[]},key=randomUUID();
 const identity=await S.anonymousIdentity(randomUUID());const student={owner:false,permissions:[],identity};
@@ -28,6 +30,9 @@ ok(t.id>0,'web ticket created');
 ok((await S.createTicket(student,{category:'problem',subject:'TEST repeat',body:'duplicate',key,source:'web'})).id===t.id,'idempotent creation');
 await assert.rejects(()=>S.getTicket(outsider,t.id));passed++;console.log('PASS anonymous IDOR denied');
 let detail=await S.getTicket(student,t.id);ok(detail.messages.length===1,'one initial message');
+const initialSeen=await qOne('SELECT last_read_id FROM support_read_states WHERE ticket_id=$1 AND reader_key=$2',
+ [t.id,'student:'+identity]);
+ok(Number(initialSeen?.last_read_id)>0,'opening a ticket marks it seen for the visitor');
 ok(detail.attachments.length===1,'attachment saved');
 await assert.rejects(()=>S.attachment(outsider,detail.attachments[0].id));passed++;
 ok((await S.attachment(student,detail.attachments[0].id)).bytes.length>0,'attachment ownership');
@@ -67,6 +72,14 @@ ok(knownOwnerDetail.studentProfile?.telegram_id==='88776655','correct Telegram I
 ok(knownOwnerDetail.studentProfile?.username==='teststudent','Telegram username shown only to support');
 ok(knownOwnerDetail.studentProfile?.section==='B','academic section is inherited only from the verified Telegram account');
 ok(!('studentProfile' in await S.getTicket(knownStudent,knownTicket.id)),'verified Telegram metadata stays private to staff');
+const recoveryCode=await S.issueRecoveryCode(student);
+ok(/^[a-f0-9]{64}$/.test(recoveryCode),'recovery code is cryptographically random and copyable');
+const newBrowserSecret=randomUUID();
+const newBrowserIdentity=await S.anonymousIdentity(newBrowserSecret);
+await S.recoverBrowserIdentity(newBrowserIdentity,newBrowserSecret,recoveryCode);
+ok(await S.anonymousIdentity(newBrowserSecret)===identity,'website-only recovery restores prior student tickets');
+await assert.rejects(()=>S.recoverBrowserIdentity(newBrowserIdentity,newBrowserSecret,recoveryCode));passed++;
+console.log('PASS recovery code cannot be reused');
 
 await q("INSERT INTO portal_admins(id,name,email,role,status,is_active) VALUES(1,'Site Owner','owner@example.test','super_admin','active',true)");
 const siteOwner=await S.adminActor({id:1,email:'owner@example.test',role:'super_admin',is_active:true});
