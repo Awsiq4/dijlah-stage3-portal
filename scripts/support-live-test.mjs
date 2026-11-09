@@ -162,7 +162,7 @@ try{
  ok(siteTicket?.category==='idea'&&siteTicket?.source==='telegram'&&Number(siteTicket?.telegram_id)===88776655,
    'site category and authenticated Telegram sender are retained');
  const newTicketAlert=await qOne("SELECT recipient,text FROM support_jobs WHERE event_key=$1",["new:"+siteTicket.id]);
- ok(Number(newTicketAlert?.recipient)===999999999&&newTicketAlert?.text.includes("رقم التسجيل"),
+ ok(Number(newTicketAlert?.recipient)===999999999&&newTicketAlert?.text.includes("تسلسله بالبوت"),
    'owner gets a durable new-ticket notification including sender identity');
  const sender=await S.telegramActor(88776655);
  await B.clearSupportDraft(88776655); // /start cancels only the typing state.
