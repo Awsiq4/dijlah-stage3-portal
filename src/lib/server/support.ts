@@ -169,6 +169,7 @@ export async function listTickets(a:Actor,filters:Record<string,string>={}) {
  const {lastSender,inbox}=supportInboxSql();
  for(const k of ['category','status','priority'])if(filters[k])add(`t.${k}=?`,filters[k]);
  if(filters.section&&['A','B','C','F'].includes(filters.section))add('COALESCE(t.section,s.section)=?',filters.section);
+ if(staff&&filters.section==='NA')conditions.push('COALESCE(t.section,s.section) IS NULL');
  if(filters.from&&/^\d{4}-\d{2}-\d{2}$/.test(filters.from))add('t.created_at>=?::date',filters.from);
  if(filters.to&&/^\d{4}-\d{2}-\d{2}$/.test(filters.to))add("t.created_at < ?::date + interval '1 day'",filters.to);
  if(filters.q){
