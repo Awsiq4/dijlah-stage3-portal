@@ -248,11 +248,29 @@ export default function SupportPage() {
         <textarea id="support-message" rows={4} required minLength={3} maxLength={3000}
           value={message} disabled={busy} onChange={event => setMessage(event.target.value)}
           placeholder="اكتب رسالتك هنا..." />
+        <details className="sup-tools sup-attachment">
+          <summary>📎 إرفاق صورة (اختياري)</summary>
+          <input type="file" accept="image/jpeg,image/png" aria-label="صورة توضح المشكلة"
+            disabled={busy} onChange={event => setAttachment(event.target.files?.[0] || null)}/>
+          <small>JPG أو PNG — أقل من 2MB</small>
+          {attachment && <button type="button" onClick={()=>setAttachment(null)}>إزالة الصورة</button>}
+        </details>
         <button type="submit" className="sup-primary sup-submit" disabled={busy || message.trim().length<3}>
           {busy ? "جارٍ الإرسال..." : "إرسال الطلب"}
         </button>
       </form>}
 
+      {staff && <div className="sup-inbox-tabs" role="group" aria-label="تصنيف طلبات الدعم">
+        {([
+          {key:"pending" as const,label:"بانتظار ردي",count:inboxCounts.pending},
+          {key:"waiting" as const,label:"بانتظار الطالب",count:inboxCounts.waiting},
+          {key:"done" as const,label:"مكتملة",count:inboxCounts.done},
+        ]).map(item=><button key={item.key} type="button"
+           aria-pressed={inbox===item.key} className={inbox===item.key?"active":""}
+           disabled={busy} onClick={()=>void run(()=>changeInbox(item.key))}>
+          {item.label}<span>{item.count}</span>
+        </button>)}
+      </div>}
       {staff && <div className="sup-staff-controls">
         <details className="sup-tools">
           <summary>بحث وتصفية</summary>
@@ -282,10 +300,10 @@ export default function SupportPage() {
 
       <div className="sup-requests">
         <div className="sup-requests-header">
-          <h2>{staff ? "طلبات الطلاب" : "طلباتي"}</h2>
+          <h2>{staff ? ({pending:"تنتظر رد الإدارة",waiting:"بانتظار الطالب",done:"الطلبات المكتملة"} as const)[inbox] : "طلباتي"}</h2>
           <span>{total}</span>
         </div>
-        {!busy && rows.length===0 && <p className="sup-empty">ماكو طلبات حالياً.</p>}
+        {!busy && rows.length===0 && <p className="sup-empty">{staff?"ماكو طلبات بهذا القسم.":"ما عندك طلبات بعد."}</p>}
         <div className="sup-list">
           {rows.map(ticket => <button type="button" className="sup-ticket" key={ticket.id}
             onClick={() => void run(() => openTicket(ticket.id))}>
@@ -295,10 +313,13 @@ export default function SupportPage() {
               {staff && <small>👤 {ticket.first_name
                 ? [ticket.first_name,ticket.last_name].filter(Boolean).join(" ")
                 : ticket.telegram_id ? "حساب Telegram مرتبط" : "زائر غير معروف"}
-                {ticket.section || ticket.section_from_telegram ? " · شعبة " + (ticket.section || ticket.section_from_telegram) : ""}</small>}
+                {ticket.effective_section ? " · شعبة " + ticket.effective_section : ""}</small>}
             </span>
-            <span className={"sup-status " + (ticket.last_sender_type === "admin" ? "answered" : ticket.status)}>
-              {statusLabel(ticket.status, staff, ticket.last_sender_type)}
+            <span className="sup-ticket-badges">
+              {ticket.has_unread && <span className="sup-unread">{staff?"رد جديد":"رد الإدارة جديد"}</span>}
+              <span className={"sup-status " + (ticket.last_sender_type === "admin" ? "answered" : ticket.status)}>
+                {statusLabel(ticket.status, staff, ticket.last_sender_type)}
+              </span>
             </span>
           </button>)}
         </div>
@@ -308,7 +329,21 @@ export default function SupportPage() {
           <button disabled={busy || (page+1)*10>=total} onClick={() => void run(()=>load(page+1))}>التالي</button>
         </div>}
       </div>
-      {!staff && <p className="sup-hint">الردود تظهر هنا من نفس المتصفح. احتفظ ببيانات متصفحك حتى تگدر ترجع لطلباتك.</p>}
+      {!staff && <details className="sup-tools sup-recovery">
+        <summary>🔐 الاحتفاظ بطلباتي لو غيّرت الجهاز</summary>
+        <p className="sup-hint">تگدر تحفظ رمز استعادة خاص بالموقع. ما يحتاج Telegram أو تسجيل دخول.</p>
+        <button disabled={busy} type="button" onClick={()=>void run(issueRecovery)}>إنشاء رمز استعادة</button>
+        {recoveryCode && <div className="sup-recovery-token">
+          <code dir="ltr">{recoveryCode}</code>
+          <button type="button" onClick={()=>void navigator.clipboard.writeText(recoveryCode)}>نسخ الرمز</button>
+          <small>احفظه بمكان آمن. الرمز صالح مرة واحدة، وإنشاء رمز جديد يلغي السابق.</small>
+        </div>}
+        <div className="sup-recovery-form">
+          <input aria-label="رمز الاستعادة" autoComplete="off" dir="ltr" placeholder="عندك رمز قديم؟ الصقه هنا"
+            value={enterCode} onChange={event=>setEnterCode(event.target.value)}/>
+          <button type="button" disabled={busy||!enterCode.trim()} onClick={()=>void run(recover)}>استعادة طلباتي</button>
+        </div>
+      </details>}
     </>}
 
     {view === "ticket" && detail && <div className="sup-detail">
