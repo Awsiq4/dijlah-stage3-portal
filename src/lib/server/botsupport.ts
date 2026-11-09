@@ -39,9 +39,9 @@ const ticketButtons=(id:number,owner:boolean,closed=false):SupportKeyboard=>butt
 const listBack=(owner:boolean)=>buttons([[{text:owner?"🎫 إدارة الدعم":"📋 طلباتي",callback_data:owner?"sup:o:home":"sup:s:list:0"}]]);
 async function putDraft(chatId:number,data:Draft,minutes=45){
  await q(`INSERT INTO support_drafts(chat_id,data,expires_at)
-   VALUES($1,$2,now()+($3||' minutes')::interval)
+   VALUES($1,$2,$3)
    ON CONFLICT(chat_id) DO UPDATE SET data=EXCLUDED.data,expires_at=EXCLUDED.expires_at`,
-   [chatId,JSON.stringify(data),String(minutes)]);
+   [chatId,JSON.stringify(data),new Date(Date.now()+minutes*60000)]);
 }
 async function currentDraft(chatId:number):Promise<Draft|null>{
  const row=await qOne<{data:Draft|string}>(`SELECT data FROM support_drafts
