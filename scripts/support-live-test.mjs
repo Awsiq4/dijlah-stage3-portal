@@ -94,13 +94,17 @@ const testPool=(await import('../src/lib/server/db.ts')).getPool();
 const queryOriginal=testPool.query.bind(testPool);
 const seenPages=[];
 testPool.query=async (sql,params=[])=>{
-  if (String(sql).includes('ORDER BY t.updated_at DESC,t.id DESC LIMIT')) {
+  if (/ORDER BY t\.updated_at DESC,t\.id DESC\s+LIMIT/.test(String(sql))) {
     const placeholders=[...String(sql).matchAll(/\$(\d+)/g)].map(match=>Number(match[1]));
     assert.equal(Math.max(...placeholders),params.length,'PostgreSQL bind argument count matches placeholders');
     assert.equal(params.at(-2),10,'page size parameter included');
     assert.equal(params.at(-1),10,'page offset bound for requested second page');
     seenPages.push(params.length);
     return {rows:[]};
+  }
+  if(String(sql).includes("AS pending") && String(sql).includes("AS waiting")
+      && String(sql).includes("FROM support_tickets t")){
+    return {rows:[{pending:1,waiting:1,done:1}]};
   }
   return queryOriginal(sql,params);
 };
