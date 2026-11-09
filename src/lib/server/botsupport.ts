@@ -159,8 +159,8 @@ async function newOwnerNotification(id:number,category:string,body:string,mediaF
   "🔢 تسلسله بالبوت: "+(row?.reg_seq==null?"غير متوفر":"#"+String(row.reg_seq).padStart(6,"0")),
   "🏫 الشعبة: "+(row?.section||"غير محددة"),
   "📂 النوع: "+(categories[category]||"الدعم"),
-  "📝 الرسالة: "+body.slice(0,700),
   "📅 وقت الإرسال: "+displayTime(row?.created_at||new Date()),
+  "📝 الرسالة: "+body.slice(0,mediaFileId?360:700),
  ].join("\n");
  const keys=buttons([
   [{text:"💬 الرد",callback_data:"sup:o:reply:"+id}],
@@ -273,20 +273,50 @@ async function showOwnerList(chatId:number,group:string,page:number,search=""){
    (search?"🔍 نتائج البحث":group==="pending"?"📥 بانتظار ردّك":group==="waiting"?"💬 بانتظار الطالب":"✅ الطلبات المكتملة")+
    " — "+data.total+" طلب", {replyMarkup:buttons(items)});
 }
+async function showOwnerFilterList(chatId:number,kind:"section"|"category",value:string,page:number){
+ if(!Number.isSafeInteger(page)||page<0||page>999)return;
+ if(kind==="section"&&!["A","B","C","F","NA"].includes(value))return;
+ if(kind==="category"&&!Object.hasOwn(categories,value))return;
+ const data=await listTickets({owner:true,permissions:[]},{[kind]:value,page:String(page)});
+ const title=kind==="section"?(value==="NA"?"بدون شعبة":"شعبة "+value):categories[value];
+ const rows=data.rows.map(t=>[{text:ticketNumber(t.id)+" · "+
+   safeName([t.first_name,t.last_name].filter(Boolean).join(" ")||t.username||"طالب"),
+   callback_data:"sup:o:open:"+t.id}]);
+ const nav:Array<{text:string;callback_data:string}>=[];
+ if(page>0)nav.push({text:"⬅️",callback_data:"sup:o:filter:"+kind+":"+value+":"+(page-1)});
+ if((page+1)*10<data.total)nav.push({text:"➡️",callback_data:"sup:o:filter:"+kind+":"+value+":"+(page+1)});
+ if(nav.length)rows.push(nav);
+ rows.push([{text:"⬅️ اختيار آخر",callback_data:"sup:o:choose:"+kind}]);
+ await sendMessage(chatId,"📋 "+title+" — "+data.total+" طلب",{replyMarkup:buttons(rows)});
+}
+async function showOwnerFilterChoices(chatId:number,kind:"section"|"category"){
+ const options=kind==="section"
+   ?[...["A","B","C","F"].map(v=>({value:v,label:"شعبة "+v})),{value:"NA",label:"بدون شعبة"}]
+   :Object.entries(categories).map(([value,label])=>({value,label}));
+ await sendMessage(chatId,kind==="section"?"🏫 اختر الشعبة:":"📂 اختر نوع الطلب:",{
+   replyMarkup:buttons([
+    ...options.map(x=>[{text:x.label,callback_data:"sup:o:filter:"+kind+":"+x.value+":0"}]),
+    [{text:"🎫 لوحة الدعم",callback_data:"sup:o:home"}],
+   ]),
+ });
+}
 async function showOwnerDashboard(chatId:number){
  const r=await listTickets({owner:true,permissions:[]},{inbox:"pending",page:"0"});
  const counts=r.inboxCounts||{pending:0,waiting:0,done:0};
- await sendMessage(chatId,"🎫 إدارة الدعم\nاختر القسم:",{
+ const fresh=await qOne<{n:number}>("SELECT count(*)::int AS n FROM support_tickets WHERE status='new'");
+ await sendMessage(chatId,"🎫 إدارة الدعم\n🆕 الطلبات الجديدة: "+(fresh?.n||0)+"\nاختر القسم:",{
   replyMarkup:buttons([
    [{text:"📥 بانتظار ردي ("+counts.pending+")",callback_data:"sup:o:list:pending:0"}],
    [{text:"💬 بانتظار الطالب ("+counts.waiting+")",callback_data:"sup:o:list:waiting:0"}],
    [{text:"✅ المكتملة ("+counts.done+")",callback_data:"sup:o:list:done:0"}],
+   [{text:"🏫 حسب الشعبة",callback_data:"sup:o:choose:section"},
+    {text:"📂 حسب النوع",callback_data:"sup:o:choose:category"}],
    [{text:"🔍 البحث عن طلب",callback_data:"sup:o:search"}],
    [{text:"👑 لوحة المالك",callback_data:"own:home"}],
   ]),
  });
 }
-async function showTicket(chatId:number,userId:number,id:number,owner:boolean){
+async function showTicket(chatId:number,userId:number,id:number,owner:boolean,page=0){
  const actor:Actor=owner?{owner:true,permissions:[]}:await telegramActor(userId);
  const data=await getTicket(actor,id);
  const t=data.ticket;
@@ -302,16 +332,27 @@ async function showTicket(chatId:number,userId:number,id:number,owner:boolean){
    "🔢 "+(student?.reg_seq==null?"غير متوفر":"#"+String(student.reg_seq).padStart(6,"0")),
    "🏫 "+(student?.section||t.section||"غير محددة")
  );
- const last=data.messages.filter(m=>!m.internal).slice(-8);
- for(const m of last){
-   lines.push("","— "+(m.sender_type==="student"?"الطالب":"الإدارة")+" · "+displayTime(m.created_at)+" —",m.body.slice(0,550));
+ const history=owner?data.messages:data.messages.filter(m=>!m.internal);
+ const size=4;
+ const safePage=Number.isSafeInteger(page)?Math.min(999,Math.max(0,page)):0;
+ const to=Math.max(0,history.length-safePage*size);
+ const from=Math.max(0,to-size);
+ const visible=history.slice(from,to);
+ lines.push("📜 الرسائل "+(history.length?from+1:0)+"–"+to+" من "+history.length);
+ for(const m of visible){
+   const role=m.sender_type==="internal"?"ملاحظة داخلية":m.sender_type==="student"?"الطالب":"الإدارة";
+   lines.push("","— "+role+" · "+displayTime(m.created_at)+" —",m.body.slice(0,650));
  }
- if(data.messages.filter(m=>!m.internal).length>8)lines.push("… عرضت آخر 8 رسائل فقط.");
  const media=await q<{id:string}>(`SELECT a.id FROM support_attachments a
    JOIN support_messages m ON m.id=a.message_id
    WHERE m.ticket_id=$1 AND a.telegram_file_id IS NOT NULL
    ORDER BY m.id DESC LIMIT 3`,[id]);
  const kb=ticketButtons(id,owner,t.status==="closed"||t.status==="resolved").inline_keyboard;
+ const controls:Array<{text:string;callback_data:string}>=[];
+ const prefix="sup:"+(owner?"o":"s")+":history:"+id+":";
+ if(from>0)controls.push({text:"⬅️ الرسائل الأقدم",callback_data:prefix+(safePage+1)});
+ if(safePage>0)controls.push({text:"الأحدث ➡️",callback_data:prefix+(safePage-1)});
+ if(controls.length)kb.unshift(controls);
  if(media.length)kb.unshift(...media.map((row,i)=>[{text:"🖼️ عرض صورة "+(i+1),callback_data:"sup:f:"+row.id}]));
  await sendMessage(chatId,lines.join("\n").slice(0,3800),{replyMarkup:buttons(kb)});
 }
@@ -330,6 +371,10 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
    return;
  }
  if(data==="sup:o:home"){await showOwnerDashboard(chatId);return;}
+ const filterChoices=/^sup:o:choose:(section|category)$/.exec(data);
+ if(filterChoices){await showOwnerFilterChoices(chatId,filterChoices[1] as "section"|"category");return;}
+ const filterList=/^sup:o:filter:(section|category):([A-Za-z_]{1,15}):([0-9]{1,3})$/.exec(data);
+ if(filterList){await showOwnerFilterList(chatId,filterList[1] as "section"|"category",filterList[2],Number(filterList[3]));return;}
  if(data==="sup:o:search"){
    await putDraft(chatId,{mode:"owner_search"},20);
    await sendMessage(chatId,"🔍 اكتب اسم الطالب أو يوزره أو رقم التذكرة:",{replyMarkup:cancelButtons()});
@@ -349,6 +394,14 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
      "🎫 "+ticketNumber(id)+"\nحالة الطلب: "+statuses[ownerStatus[2]],
      ticketButtons(id,false,["closed","resolved"].includes(ownerStatus[2])));
    await sendMessage(chatId,"✅ تم تحديث حالة "+ticketNumber(id)+".",{replyMarkup:ticketButtons(id,true)});
+   return;
+ }
+ const historyMatch=/^sup:(o|s):history:([0-9]{1,12}):([0-9]{1,3})$/.exec(data);
+ if(historyMatch){
+   const owner=historyMatch[1]==="o";
+   if(owner&&!isBotOwner(userId))return;
+   const id=Number(historyMatch[2]),page=Number(historyMatch[3]);
+   if(validTicket(id))await showTicket(chatId,userId,id,owner,page);
    return;
  }
  const idMatch=/^sup:(o:open|o:reply|s:open|s:reply|s:reopen):([0-9]{1,12})$/.exec(data);
