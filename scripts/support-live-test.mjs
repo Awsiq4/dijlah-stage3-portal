@@ -8,18 +8,25 @@ console.log(memory?'Using isolated in-memory PostgreSQL emulation':'Provide isol
 let url='postgres://test';
 if(!memory){const rl=createInterface({input:process.stdin});[url]=await new Promise(resolve=>rl.once('line',l=>resolve([l])));rl.close();}
 process.env.DATABASE_URL=url; process.env.SESSION_SECRET='isolated-support-test';
+process.env.BOT_OWNER_ID='999999999'; process.env.TELEGRAM_BOT_TOKEN='mock-test-token';
+process.env.TELEGRAM_BOT_USERNAME='test_portal_bot'; process.env.TELEGRAM_BOT_ENABLED='true';
 const {q,qOne}=await import('../src/lib/server/db.ts');
 const S=await import('../src/lib/server/support.ts');
 if(memory){
  const {newDb,DataType}=await import('pg-mem'); const mem=newDb();
  mem.public.registerFunction({name:'octet_length',args:[DataType.bytea],returns:DataType.integer,implementation:b=>b.length});
  const {Pool}=mem.adapters.createPg(); (await import('../src/lib/server/db.ts')).setPoolForTests(new Pool());
- await q(`CREATE TABLE portal_admins(id BIGSERIAL PRIMARY KEY,name TEXT,email TEXT,role TEXT,status TEXT,is_active BOOLEAN,assigned_section TEXT,assigned_subjects JSONB,perms JSONB);CREATE TABLE portal_telegram_links(id BIGSERIAL PRIMARY KEY,admin_id BIGINT,telegram_user_id BIGINT,revoked_at TIMESTAMPTZ);CREATE TABLE tg_subscribers(chat_id BIGINT PRIMARY KEY,first_name TEXT,last_name TEXT,username TEXT,reg_seq BIGINT,section TEXT,role TEXT,status TEXT,registered_at TIMESTAMPTZ);CREATE TABLE portal_login_attempts(key TEXT PRIMARY KEY,count INTEGER,reset_at TIMESTAMPTZ);`);
+ await q(`CREATE TABLE portal_admins(id BIGSERIAL PRIMARY KEY,name TEXT,email TEXT,role TEXT,status TEXT,is_active BOOLEAN,assigned_section TEXT,assigned_subjects JSONB,perms JSONB);CREATE TABLE portal_telegram_links(id BIGSERIAL PRIMARY KEY,admin_id BIGINT,telegram_user_id BIGINT,revoked_at TIMESTAMPTZ);CREATE SEQUENCE tg_reg_seq START 10;
+CREATE TABLE tg_subscribers(chat_id BIGINT PRIMARY KEY,user_id BIGINT,first_name TEXT,last_name TEXT,username TEXT,reg_seq BIGINT,section TEXT,role TEXT,status TEXT,registered_at TIMESTAMPTZ,last_activity_at TIMESTAMPTZ,updated_at TIMESTAMPTZ,consent_at TIMESTAMPTZ);
+CREATE TABLE tg_owner_notifs(event_key TEXT PRIMARY KEY,chat_id BIGINT,payload JSONB,sent_at TIMESTAMPTZ,attempts INT NOT NULL DEFAULT 0);
+CREATE TABLE bot_settings(key TEXT PRIMARY KEY,value JSONB);CREATE TABLE portal_login_attempts(key TEXT PRIMARY KEY,count INTEGER,reset_at TIMESTAMPTZ);`);
 }
 const sql=readFileSync(new URL('../database/support.sql',import.meta.url),'utf8');
 for(let i=0;i<(memory?1:2);i++)for(const part of sql.split(';').map(s=>s.trim()).filter(Boolean))await q(part);
 const experienceSql=readFileSync(new URL('../database/support-experience.sql',import.meta.url),'utf8');
 for(let i=0;i<(memory?1:2);i++)for(const part of experienceSql.split(';').map(s=>s.trim()).filter(Boolean))await q(part);
+const siteSql=readFileSync(new URL('../database/support-site-telegram.sql',import.meta.url),'utf8');
+for(let i=0;i<(memory?1:2);i++)for(const part of siteSql.split(';').map(s=>s.trim()).filter(Boolean))await q(part);
 let passed=0;const ok=(v,label)=>{assert.ok(v,label);passed++;console.log('PASS '+label);};
 const owner={owner:true,permissions:[]},key=randomUUID();
 const identity=await S.anonymousIdentity(randomUUID());const student={owner:false,permissions:[],identity};
@@ -115,5 +122,56 @@ try {
 ok(seenPages.length===2,'pagination uses valid prepared parameters for visitor and owner');
 const jobs=await qOne('SELECT count(*)::int AS total FROM support_jobs');
 ok(Number(jobs.total)===0,'legacy website ticket operations do not enqueue Telegram notifications');
-console.log('Support integration: '+passed+' PASS; '+(memory?'pg-mem':'isolated real PostgreSQL')+'; website-only, no Telegram integration.');
+// Telegram support opens ONLY after a valid website-issued deep-link token.
+const sentMessages=[];
+const originalFetch=globalThis.fetch;
+globalThis.fetch=async (url,opts={})=>{
+ const endpoint=String(url);
+ if(endpoint.startsWith("https://api.telegram.org/botmock-test-token/")){
+  const payload=JSON.parse(String(opts.body||"{}"));
+  sentMessages.push({method:endpoint.split("/").at(-1),payload});
+  return {ok:true,json:async()=>({ok:true,result:{message_id:sentMessages.length}})};
+ }
+ throw new Error("Unexpected external URL during isolated Telegram test");
+};
+try{
+ const B=await import('../src/lib/server/botsupport.ts');
+ const token='A'.repeat(27),expired='B'.repeat(27);
+ await q("INSERT INTO support_site_entries(token_hash,category,expires_at) VALUES($1,'idea',now()+interval '10 minutes'),($2,'support',now()-interval '1 minute')",
+   [S.hash(token),S.hash(expired)]);
+ ok(!await B.receiveSupportMessage(88776655,88776655,700,{text:'without site link'}),
+   'direct bot message does not create support ticket');
+ await B.redeemSiteSupport(88776655,88776655,expired,{username:'teststudent',first_name:'Test',last_name:'Student'});
+ const expiredState=await qOne("SELECT used_by FROM support_site_entries WHERE token_hash=$1",[S.hash(expired)]);
+ ok(expiredState.used_by==null,'expired entry token is not redeemed');
+ await B.redeemSiteSupport(88776655,88776655,token,{username:'teststudent',first_name:'Test',last_name:'Student'});
+ const bound=await qOne("SELECT used_by FROM support_site_entries WHERE token_hash=$1",[S.hash(token)]);
+ ok(Number(bound.used_by)===88776655,'valid site token is consumed atomically by Telegram sender');
+ await B.redeemSiteSupport(11223344,11223344,token,{username:'attacker'});
+ ok(!await B.receiveSupportMessage(11223344,11223344,701,{text:'spoofed ticket'}),
+   'single-use token cannot be replayed by another Telegram account');
+ ok(!await B.receiveSupportMessage(88776655,88776655,702,{text:'/support'}),
+   'public /support command cannot create tickets');
+ ok(await B.receiveSupportMessage(88776655,88776655,703,{text:'فكرة جديدة لتطوير البوابة'}),
+   'site-authorized Telegram message creates ticket');
+ const siteTicket=await qOne("SELECT t.id,t.category,t.source,i.telegram_id FROM support_tickets t JOIN support_identities i ON i.id=t.identity_id WHERE t.request_key='tg:update:703'");
+ ok(siteTicket?.category==='idea'&&siteTicket?.source==='telegram'&&Number(siteTicket?.telegram_id)===88776655,
+   'site category and authenticated Telegram sender are retained');
+ await B.clearSupportDraft(88776655); // /start cancels only the typing state.
+ ok((await S.getTicket(sender,siteTicket.id)).messages.length===1,
+   'plain /start does not delete an already-submitted ticket');
+ await B.handleSupportCallback(999999999,999999999,'sup:o:reply:'+siteTicket.id);
+ ok(await B.receiveSupportMessage(999999999,999999999,704,{text:'رد الإدارة بعد تأخير'}),
+   'owner can reply later even after the student pressed /start');
+ const queued=await qOne("SELECT recipient,text FROM support_jobs WHERE event_key=$1",['reply:'+siteTicket.id+':tg:update:704']);
+ ok(Number(queued?.recipient)===88776655&&queued?.text.includes('رد الإدارة'),
+   'delayed owner response is addressed to the correct Telegram ID');
+ await B.handleSupportCallback(88990011,88990011,'sup:o:home');
+ ok(sentMessages.some(m=>m.payload.chat_id===88990011&&String(m.payload.text||'').includes('خاص بالمالك')),
+   'non-owner cannot open the Telegram owner support dashboard');
+ const ticketCount=await qOne("SELECT count(*)::int AS n FROM support_tickets WHERE request_key='tg:update:703'");
+ ok(Number(ticketCount?.n)===1,'one Telegram update creates only one ticket');
+}finally{globalThis.fetch=originalFetch;}
+
+console.log('Support integration: '+passed+' PASS; '+(memory?'pg-mem':'isolated real PostgreSQL')+'; site-gated Telegram and legacy website-data security.');
 const pool=(await import('../src/lib/server/db.ts')).getPool();await pool.end();
