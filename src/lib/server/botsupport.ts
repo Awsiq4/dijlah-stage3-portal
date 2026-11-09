@@ -348,6 +348,10 @@ async function showTicket(chatId:number,userId:number,id:number,owner:boolean,pa
    WHERE m.ticket_id=$1 AND a.telegram_file_id IS NOT NULL
    ORDER BY m.id DESC LIMIT 3`,[id]);
  const kb=ticketButtons(id,owner,t.status==="closed"||t.status==="resolved").inline_keyboard;
+ for(const m of visible)if(m.body.length>650)kb.unshift([{
+   text:"📄 عرض نص الرسالة #"+m.id,
+   callback_data:(owner?"sup:o:message:":"sup:s:message:")+id+":"+m.id,
+ }]);
  const controls:Array<{text:string;callback_data:string}>=[];
  const prefix="sup:"+(owner?"o":"s")+":history:"+id+":";
  if(from>0)controls.push({text:"⬅️ الرسائل الأقدم",callback_data:prefix+(safePage+1)});
@@ -388,7 +392,11 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
  if(ownerStatus){
    const id=Number(ownerStatus[1]);
    if(!validTicket(id))return;
-   await changeStatus({owner:true,permissions:[]},id,ownerStatus[2]);
+   const changed=await changeStatus({owner:true,permissions:[]},id,ownerStatus[2]);
+   if(!changed){
+     await sendMessage(chatId,"ℹ️ حالة "+ticketNumber(id)+" محدّثة مسبقاً.",{replyMarkup:ticketButtons(id,true)});
+     return;
+   }
    const recipient=await ticketRecipient(id);
    if(recipient)await queue("status:"+id+":"+ownerStatus[2]+":"+Date.now(),id,recipient,
      "🎫 "+ticketNumber(id)+"\nحالة الطلب: "+statuses[ownerStatus[2]],
@@ -402,6 +410,19 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
    if(owner&&!isBotOwner(userId))return;
    const id=Number(historyMatch[2]),page=Number(historyMatch[3]);
    if(validTicket(id))await showTicket(chatId,userId,id,owner,page);
+   return;
+ }
+ const messageMatch=/^sup:(o|s):message:([0-9]{1,12}):([0-9]{1,12})$/.exec(data);
+ if(messageMatch){
+   const owner=messageMatch[1]==="o",id=Number(messageMatch[2]),messageId=Number(messageMatch[3]);
+   if(!validTicket(id)||!validTicket(messageId))return;
+   const actor:Actor=owner?{owner:true,permissions:[]}:await telegramActor(userId);
+   const details=await getTicket(actor,id);
+   const msg=details.messages.find(item=>Number(item.id)===messageId);
+   if(!msg){await sendMessage(chatId,"الرسالة غير موجودة أو غير متاحة.");return;}
+   await sendMessage(chatId,"🎫 "+ticketNumber(id)+" — "+(msg.internal?"ملاحظة داخلية":msg.sender_type==="student"?"رسالة الطالب":"رد الإدارة")+
+     "\n🕒 "+displayTime(msg.created_at)+"\n\n"+msg.body.slice(0,3500),
+     {replyMarkup:buttons([[{text:"📖 العودة للمحادثة",callback_data:(owner?"sup:o:open:":"sup:s:open:")+id}]])});
    return;
  }
  const idMatch=/^sup:(o:open|o:reply|s:open|s:reply|s:reopen):([0-9]{1,12})$/.exec(data);
