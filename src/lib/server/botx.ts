@@ -72,7 +72,7 @@ export async function handleStudentCallback(chatId: number, userId: number, data
   }
   if (data.startsWith("stu:lec:")) {
     const subj = data.slice(8);
-    const all = await q<Record<string, unknown>>(`SELECT id, number, title, file_url, sections FROM portal_lectures WHERE archived_at IS NULL AND status='published' AND subject_id=$1 ORDER BY number`, [subj]);
+    const all = await q<Record<string, unknown>>(`SELECT id, number, title, file_url, sections FROM portal_lectures WHERE archived_at IS NULL AND status='published' AND subject_id=$1 AND material_kind='lecture' ORDER BY number`, [subj]);
     const vis = all.filter(r => !Array.isArray(r.sections) || r.sections.includes(sec));
     const text = vis.length ? vis.map(r => `• محاضرة ${r.number}: ${r.title} — ${PORTAL_BASE_URL}/subjects/${subj}`).join("\n") : "لا توجد محاضرات منشورة لهذه المادة بعد.";
 

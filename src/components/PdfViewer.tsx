@@ -1,151 +1,167 @@
 "use client";
-import React,{useCallback,useEffect,useRef,useState} from "react";
-import {ChevronDown,ChevronUp,Download,ExternalLink,Loader2,Maximize,Minimize,X,ZoomIn,ZoomOut} from "lucide-react";
+
+import {useEffect, useRef, useState} from "react";
+import {ChevronDown, ChevronUp, Download, ExternalLink, Loader2, Maximize, Minimize, ZoomIn, ZoomOut} from "lucide-react";
 
 type Pdfjs = typeof import("pdfjs-dist");
+type PdfDocument = Awaited<ReturnType<Pdfjs["getDocument"]>["promise"]>;
 
-export default function PdfViewer({src,fileName,onClose}:{src:string;fileName?:string;onClose?:()=>void}){
-  const [pdfjs,setPdfjs]=useState<Pdfjs|null>(null);
-  const [doc,setDoc]=useState<{numPages:number}|null>(null);
-  const [page,setPage]=useState(1);
-  const [zoom,setZoom]=useState(1);
-  const [status,setStatus]=useState<"loading"|"ready"|"error">("loading");
-  const [error,setError]=useState("");
-  const [fullscreen,setFullscreen]=useState(false);
-  const wrapRef=useRef<HTMLDivElement>(null);
-  const pagesRef=useRef<HTMLDivElement>(null);
-  const docRef=useRef<Awaited<ReturnType<Pdfjs["getDocument"]>["promise"]>|null>(null);
-  const renderTasks=useRef(new Set<unknown>());
-  const pinchRef=useRef<{d:number;z:number}|null>(null);
+function PdfPage({pdf, number, width, ratio, root}: {pdf: PdfDocument; number: number; width: number; ratio: number; root: HTMLDivElement}) {
+  const element = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [pageRatio, setPageRatio] = useState<number>();
+  const [failed, setFailed] = useState(false);
 
-  useEffect(()=>{
-    let cancelled=false;
-    (async()=>{
-      try{
-        const lib: Pdfjs=await import("pdfjs-dist");
-        lib.GlobalWorkerOptions.workerSrc=new URL("pdfjs-dist/build/pdf.worker.min.mjs",import.meta.url).toString();
-        if(cancelled)return;
-        setPdfjs(lib);
-        const task=lib.getDocument({url:src});
-        const d=await task.promise;
-        if(cancelled){task.destroy();return;}
-        docRef.current=d;
-        setDoc({numPages:d.numPages});
-        setStatus("ready");
-      }catch(err){
-        if(!cancelled){setStatus("error");setError(err instanceof Error?err.message:"تعذّر تحميل الملف");}
-      }
-    })();
-    return()=>{cancelled=true;(docRef.current as unknown as {destroy?:()=>void})?.destroy?.();renderTasks.current.forEach((t)=>{(t as {cancel?:()=>void}).cancel?.();});renderTasks.current.clear();};
-  },[src]);
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), {root, rootMargin: "450px"});
+    if (element.current) observer.observe(element.current);
+    return () => observer.disconnect();
+  }, [root]);
 
-  const renderPage=useCallback(async(p:number)=>{
-    if(!pdfjs||!docRef.current)return;
-    const holder=pagesRef.current?.querySelector(`[data-page="${p}"]`);
-    if(!holder||holder.querySelector("canvas"))return;
-    const canvas=document.createElement("canvas");
-    canvas.className="pdf-canvas";
-    holder.appendChild(canvas);
-    try{
-      const pg=await docRef.current.getPage(p);
-      const base=pg.getViewport({scale:1});
-      const holderW=holder.clientWidth||300;
-      const scale=(holderW*zoom)/base.width;
-      const viewport=pg.getViewport({scale});
-      const dpr=Math.min(window.devicePixelRatio||1,2);
-      canvas.width=Math.floor(viewport.width*dpr);
-      canvas.height=Math.floor(viewport.height*dpr);
-      canvas.style.width=`${Math.floor(viewport.width)}px`;
-      canvas.style.height=`${Math.floor(viewport.height)}px`;
-      const task=pg.render({canvas,viewport,transform:dpr!==1?[dpr,0,0,dpr,0,0]:undefined});
-      renderTasks.current.add(task);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!visible || !canvas) return;
+    let cancelled = false;
+    let task: ReturnType<Awaited<ReturnType<PdfDocument["getPage"]>>["render"]> | undefined;
+    setFailed(false);
+    void pdf.getPage(number).then(async page => {
+      if (cancelled) return;
+      const base = page.getViewport({scale: 1});
+      const viewport = page.getViewport({scale: width / base.width});
+      setPageRatio(base.width / base.height);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3_000_000 / (viewport.width * viewport.height)));
+      canvas.width = Math.ceil(viewport.width * dpr);
+      canvas.height = Math.ceil(viewport.height * dpr);
+      task = page.render({canvas, viewport, transform: [dpr, 0, 0, dpr, 0, 0]});
       await task.promise;
-      renderTasks.current.delete(task);
-    }catch{/* page render cancelled */}
-  },[pdfjs,zoom]);
+    }).catch(() => { if (!cancelled) setFailed(true); });
+    return () => {
+      cancelled = true;
+      task?.cancel();
+      canvas.width = 0;
+      canvas.height = 0;
+    };
+  }, [pdf, number, visible, width]);
 
-  useEffect(()=>{
-    if(status!=="ready"||!doc)return;
-    let raf=0;
-    const io=new IntersectionObserver(entries=>{
-      cancelAnimationFrame(raf);
-      raf=requestAnimationFrame(()=>{
-        for(const e of entries)if(e.isIntersecting)renderPage(Number((e.target as HTMLElement).dataset.page));
-      });
-    },{root:pagesRef.current,rootMargin:"600px"});
-    pagesRef.current?.querySelectorAll("[data-page]").forEach(el=>io.observe(el));
-    return()=>{io.disconnect();cancelAnimationFrame(raf);};
-  },[status,doc,renderPage]);
+  return <div ref={element} className="pdf-page" data-page={number} style={{width, aspectRatio: pageRatio || ratio}}>
+    {visible && <canvas ref={canvasRef} className="pdf-canvas" role="img" aria-label={`صفحة ${number}`}/>}
+    {failed && <p className="pdf-state error">تعذّر عرض هذه الصفحة. يمكنك فتح الملف مباشرة.</p>}
+  </div>;
+}
 
-  useEffect(()=>{
-    if(status!=="ready")return;
-    const holders=pagesRef.current?.querySelectorAll("[data-page]")||[];
-    for(const h of holders){
-      const p=Number((h as HTMLElement).dataset.page);
-      const canvas=h.querySelector("canvas");
-      if(canvas&&Math.abs((canvas as HTMLCanvasElement).width/ (window.devicePixelRatio||1) - 0)>0){/* rerender on zoom */}
-      if(!canvas)renderPage(p);
-      else renderPage(p);
+export default function PdfViewer({src, fileName}: {src: string; fileName?: string}) {
+  const [documentData, setDocumentData] = useState<{pdf: PdfDocument; ratio: number}>();
+  const [failed, setFailed] = useState(false);
+  const [pages, setPages] = useState<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+  const [page, setPage] = useState(1);
+  const [zoom, setZoom] = useState(1);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let task: ReturnType<Pdfjs["getDocument"]> | undefined;
+    setDocumentData(undefined);
+    setFailed(false);
+    setPage(1);
+    setZoom(1);
+    void import("pdfjs-dist").then(async lib => {
+      if (cancelled) return;
+      lib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+      task = lib.getDocument({url: src});
+      const pdf = await task.promise;
+      const first = (await pdf.getPage(1)).getViewport({scale: 1});
+      if (!cancelled) setDocumentData({pdf, ratio: first.width / first.height});
+    }).catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; void task?.destroy().catch(() => {}); };
+  }, [src]);
+
+  useEffect(() => {
+    if (!pages) return;
+    const measure = () => setWidth(Math.max(1, Math.min(900, pages.clientWidth - 28)));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(pages);
+    return () => observer.disconnect();
+  }, [pages]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", escape);
+    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", escape); };
+  }, [fullscreen]);
+
+  const count = documentData?.pdf.numPages || 0;
+  function goTo(number: number) {
+    if (number < 1 || number > count || !pages) return;
+    const target = pages.querySelector<HTMLElement>(`[data-page="${number}"]`);
+    if (target) pages.scrollTop += target.getBoundingClientRect().top - pages.getBoundingClientRect().top - 10;
+    setPage(number);
+  }
+
+  function trackPage() {
+    if (!pages) return;
+    const top = pages.getBoundingClientRect().top;
+    const current = Array.from(pages.children).find(item => item.getBoundingClientRect().bottom > top + 24);
+    if (current instanceof HTMLElement) setPage(Number(current.dataset.page) || 1);
+  }
+
+  function changeZoom(value: number) {
+    const current = page;
+    setZoom(value);
+    requestAnimationFrame(() => goTo(current));
+  }
+
+  async function download(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (new URL(src, window.location.href).origin === window.location.origin) return;
+    event.preventDefault();
+    if (downloading) return;
+    setDownloading(true);
+    setDownloadError(false);
+    try {
+      const response = await fetch(src);
+      if (!response.ok) throw new Error("Download failed");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName || "document.pdf";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setDownloadError(true);
+    } finally {
+      setDownloading(false);
     }
-  },[zoom,status,renderPage]);
+  }
 
-  const goTo=useCallback((p:number)=>{
-    const n=Math.min(Math.max(1,p),doc?.numPages||1);
-    setPage(n);
-    pagesRef.current?.querySelector(`[data-page="${n}"]`)?.scrollIntoView({behavior:"smooth",block:"start"});
-  },[doc]);
-
-  const toggleFullscreen=useCallback(async()=>{
-    try{
-      if(!document.fullscreenElement){await wrapRef.current?.requestFullscreen();setFullscreen(true);}
-      else{await document.exitFullscreen();setFullscreen(false);}
-    }catch{/* fullscreen unsupported */}
-  },[]);
-
-  useEffect(()=>{
-    const onFs=()=>setFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange",onFs);
-    return()=>document.removeEventListener("fullscreenchange",onFs);
-  },[]);
-
-  const onTouchStart=useCallback((e:React.TouchEvent)=>{
-    if(e.touches.length===2){
-      const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
-      pinchRef.current={d:Math.hypot(dx,dy),z:zoom};
-    }
-  },[zoom]);
-  const onTouchMove=useCallback((e:React.TouchEvent)=>{
-    if(e.touches.length===2&&pinchRef.current){
-      const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY;
-      const d=Math.hypot(dx,dy);
-      if(pinchRef.current.d>0)setZoom(Math.min(3,Math.max(0.5,pinchRef.current.z*(d/pinchRef.current.d))));
-    }
-  },[]);
-
-  const zoomStep=(dir:number)=>setZoom(z=>Math.min(3,Math.max(0.5,Math.round((z+dir*0.25)*100)/100)));
-
-  return <div className="pdf-viewer-wrap" ref={wrapRef}>
-    <div className="pdf-toolbar">
-      <strong className="grow">{fileName||"ملف PDF"}</strong>
-      {status==="ready"&&doc&&<span className="pdf-page-ind" aria-live="polite">صفحة {page} / {doc.numPages}</span>}
-      {status==="ready"&&<>
-        <button type="button" className="icon-button sm" onClick={()=>goTo(page-1)} disabled={page<=1} aria-label="الصفحة السابقة"><ChevronUp size={17}/></button>
-        <button type="button" className="icon-button sm" onClick={()=>goTo(page+1)} disabled={page>=(doc?.numPages??1)} aria-label="الصفحة التالية"><ChevronDown size={17}/></button>
-        <button type="button" className="icon-button sm" onClick={()=>zoomStep(-1)} aria-label="تصغير"><ZoomOut size={17}/></button>
-        <span className="pdf-zoom">{Math.round(zoom*100)}%</span>
-        <button type="button" className="icon-button sm" onClick={()=>zoomStep(1)} aria-label="تكبير"><ZoomIn size={17}/></button>
-        <button type="button" className="icon-button sm" onClick={toggleFullscreen} aria-label={fullscreen?"الخروج من ملء الشاشة":"ملء الشاشة"}>{fullscreen?<Minimize size={17}/>:<Maximize size={17}/>}</button>
-      </>}
-      <a className="icon-button sm" href={src} download={fileName||true} aria-label="تحميل الملف" title="تحميل"><Download size={17}/></a>
-      <a className="icon-button sm" href={src} target="_blank" rel="noopener noreferrer" aria-label="فتح في نافذة جديدة" title="فتح خارجي"><ExternalLink size={17}/></a>
-      {onClose&&<button type="button" className="icon-button sm" onClick={onClose} aria-label="إغلاق"><X size={17}/></button>}
+  return <div className={`pdf-viewer-wrap${fullscreen ? " pdf-expanded" : ""}`}>
+    <div className="pdf-reader-tools">
+      <div className="pdf-tool-row">
+        <strong className="pdf-filename" dir="auto">{fileName || "ملف PDF"}</strong>
+        <a className="action-button" href={src} download={fileName || true} onClick={download}><Download size={16}/> {downloading ? "جارٍ التحميل…" : "تحميل PDF"}</a>
+        <a className="icon-button" href={src} target="_blank" rel="noopener noreferrer" aria-label="فتح الملف مباشرة" title="فتح الملف مباشرة"><ExternalLink size={17}/></a>
+      </div>
+      {count > 0 && <div className="pdf-tool-row pdf-controls">
+        <button type="button" className="icon-button" onClick={() => goTo(page - 1)} disabled={page <= 1} aria-label="الصفحة السابقة"><ChevronUp size={18}/></button>
+        <span className="pdf-page-ind">صفحة <bdi>{page} / {count}</bdi></span>
+        <button type="button" className="icon-button" onClick={() => goTo(page + 1)} disabled={page >= count} aria-label="الصفحة التالية"><ChevronDown size={18}/></button>
+        <button type="button" className="icon-button" onClick={() => changeZoom(Math.max(1, zoom - .25))} disabled={zoom <= 1} aria-label="تصغير"><ZoomOut size={18}/></button>
+        <button type="button" className="icon-button" onClick={() => changeZoom(Math.min(3, zoom + .25))} disabled={zoom >= 3} aria-label="تكبير"><ZoomIn size={18}/></button>
+        <button type="button" className="icon-button" onClick={() => setFullscreen(value => !value)} aria-label={fullscreen ? "تصغير القارئ" : "ملء الشاشة"}>{fullscreen ? <Minimize size={18}/> : <Maximize size={18}/>}</button>
+      </div>}
+      {downloadError && <p role="status">تعذّر التحميل المباشر. <a href={src} target="_blank" rel="noopener noreferrer">افتح الملف واحفظه من المتصفح</a>.</p>}
     </div>
-    {status==="loading"&&<div className="pdf-state"><Loader2 size={26} className="spin"/><p>جارٍ تحميل المستند…</p></div>}
-    {status==="error"&&<div className="pdf-state error"><p>تعذّر عرض المستند: {error}</p><a className="action-button" href={src} download={fileName||true}><Download size={16}/> تحميل الملف مباشرة</a></div>}
-    <div className="pdf-pages" ref={pagesRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
-      {status==="ready"&&doc&&Array.from({length:doc.numPages},(_,i)=>i+1).map(p=>
-        <div className="pdf-page" key={p} data-page={p}/>
-      )}
-    </div>
+    {!documentData && (failed ? <p role="alert" className="pdf-state error">تعذّر عرض الملف هنا. استخدم زر فتح الملف أو التحميل.</p> : <div className="pdf-state" role="status"><Loader2 size={26} className="spin"/> جارٍ تحميل المستند…</div>)}
+    {documentData && <div className="pdf-pages" ref={setPages} dir="ltr" onScroll={trackPage}>
+      {width > 0 && pages && Array.from({length: count}, (_, index) => <PdfPage key={index} pdf={documentData.pdf} ratio={documentData.ratio} number={index + 1} width={Math.round(width * zoom)} root={pages}/>)}
+    </div>}
   </div>;
 }

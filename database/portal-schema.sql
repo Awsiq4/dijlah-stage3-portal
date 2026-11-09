@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS portal_lectures (
   description TEXT NOT NULL DEFAULT '',
   file_url TEXT NOT NULL DEFAULT '',
   file_name TEXT NOT NULL DEFAULT '',
+  material_kind TEXT NOT NULL DEFAULT 'lecture' CHECK (material_kind IN ('lecture','summary')),
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('published','draft')),
   updated_at TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()

@@ -40,6 +40,7 @@ const FIELDS: Record<WritableTab, Field[]> = {
     {k: "description", label: "الوصف", area: true},
     {k: "file_url", label: "رابط الملف"},
     {k: "file_name", label: "اسم الملف"},
+    {k: "material_kind", label: "نوع المحتوى", select: ["lecture", "summary"]},
     {k: "status", label: "الحالة", select: ["published", "draft"]},
     {k: "updated_at", label: "تاريخ التحديث"},
   ],
@@ -224,7 +225,7 @@ export default function AdminDashboard(){
             <label className={"form-field" + (f.area ? " wide" : "")} key={f.k}><span>{f.label}{f.req ? " *" : ""}</span>
               {f.select ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
                 <option value="">—</option>
-                {f.select.map(o => <option key={o} value={o}>{o}</option>)}
+                {f.select.map(o => <option key={o} value={o}>{f.k === "material_kind" ? (o === "summary" ? "ملخص" : "محاضرة / ملزمة") : o}</option>)}
               </select>
               : f.area ? <textarea rows={3} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>
               : <input type={f.num ? "number" : "text"} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>}

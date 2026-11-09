@@ -312,7 +312,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       const fresh = await getLinkedAdmin(userId);
       if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu(admin)}); return; }
       const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
-      const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1`, [String(d.subjectId)]);
+      const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
       const r = await publishLecture(fresh, {id: String(d.draftId || undefined), subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), sections, source: "telegram"});
       if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok

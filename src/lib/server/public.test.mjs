@@ -50,6 +50,9 @@ test("public layer (pg-mem): only published rows, section targeting correct, dra
   await pool.query(`INSERT INTO portal_subjects (id,name) VALUES ('subj','مادة')`);
   await pool.query(`INSERT INTO portal_lectures (id,subject_id,number,title,status) VALUES ('pub','subj',1,'منشورة','published')`);
   await pool.query(`INSERT INTO portal_lectures (id,subject_id,number,title,status) VALUES ('drf','subj',2,'مسودة','draft')`);
+  await pool.query(`INSERT INTO portal_lectures (id,subject_id,number,title,status,material_kind,sections) VALUES
+    ('summary-a','subj',1,'ملخص A','published','summary','["A"]'),
+    ('summary-draft','subj',1,'ملخص مسودة','draft','summary','["A"]')`);
   await pool.query(`INSERT INTO portal_announcements (id,title,scope,section) VALUES ('a-gen','عام','general','all')`);
   await pool.query(`INSERT INTO portal_announcements (id,title,scope,section) VALUES ('a-A','شعبة A','section','A')`);
   await pool.query(`INSERT INTO portal_announcements (id,title,scope,section) VALUES ('a-B','شعبة B','section','B')`);
@@ -61,12 +64,14 @@ test("public layer (pg-mem): only published rows, section targeting correct, dra
   const pubA = await getPublicContent("all", "A", defaultQueryer);
   assert.equal(pubA.fromDatabase, true);
   const c = pubA.content;
-  assert.deepEqual(c.lectures.map(l => l.id), ["pub"]); // draft excluded
+  assert.deepEqual(c.lectures.map(l => l.id), ["pub"]);
+  assert.deepEqual(c.summaries.map(l => l.id), ["summary-a"]); // draft excluded
   assert.deepEqual(c.announcements.map(a => a.id).sort(), ["a-A", "a-gen"]); // B excluded for section A
   assert.deepEqual(c.exams.map(e => e.id), ["e-AB"]); // C exam excluded
   assert.deepEqual(c.schedule.map(x => x.id), ["s-A"]);
 
   const pubB = await getPublicContent("all", "B", defaultQueryer);
+  assert.deepEqual(pubB.content.summaries, []);
   assert.deepEqual(pubB.content.announcements.map(a => a.id).sort(), ["a-B", "a-gen"]);
   assert.deepEqual(pubB.content.exams.map(e => e.id), ["e-AB"]);
   assert.equal(pubB.content.schedule.length, 0);
