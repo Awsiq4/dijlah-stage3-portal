@@ -1,4 +1,4 @@
-import {NextRequest, NextResponse} from "next/server";
+import {after, NextRequest, NextResponse} from "next/server";
 import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTION_SECRET, botConfigured, webhookAuthorized} from "@/lib/server/flags";
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
@@ -10,6 +10,7 @@ import {registerUser, notifyOwnerNewUser, touchActivity, isBotOwner} from "@/lib
 import {listUsers} from "@/lib/server/analytics";
 import {getFlowState, setFlowState} from "@/lib/server/bot";
 import {recordBotActivity} from "@/lib/server/owner-intelligence";
+import {redeemSiteSupport,clearSupportDraft,receiveSupportMessage,handleSupportCallback,wakeSupportDelivery} from "@/lib/server/botsupport";
 
 export const dynamic = "force-dynamic";
 
@@ -154,15 +155,18 @@ export async function POST(req: NextRequest) {
     const callback = update.callback_query;
     replyChat = Number(message?.chat?.id || callback?.message?.chat?.id) || undefined;
     if ((message?.chat?.type || callback?.message?.chat?.type) !== "private") return NextResponse.json({ok: true});
-    if (message?.chat?.id && (message.text || message.document)) {
+    if (message?.chat?.id && (message.text || message.document || message.photo)) {
       const text = String(message.text || message.caption || "");
       const arg = text.split(" ").slice(1).join(" ").trim();
-      if (text.startsWith("/start") && arg.startsWith("link_")) {
+      if (text.startsWith("/start") && arg.startsWith("sd_")) {
+        await redeemSiteSupport(Number(message.chat.id),Number(message.from?.id || message.chat.id),arg.slice(3),message.from);
+      } else if (text.startsWith("/start") && arg.startsWith("link_")) {
         await handleLinkStart(Number(message.chat.id), Number(message.from?.id || message.chat.id), arg);
       } else if (text.startsWith("/")) {
         // a linked admin mid-flow may send a file URL starting with "/" — route by active flow first
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
         if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
+          await clearSupportDraft(Number(message.chat.id)); // only transient typing; saved tickets are untouched
           // every /start registers the user (idempotent; owner notified only when genuinely new)
           const reg = await registerUser(Number(message.chat.id), Number(message.from?.id || message.chat.id), message.from?.username, message.from?.first_name, message.from?.last_name, null);
           if (reg.isNew) {
@@ -175,6 +179,8 @@ export async function POST(req: NextRequest) {
         } else {
           await handleCommand(Number(message.chat.id), text, arg, message.from);
         }
+      } else if (await receiveSupportMessage(Number(message.chat.id),Number(message.from?.id || message.chat.id),Number(update.update_id),message)) {
+        // Saved tickets and replies are independent of /start or academic navigation.
       } else {
         // owner search flow
         const st = await getFlowState(Number(message.chat.id));
@@ -201,7 +207,9 @@ export async function POST(req: NextRequest) {
       await tgFetch("answerCallbackQuery", {callback_query_id: String(callback.id)});
       const data = String(callback.data);
       const userId = Number(callback.from?.id || callback.message.chat.id);
-      if (data.startsWith("own:")) {
+      if (data.startsWith("sup:")) {
+        await handleSupportCallback(Number(callback.message.chat.id),userId,data);
+      } else if (data.startsWith("own:")) {
         await handleOwnerCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("stu:") ) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
@@ -216,6 +224,7 @@ export async function POST(req: NextRequest) {
       }
     }
     await recordBotActivity(update);
+    after(()=>wakeSupportDelivery().catch(err=>console.error("support delivery retry:",err instanceof Error?err.message:"error")));
     return NextResponse.json({ok: true});
   } catch (err) {
     console.error("telegram webhook error", err instanceof Error ? err.message : err);
