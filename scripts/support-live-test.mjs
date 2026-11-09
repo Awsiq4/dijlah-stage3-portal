@@ -84,8 +84,8 @@ console.log('PASS recovery code cannot be reused');
 await q("INSERT INTO portal_admins(id,name,email,role,status,is_active) VALUES(1,'Site Owner','owner@example.test','super_admin','active',true)");
 const siteOwner=await S.adminActor({id:1,email:'owner@example.test',role:'super_admin',is_active:true});
 ok(siteOwner.owner===true,'site super admin manages support without Telegram account linkage');
-ok(typeof S.createLink==='undefined'&&typeof S.bindLink==='undefined'&&typeof S.telegramActor==='undefined',
-  'Telegram support links and identity paths are removed');
+ok(typeof S.createLink==='undefined'&&typeof S.bindLink==='undefined'&&typeof S.telegramActor==='function',
+  'legacy website account linking remains disabled; verified Telegram webhook actors supported');
 await assert.rejects(()=>S.createTicket(student,{category:'idea',subject:'Unallowed bot ticket',body:'Test only',key:randomUUID(),source:'telegram'}));passed++;
 console.log('PASS Telegram support submissions refused');
 // Mimic PostgreSQL's strict prepared-statement parameter count for both roles.
@@ -114,6 +114,6 @@ try {
 } finally {testPool.query=queryOriginal;}
 ok(seenPages.length===2,'pagination uses valid prepared parameters for visitor and owner');
 const jobs=await qOne('SELECT count(*)::int AS total FROM support_jobs');
-ok(Number(jobs.total)===0,'ticket creation and replies do not enqueue Telegram notifications');
+ok(Number(jobs.total)===0,'legacy website ticket operations do not enqueue Telegram notifications');
 console.log('Support integration: '+passed+' PASS; '+(memory?'pg-mem':'isolated real PostgreSQL')+'; website-only, no Telegram integration.');
 const pool=(await import('../src/lib/server/db.ts')).getPool();await pool.end();
