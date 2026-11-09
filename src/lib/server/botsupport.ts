@@ -259,7 +259,7 @@ async function showStudentList(chatId:number,userId:number,page:number){
 async function showOwnerList(chatId:number,group:string,page:number,search=""){
  if(!["pending","waiting","done"].includes(group))group="pending";
  if(!Number.isSafeInteger(page)||page<0||page>999)page=0;
- const data=await listTickets({owner:true,permissions:[]},{inbox:group,page:String(page),...(search?{q:search}:{})});
+ const data=await listTickets({owner:true,permissions:[]},{page:String(page),...(search?{q:search}:{inbox:group})});
  const items=data.rows.map(t=>[{
    text:ticketNumber(t.id)+" · "+safeName([t.first_name,t.last_name].filter(Boolean).join(" ")||t.username||"طالب")+" · "+(t.effective_section||"—"),
    callback_data:"sup:o:open:"+t.id,
@@ -368,7 +368,7 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
    if(mode.endsWith(":reply")){
      if(["closed","resolved"].includes(t.status)){
        await sendMessage(chatId,"هذا الطلب مكتمل. إذا تريد ترد، افتحه من جديد.",{
-         replyMarkup:buttons([[{text:"🔄 إعادة فتح",callback_data:"sup:s:reopen:"+id}]]),
+         replyMarkup:buttons([[{text:"🔄 إعادة فتح",callback_data:owner?"sup:o:status:"+id+":progress":"sup:s:reopen:"+id}]]),
        });
        return;
      }
