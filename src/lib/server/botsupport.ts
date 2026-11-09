@@ -172,6 +172,37 @@ async function newOwnerNotification(id:number,category:string,body:string,mediaF
  await queue("new:"+id,id,owner,msg,keys,mediaFileId);
 }
 
+// Repair alerts that could not be queued at ticket creation (e.g. an old preview
+// webhook with incomplete environment settings). Exactly-once queue event_key
+// prevents repeated owner alerts. Existing historical web tickets are excluded.
+export async function recoverUnqueuedOwnerAlerts(limit=10):Promise<number>{
+ if(!ownerID()){
+   console.warn("support owner alert: BOT_OWNER_ID is not configured for this deployment");
+   return 0;
+ }
+ const missing=await q<{id:number;category:string}>(`
+   SELECT t.id,t.category FROM support_tickets t
+   LEFT JOIN support_jobs j ON j.event_key='new:'||t.id::text
+   WHERE t.source='telegram' AND t.created_at>=now()-interval '7 days'
+     AND j.id IS NULL ORDER BY t.id ASC LIMIT $1`,
+   [Math.min(Math.max(limit,1),20)]);
+ let repaired=0;
+ for(const ticket of missing){
+   try{
+     const message=await qOne<{body:string}>(`SELECT body FROM support_messages
+       WHERE ticket_id=$1 AND internal=false ORDER BY id LIMIT 1`,[ticket.id]);
+     const picture=await qOne<{telegram_file_id:string|null}>(`SELECT a.telegram_file_id
+       FROM support_attachments a JOIN support_messages m ON m.id=a.message_id
+       WHERE m.ticket_id=$1 AND a.telegram_file_id IS NOT NULL ORDER BY m.id LIMIT 1`,[ticket.id]);
+     await newOwnerNotification(ticket.id,ticket.category,message?.body||"صورة مرفقة",picture?.telegram_file_id||undefined);
+     repaired++;
+   }catch(error){
+     console.error("support owner alert backfill failed",error instanceof Error?error.message:"unknown");
+   }
+ }
+ return repaired;
+}
+
 export async function receiveSupportMessage(chatId:number,userId:number,updateId:number,message:SupportTelegramMessage):Promise<boolean>{
  if(!isPrivate(chatId,userId))return false;
  const d=await currentDraft(chatId);
@@ -202,7 +233,13 @@ export async function receiveSupportMessage(chatId:number,userId:number,updateId
    const result=await createTicket(actor,{category,subject,body,key,file,source:"telegram"});
    await saveFileId(result.id,"student:"+actor.identity,key,fileId);
    await clearSupportDraft(chatId);
-   await newOwnerNotification(result.id,category,body,fileId);
+   try{
+     await newOwnerNotification(result.id,category,body,fileId);
+   }catch(err){
+     // The ticket was already saved: never report it as a failed submission.
+     // Subsequent webhook/worker requests backfill the durable owner alert.
+     console.error("support owner alert enqueue deferred",err instanceof Error?err.message:"unknown");
+   }
    await sendMessage(chatId,"✅ تم استلام طلبك\n🎫 "+ticketNumber(result.id)+"\nراح يوصلك رد الإدارة هنا.",{
      replyMarkup:ticketButtons(result.id,false),
    });
@@ -464,6 +501,7 @@ async function scheduleWorker(delaySeconds=0){
  }catch{/* webhook delivery still handles immediate attempts */}
 }
 export async function drainSupportQueue(limit=12):Promise<{sent:number;retried:number;failed:number}>{
+ await recoverUnqueuedOwnerAlerts(10);
  const due=await q<{id:number;recipient:string|number;ticket_id:number;text:string;
    reply_markup:SupportKeyboard|null;media_file_id:string|null;attempts:number}>(`
      UPDATE support_jobs j SET attempts=j.attempts+1,next_at=now()+interval '3 minutes'
