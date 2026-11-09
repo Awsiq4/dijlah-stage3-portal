@@ -129,9 +129,13 @@ globalThis.fetch=async (url,opts={})=>{
  const endpoint=String(url);
  if(endpoint.startsWith("https://api.telegram.org/botmock-test-token/")){
   const payload=JSON.parse(String(opts.body||"{}"));
-  sentMessages.push({method:endpoint.split("/").at(-1),payload});
-  return {ok:true,json:async()=>({ok:true,result:{message_id:sentMessages.length}})};
+  const method=endpoint.split("/").at(-1);
+  sentMessages.push({method,payload});
+  return {ok:true,json:async()=>({ok:true,result:method==='getFile'
+    ?{file_path:'photos/test.jpg',file_size:4}:{message_id:sentMessages.length}})};
  }
+ if(endpoint.startsWith('https://api.telegram.org/file/botmock-test-token/'))
+   return {ok:true,arrayBuffer:async()=>Uint8Array.from([255,216,255,217]).buffer};
  throw new Error("Unexpected external URL during isolated Telegram test");
 };
 try{
@@ -172,6 +176,19 @@ try{
    'non-owner cannot open the Telegram owner support dashboard');
  const ticketCount=await qOne("SELECT count(*)::int AS n FROM support_tickets WHERE request_key='tg:update:703'");
  ok(Number(ticketCount?.n)===1,'one Telegram update creates only one ticket');
+
+ const tokenForNew='C'.repeat(27);
+ await q("INSERT INTO support_site_entries(token_hash,category,expires_at) VALUES($1,'problem',now()+interval '10 minutes')",
+   [S.hash(tokenForNew)]);
+ await B.redeemSiteSupport(55667788,55667788,tokenForNew,{username:'new_student',first_name:'New',last_name:'User'});
+ const registered=await qOne("SELECT chat_id,reg_seq FROM tg_subscribers WHERE chat_id=55667788");
+ ok(Number(registered?.chat_id)===55667788&&Number(registered?.reg_seq)>0,
+   'new Telegram user is registered by website support entry');
+ ok(await B.receiveSupportMessage(55667788,55667788,705,{caption:'صورة توضح المشكلة',photo:[{file_id:'file_photo_1',file_size:4}]}),
+   'new user can submit an optional photo with a support request');
+ const photo=await qOne("SELECT a.telegram_file_id FROM support_attachments a JOIN support_messages m ON m.id=a.message_id WHERE m.request_key='tg:update:705'");
+ ok(photo?.telegram_file_id==='file_photo_1','support image is stored in the existing private attachment table');
+
 }finally{globalThis.fetch=originalFetch;}
 
 console.log('Support integration: '+passed+' PASS; '+(memory?'pg-mem':'isolated real PostgreSQL')+'; site-gated Telegram and legacy website-data security.');
