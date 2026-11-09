@@ -141,7 +141,10 @@ async function ticketRecipient(id:number):Promise<number|null> {
 }
 async function newOwnerNotification(id:number,category:string,body:string,mediaFileId?:string){
  const owner=ownerID();
- if(!owner)return;
+ if(!owner){
+   console.error("support:new owner notification skipped: invalid or missing BOT_OWNER_ID");
+   return false;
+ }
  const row=await qOne<{
    telegram_id:string|null;first_name:string|null;last_name:string|null;
    username:string|null;reg_seq:number|null;section:string|null;created_at:string;
@@ -169,7 +172,40 @@ async function newOwnerNotification(id:number,category:string,body:string,mediaF
   [{text:"📖 عرض الطلب",callback_data:"sup:o:open:"+id},
    {text:"🎫 طلبات الدعم",callback_data:"sup:o:home"}],
  ]);
- await queue("new:"+id,id,owner,msg,keys,mediaFileId);
+ // Send the owner's full text notification even when the student attached an image.
+ // Images remain accessible from the ticket; an invalid photo file_id must never
+ // prevent delivery of the important new-ticket alert.
+ await queue("new:"+id,id,owner,msg,keys);
+ return true;
+}
+
+// Recovery for transient failures (or older webhook deployments) which persisted
+// tickets but never queued a "new:<id>" owner alert.  The event_key uniqueness
+// makes retries safe; only real Telegram tickets are eligible.
+export async function reconcileMissingOwnerAlerts(limit=20):Promise<number>{
+ if(!ownerID()){
+   console.error("support:new reconciliation skipped: owner configuration unavailable");
+   return 0;
+ }
+ const missing=await q<{id:number;category:string}>(`SELECT t.id,t.category
+   FROM support_tickets t
+   LEFT JOIN support_jobs j ON j.event_key=('new:'||t.id::text)
+   WHERE t.source='telegram' AND t.created_at > now()-interval '7 days'
+     AND j.id IS NULL
+   ORDER BY t.id DESC LIMIT $1`,[Math.max(1,Math.min(limit,30))]);
+ let count=0;
+ for(const t of missing){
+   try{
+     const first=await qOne<{body:string}>(`SELECT body FROM support_messages
+       WHERE ticket_id=$1 AND author LIKE 'student:%'
+       ORDER BY id LIMIT 1`,[t.id]);
+     if(!first)continue;
+     if(await newOwnerNotification(t.id,t.category,first.body))count++;
+   }catch(error){
+     console.error("support:new recovery failed for ticket "+t.id,error instanceof Error?error.message:"unknown");
+   }
+ }
+ return count;
 }
 
 export async function receiveSupportMessage(chatId:number,userId:number,updateId:number,message:SupportTelegramMessage):Promise<boolean>{
@@ -202,7 +238,13 @@ export async function receiveSupportMessage(chatId:number,userId:number,updateId
    const result=await createTicket(actor,{category,subject,body,key,file,source:"telegram"});
    await saveFileId(result.id,"student:"+actor.identity,key,fileId);
    await clearSupportDraft(chatId);
-   await newOwnerNotification(result.id,category,body,fileId);
+   try{
+     await newOwnerNotification(result.id,category,body,fileId);
+   }catch(error){
+     // The student's saved ticket and receipt must never depend on owner delivery.
+     // The notification is automatically recovered by drainSupportQueue().
+     console.error("support:new queue failed for ticket "+result.id,error instanceof Error?error.message:"unknown");
+   }
    await sendMessage(chatId,"✅ تم استلام طلبك\n🎫 "+ticketNumber(result.id)+"\nراح يوصلك رد الإدارة هنا.",{
      replyMarkup:ticketButtons(result.id,false),
    });
@@ -485,6 +527,7 @@ async function scheduleWorker(delaySeconds=0){
  }catch{/* webhook delivery still handles immediate attempts */}
 }
 export async function drainSupportQueue(limit=12):Promise<{sent:number;retried:number;failed:number}>{
+ await reconcileMissingOwnerAlerts(Math.max(1,Math.min(limit,20)));
  const due=await q<{id:number;recipient:string|number;ticket_id:number;text:string;
    reply_markup:SupportKeyboard|null;media_file_id:string|null;attempts:number}>(`
      UPDATE support_jobs j SET attempts=j.attempts+1,next_at=now()+interval '3 minutes'
