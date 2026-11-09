@@ -223,11 +223,12 @@ export async function reply(a:Actor,id:number,body:string,key:string,internal=fa
 }
 export async function changeStatus(a:Actor,id:number,status:string){
  if(!statuses[status])throw new SupportError('حالة غير صالحة.');
- await withTx(async db=>{const t=await ticket(db,a,id,true);const staff=permission(a,'close');
+ return withTx(async db=>{const t=await ticket(db,a,id,true);const staff=permission(a,'close');
   if(!staff && !(t.identity_id===a.identity && (status==='closed'||(['closed','resolved'].includes(t.status)&&status==='progress'))))throw new SupportError('غير مخول لتغيير الحالة.',403);
-  if(t.status===status)return;
+  if(t.status===status)return false;
   await db.q(`UPDATE support_tickets SET status=$2,updated_at=now(),resolved_at=CASE WHEN $2='resolved' THEN now() WHEN $2='progress' THEN NULL ELSE resolved_at END,closed_at=CASE WHEN $2='closed' THEN now() ELSE NULL END,reopened=reopened+$3 WHERE id=$1`,[id,status,['closed','resolved'].includes(t.status)&&status==='progress'?1:0]);
   await audit(db,a,id,'status',{from:t.status,to:status});
+  return true;
  });
 }
 export async function attachment(a:Actor,id:string){
