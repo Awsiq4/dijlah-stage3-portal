@@ -159,8 +159,8 @@ async function newOwnerNotification(id:number,category:string,body:string,mediaF
   "🔢 تسلسله بالبوت: "+(row?.reg_seq==null?"غير متوفر":"#"+String(row.reg_seq).padStart(6,"0")),
   "🏫 الشعبة: "+(row?.section||"غير محددة"),
   "📂 النوع: "+(categories[category]||"الدعم"),
-  "📝 الرسالة: "+body.slice(0,700),
   "📅 وقت الإرسال: "+displayTime(row?.created_at||new Date()),
+  "📝 الرسالة: "+body.slice(0,mediaFileId?360:700),
  ].join("\n");
  const keys=buttons([
   [{text:"💬 الرد",callback_data:"sup:o:reply:"+id}],
