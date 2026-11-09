@@ -157,6 +157,7 @@ try{
  const siteTicket=await qOne("SELECT t.id,t.category,t.source,i.telegram_id FROM support_tickets t JOIN support_identities i ON i.id=t.identity_id WHERE t.request_key='tg:update:703'");
  ok(siteTicket?.category==='idea'&&siteTicket?.source==='telegram'&&Number(siteTicket?.telegram_id)===88776655,
    'site category and authenticated Telegram sender are retained');
+ const sender=await S.telegramActor(88776655);
  await B.clearSupportDraft(88776655); // /start cancels only the typing state.
  ok((await S.getTicket(sender,siteTicket.id)).messages.length===1,
    'plain /start does not delete an already-submitted ticket');
