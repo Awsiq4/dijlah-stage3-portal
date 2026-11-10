@@ -52,7 +52,8 @@ export function RoleWorkspace({me}: {me: Me}) {
       if (kind === "mat" && file) {
         // direct-to-Blob upload: bypasses the 4.5MB function limit; the route validates role/subject/AUDIENCE/type/size
         try {
-          const blob = await upload(file.name, file, {
+          const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-100);
+          const blob = await upload(`lectures/${crypto.randomUUID()}-${safeName}`, file, {
             access: "public",
             handleUploadUrl: "/api/admin/upload",
             contentType: "application/pdf",

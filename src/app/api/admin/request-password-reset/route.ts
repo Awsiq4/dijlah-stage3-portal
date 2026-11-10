@@ -1,6 +1,6 @@
 import {createHash, randomBytes} from "node:crypto";
 import {NextRequest, NextResponse} from "next/server";
-import {checkLoginRateLimit} from "@/lib/server/auth";
+import {checkLoginRateLimit, csrfWriteOk} from "@/lib/server/auth";
 import {q, withTx} from "@/lib/server/db";
 import {BOT_OWNER_ID, PORTAL_BASE_URL, telegramServiceEnabled} from "@/lib/server/flags";
 import {sendMessage} from "@/lib/server/telegram";
@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   if (!telegramServiceEnabled() || !/^[0-9]+$/.test(BOT_OWNER_ID)) {
     return NextResponse.json({error: "خدمة استعادة الحساب غير متاحة حاليًا"}, {status: 503});
   }
+  if (req.headers.has("origin") && !csrfWriteOk(req)) return NextResponse.json({error: "forbidden"}, {status: 403});
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!(await checkLoginRateLimit("reset-link:" + ip, 3, 15 * 60_000))) {
     return NextResponse.json({error: "محاولات كثيرة. حاول بعد 15 دقيقة."}, {status: 429});

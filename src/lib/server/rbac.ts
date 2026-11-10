@@ -108,7 +108,7 @@ export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<s
 export function canModifyContent(a: AdminInfo, row: {created_by?: number | null}): boolean {
   if (!isActive(a)) return false;
   if (canManageAllContent(a.role)) return true;
-  return row.created_by === a.id;
+  return canUseTelegramPublishing(a) && String(row.created_by) === String(a.id);
 }
 
 // Telegram publishing requires an active linked account of a publishing role.

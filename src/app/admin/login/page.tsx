@@ -1,4 +1,5 @@
 "use client";
+import {adminReturnPath} from "@/lib/safe-url";
 import React,{Suspense,useState} from "react";
 import {useRouter,useSearchParams} from "next/navigation";
 import Image from "next/image";
@@ -24,7 +25,7 @@ function AdminLoginInner(){
       const res=await fetch("/api/admin/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email,password})});
       const j=await res.json().catch(()=>({}));
       if(res.ok&&j.ok){
-        router.push(params.get("next")||"/admin");
+        router.push(adminReturnPath(params.get("next")));
         router.refresh();
       }else{
         setError(j.error||"فشل تسجيل الدخول");

@@ -17,13 +17,14 @@ export function contentFromSeed(type: ContentType) {
   return [...(SEED[type] as unknown as Record<string, unknown>[])];
 }
 
-export async function listContent(type: ContentType, db: Queryer = defaultQueryer): Promise<Record<string, unknown>[]> {
+export async function listContent(type: ContentType, db: Queryer = defaultQueryer, ownerId?: number): Promise<Record<string, unknown>[]> {
   if (type === "telegram") {
     if (!dbConfigured()) return contentFromSeed("telegram");
     return db.q(`SELECT kind, key, url FROM portal_telegram ORDER BY kind, key`);
   }
   if (!dbConfigured()) return contentFromSeed(type);
   const table = SCHEMAS[type].table;
+  if (ownerId !== undefined) return db.q(`SELECT * FROM ${table} WHERE created_by=$1 ORDER BY 1`, [ownerId]);
   return db.q(`SELECT * FROM ${table} ORDER BY 1`);
 }
 

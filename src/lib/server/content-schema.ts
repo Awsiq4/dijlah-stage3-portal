@@ -1,5 +1,5 @@
 // Pure schema validation for admin content writes.
-// No imports here so it can be unit-tested directly under node --experimental-strip-types.
+import {safeFileUrl} from "../safe-url.ts";
 
 export type ContentType = "subjects" | "lectures" | "announcements" | "exams" | "assignments" | "schedule" | "telegram";
 export type WritableContentType = Exclude<ContentType, "telegram">;
@@ -100,6 +100,9 @@ function coerce(field: FieldDef, value: unknown): unknown {
     return value;
   }
   const s = String(value);
+  if ((field.col === "file_url" || field.col === "attachment_url") && !safeFileUrl(s)) {
+    throw new Error(`رابط غير صالح: ${field.col}`);
+  }
   if (field.oneOf && !field.oneOf.includes(s)) throw new Error(`قيمة غير مسموحة لحقل ${field.col}: ${s}`);
   return s;
 }
@@ -122,25 +125,43 @@ export function sanitizeRow(type: Exclude<ContentType, "telegram">, row: Record<
       throw new Error(`الحقل المطلوب مفقود: ${field.col}`);
     }
   }
+  if (out.sections != null && (!Array.isArray(out.sections) || out.sections.some(s => !["A", "B", "C", "F"].includes(s)))) {
+    throw new Error("قيمة غير مسموحة لحقل sections");
+  }
   return out;
 }
 
 // Pure SQL builder — identifiers come only from SCHEMAS, values are always $n placeholders.
 // mode "update" (default, for admin edits) refreshes an existing row;
 // mode "nothing" (seed migration default) NEVER overwrites existing rows — preserves admin edits.
-export function buildUpsert(type: Exclude<ContentType, "telegram">, rawRow: Record<string, unknown>, mode: "update" | "nothing" = "update"): {sql: string; params: unknown[]} {
+export function buildUpsert(type: Exclude<ContentType, "telegram">, rawRow: Record<string, unknown>, mode: "update" | "nothing" = "update", owner?: {id: number; source: "web" | "telegram"}): {sql: string; params: unknown[]} {
   const schema = SCHEMAS[type];
   const row = sanitizeRow(type, rawRow);
+  if (owner) {
+    row.created_by = owner.id;
+    row.source = owner.source;
+  }
   const cols = Object.keys(row);
   if (!cols.length) throw new Error("لا توجد حقول صالحة للإدراج");
   const q = (c: string) => `"${c}"`; // always quote identifiers (reserved words like "end" included)
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
-  const sets = cols.filter(c => c !== "id").map(c => `${q(c)}=EXCLUDED.${q(c)}`).join(",");
+  const sets = cols.filter(c => c !== "id" && c !== "created_by" && c !== "source").map(c => `${q(c)}=EXCLUDED.${q(c)}`).join(",");
   let sql = `INSERT INTO ${schema.table} (${cols.map(q).join(",")}) VALUES (${placeholders})`;
   if (mode === "nothing") sql += " ON CONFLICT (id) DO NOTHING";
   else sql += sets ? ` ON CONFLICT (id) DO UPDATE SET ${sets}` : " ON CONFLICT (id) DO NOTHING";
-  if (mode === "nothing") sql += " RETURNING id"; // lets callers count actually-inserted rows
+  if (mode === "nothing") sql += owner ? " RETURNING id, created_by" : " RETURNING id"; // lets callers count actually-inserted rows
   const params = cols.map(c => (typeof row[c] === "object" && row[c] !== null ? JSON.stringify(row[c]) : row[c]));
   return {sql, params};
 }
 
+
+// Update only the record still owned by this account, even after a concurrent insert.
+export function buildOwnedUpdate(type: WritableContentType, row: Record<string, unknown>, ownerId: number) {
+  const fields = Object.entries(sanitizeRow(type, row)).filter(([key]) => key !== "id");
+  const sets = fields.map(([key], i) => `"${key}"=$${i + 3}`).join(",");
+  const values = fields.map(([, value]) => value !== null && typeof value === "object" ? JSON.stringify(value) : value);
+  return {
+    sql: `UPDATE ${SCHEMAS[type].table} SET ${sets} WHERE id=$1 AND created_by=$2 RETURNING id`,
+    params: [row.id, ownerId, ...values],
+  };
+}

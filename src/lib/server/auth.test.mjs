@@ -81,3 +81,25 @@ test("requireAdmin: no cookie and no header -> null; wrong secret header -> null
   const bad = {cookies: {get: () => undefined}, headers: {get: n => (n === "x-admin-secret" ? "wrong" : null)}};
   assert.equal(await requireAdmin(bad), null);
 });
+
+test("sessions issued for one account in the same second are distinct", () => {
+  const now = 1_000_000_000;
+  const first = signSessionToken(7, now);
+  const second = signSessionToken(7, now);
+  assert.notEqual(first, second);
+  assert.deepEqual(verifySessionToken(first, now), {adminId: 7});
+  assert.deepEqual(verifySessionToken(second, now), {adminId: 7});
+});
+
+test("navigation and file links reject unsafe protocols and URL parsing ambiguities", async () => {
+  const {adminReturnPath, safeFileUrl} = await import("../safe-url.ts");
+  for (const url of ["javascript:alert(1)", "//external.test", "/\\external.test", "/admin/../outside", "https://external.test"]) {
+    assert.equal(adminReturnPath(url), "/admin");
+  }
+  assert.equal(adminReturnPath("/admin-legacy"), "/admin-legacy");
+  assert.equal(safeFileUrl("/files/handout.pdf"), "/files/handout.pdf");
+  assert.equal(safeFileUrl("https://cdn.example.org/handout.pdf"), "https://cdn.example.org/handout.pdf");
+  for (const url of ["javascript:alert(1)", "//external.test/a.pdf", "/a\\b.pdf", "https://user@external.test/a.pdf"]) {
+    assert.equal(safeFileUrl(url), "");
+  }
+});

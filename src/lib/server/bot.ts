@@ -3,9 +3,9 @@
 // Conversation state is persisted in portal_bot_state (survives serverless restarts).
 import {randomBytes} from "node:crypto";
 import {homeMenuFor} from "./botx.ts";
-import {q, qOne} from "./db.ts";
+import {q, qOne, withTx} from "./db.ts";
 import {sendMessage} from "./telegram.ts";
-import {hashToken, tokenUsable, isActive, canUseTelegramPublishing, teacherSections, type AdminInfo} from "./rbac.ts";
+import {hashToken, isActive, canUseTelegramPublishing, teacherSections, type AdminInfo} from "./rbac.ts";
 import {publishAnnouncement, publishLecture, updateAnnouncementOwn, updateLectureMetaOwn, replaceLectureFileOwn} from "./publish.ts";
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {tgFetch} from "./telegram.ts";
@@ -28,30 +28,36 @@ export async function getLinkedAdmin(telegramUserId: number): Promise<LinkedAdmi
 // ---- /start link_<payload> : bind this Telegram user to the invited admin account ----
 export async function handleLinkStart(chatId: number, userId: number, arg: string): Promise<void> {
   const raw = arg.replace(/^link_/, "");
-  // short single-use token: looked up ONLY by its SHA-256 hash (never stored raw)
-  const tok = await qOne<{token_hash: string; expires_at: string; used_at: string | null; admin_id: number}>(
-    `SELECT token_hash, expires_at, used_at, admin_id FROM portal_link_tokens WHERE token_hash=$1`,
-    [hashToken(raw)]
-  );
-  if (!tok || !tokenUsable(tok)) {
-    await sendMessage(chatId, "⚠️ رابط الربط غير صالح أو مستخدم مسبقًا أو منتهي الصلاحية. اطلب رابطًا جديدًا من لوحة الإدارة.");
+  const digest = hashToken(raw);
+  const admin = await withTx(async db => {
+    // Serialize linking, unlinking and suspension against the same account row.
+    const account = await db.qOne<AdminInfo>(
+      `SELECT a.* FROM portal_admins a JOIN portal_link_tokens t ON t.admin_id=a.id
+       WHERE t.token_hash=$1 AND t.used_at IS NULL AND t.expires_at>now() FOR UPDATE OF a`,
+      [digest]
+    );
+    if (!account || !canUseTelegramPublishing(account)) return null;
+    const used = await db.qOne(
+      `UPDATE portal_link_tokens SET used_at=now()
+       WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now() RETURNING token_hash`, [digest]
+    );
+    if (!used) return null;
+    const link = await db.qOne(
+      `INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,$2)
+       ON CONFLICT (telegram_user_id) DO UPDATE SET admin_id=EXCLUDED.admin_id, revoked_at=NULL, linked_at=now()
+       WHERE portal_telegram_links.revoked_at IS NOT NULL OR portal_telegram_links.admin_id=EXCLUDED.admin_id
+       RETURNING id`, [account.id, userId]
+    );
+    if (!link) return null;
+    await db.q(`UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=$1 AND telegram_user_id<>$2 AND revoked_at IS NULL`, [account.id, userId]);
+    await db.q(`UPDATE portal_link_tokens SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [account.id]);
+    await db.q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [account.email, "telegram.link.bound", {telegram_user_id: userId}]);
+    return account;
+  });
+  if (!admin) {
+    await sendMessage(chatId, "⚠️ تعذّر الربط. تحقق من صلاحية الرابط وأن حساب Telegram غير مربوط بحساب آخر.");
     return;
   }
-  const conflict = await qOne<{admin_id: number}>(`SELECT admin_id FROM portal_telegram_links WHERE telegram_user_id=$1 AND revoked_at IS NULL`, [userId]);
-  if (conflict && conflict.admin_id !== tok.admin_id) {
-    await sendMessage(chatId, "⚠️ هذا حساب Telegram مربوط بحساب آخر نشط. ألغِ الربط من الحساب الآخر أولًا.");
-    return;
-  }
-  await q(
-    `INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,$2)
-     ON CONFLICT (telegram_user_id) DO UPDATE SET admin_id=EXCLUDED.admin_id, revoked_at=NULL, linked_at=now()`,
-    [tok.admin_id, userId]
-  );
-  await q(`UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=$1 AND telegram_user_id<>$2 AND revoked_at IS NULL`, [tok.admin_id, userId]);
-  await q(`UPDATE portal_link_tokens SET used_at=now() WHERE token_hash=$1`, [tok.token_hash]);
-  const admin = await qOne<AdminInfo>(`SELECT id, email, role, status, is_active, name, assigned_section, assigned_subjects, perms FROM portal_admins WHERE id=$1`, [tok.admin_id]);
-  if (!admin || !canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ الحساب غير مخوّل للنشر عبر Telegram."); return; }
-  await q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [admin.email, "telegram.link.bound", {telegram_user_id: userId}]);
   await sendMessage(chatId, `✅ تم ربط حساب Telegram بنجاح.\nالحساب: <b>${escapeHtml(admin.email)}</b>\nالدور: <b>${admin.role}</b>\n\nاستخدم /start لعرض قائمة النشر.`, {parseMode: "HTML", replyMarkup: adminMenu(admin)});
 }
 

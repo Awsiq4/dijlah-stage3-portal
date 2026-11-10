@@ -1,9 +1,10 @@
+import {safeFileUrl} from "../safe-url.ts";
 // Shared publishing service — the SAME code path used by the website dashboard
 // and by the Telegram bot. All permission checks are enforced here, server-side.
 import {withTx, defaultQueryer, type Queryer} from "./db.ts";
-import {buildUpsert, sanitizeRow, SCHEMAS, type WritableContentType} from "./content-schema.ts";
+import {buildOwnedUpdate, buildUpsert, sanitizeRow, SCHEMAS, type WritableContentType} from "./content-schema.ts";
 import {audit} from "./content.ts";
-import {canPublishAnnouncement, canPublishSubjectContent, canPublishMaterial, canModifyContent, canManageAllContent, isActive, type AdminInfo} from "./rbac.ts";
+import {canPublishAnnouncement, canPublishSubjectContent, canPublishMaterial, canModifyContent, canManageAllContent, canWriteContentRecord, isActive, type AdminInfo} from "./rbac.ts";
 import {telegramServiceEnabled} from "./flags.ts";
 
 export type PublishOk = {ok: true; id: string; inserted: boolean};
@@ -85,7 +86,7 @@ export async function publishLecture(
   const ALL = ["A", "B", "C", "F"];
   const sections = input.sections && input.sections.length ? input.sections.map(String) : ALL;
   if (!canPublishMaterial(admin, input.subjectId, sections)) return fail("forbidden: subject or audience not authorized");
-  if (!/^\/[A-Za-z0-9_\-./]+$/.test(input.fileUrl) && !/^https:\/\//.test(input.fileUrl)) return fail("invalid file url");
+  if (!safeFileUrl(input.fileUrl)) return fail("invalid file url");
   const id = input.id || `lec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let row: Record<string, unknown>;
   try {
@@ -142,23 +143,39 @@ export async function applyContentUpsert(
   source: "web" | "telegram" = "web"
 ): Promise<void> {
   const id = String(row.id);
-  // update of an existing row requires ownership (privileged roles bypass)
-  if (!canManageAllContent(admin.role)) {
-    const table = SCHEMAS[type].table;
-    const existing = await tx.qOne<{created_by: number | null}>(`SELECT created_by FROM ${table} WHERE id=$1`, [id]);
-    if (existing && !canModifyContent(admin, existing)) {
-      const err = new Error("forbidden: not the owner") as Error & {status?: number};
-      err.status = 403;
-      throw err;
+  const clean = sanitizeRow(type, row);
+  const scoped = !canManageAllContent(admin.role);
+  const owner = scoped ? {id: admin.id, source} : undefined;
+  if (!canWriteContentRecord(admin, type, clean)) {
+    throw Object.assign(new Error("forbidden: role/scope not authorized for this content"), {status: 403});
+  }
+  if (scoped) {
+    // Use the exact audience authorized above, even when the request omitted it.
+    if (type === "lectures" || type === "exams" || type === "assignments") {
+      if (!Array.isArray(clean.sections) || !clean.sections.length) clean.sections = ["A", "B", "C", "F"];
+    } else if (type === "announcements") {
+      clean.scope ||= "general";
+      clean.section ||= "all";
     }
   }
-  const {sql, params} = buildUpsert(type, row, "update");
-  await tx.q(sql, params);
-  // set ownership only when the row is new (never overwrite an existing owner)
-  await tx.q(
-    `UPDATE ${SCHEMAS[type].table} SET created_by=$2, source=$3 WHERE id=$1 AND created_by IS NULL`,
-    [id, admin.id, source]
-  );
+  if (scoped) {
+    const update = buildOwnedUpdate(type, clean, admin.id);
+    if (!await tx.qOne(update.sql, update.params)) {
+      const insert = buildUpsert(type, clean, "nothing", owner);
+      const created = await tx.qOne<{created_by: number}>(insert.sql, insert.params);
+      if (!created || String(created.created_by) !== String(admin.id)) {
+        throw Object.assign(new Error("forbidden: not the owner or concurrent conflict"), {status: 403});
+      }
+    }
+  } else {
+    const upsert = buildUpsert(type, clean);
+    await tx.q(upsert.sql, upsert.params);
+  }
+  if (!scoped && type !== "subjects") {
+    const sourceSet = type === "schedule" ? "" : ", source=$3";
+    const values = type === "schedule" ? [id, admin.id] : [id, admin.id, source];
+    await tx.q(`UPDATE ${SCHEMAS[type].table} SET created_by=$2${sourceSet} WHERE id=$1 AND created_by IS NULL`, values);
+  }
   await audit(admin.email || `admin#${admin.id}`, `content.upsert.${type}`, {id, source}, tx);
 }
 
@@ -176,7 +193,7 @@ async function loadOwnedRow(db: {qOne: Queryer["qOne"]}, admin: AdminInfo, type:
   const table = SCHEMAS[type].table;
   const row = await db.qOne<Record<string, unknown>>(`SELECT * FROM ${table} WHERE id=$1`, [id]);
   if (!row) return null;
-  if (!canManageAllContent(admin.role) && row.created_by !== admin.id) return null; // ownership enforced
+  if (!canModifyContent(admin, row)) return null; // ownership enforced
   return row;
 }
 
@@ -221,7 +238,7 @@ export async function updateLectureMetaOwn(admin: AdminInfo, id: string, patch: 
 // Replace the PDF file but keep the same content id -> stable website link.
 export async function replaceLectureFileOwn(admin: AdminInfo, id: string, fileUrl: string, fileName: string): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
-  if (!/^\/[A-Za-z0-9_\-./]+$/.test(fileUrl) && !/^https:\/\//.test(fileUrl)) return fail("invalid file url");
+  if (!safeFileUrl(fileUrl)) return fail("invalid file url");
   return withTx(async tx => {
     const row = await loadOwnedRow(tx, admin, "lectures", id);
     if (!row) return fail("forbidden: not found or not yours");
