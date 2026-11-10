@@ -1,7 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
-import {requireAdmin, canModify} from "@/lib/server/auth";
+import {requireAdmin} from "@/lib/server/auth";
 import {canManageUsers, newToken, hashToken, ROLES, SECTIONS} from "@/lib/server/rbac";
-import {withTx, q, qOne} from "@/lib/server/db";
+import {withTx, q} from "@/lib/server/db";
 import {audit} from "@/lib/server/content";
 import {dbConfigured, PORTAL_BASE_URL} from "@/lib/server/flags";
 
@@ -90,6 +90,8 @@ export async function PATCH(req: NextRequest) {
     await db.q(`UPDATE portal_admins SET ${fields.join(", ")} WHERE id=$${i}`, params);
     if (String(body.status) === "suspended") {
       await db.q(`UPDATE portal_sessions SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL`, [id]);
+      await db.q(`UPDATE portal_link_tokens SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [id]);
+      await db.q(`UPDATE portal_password_resets SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [id]);
       await db.q(`UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL`, [id]);
     }
     await audit(admin.email, "users.update", {id, fields: Object.keys(body)}, db);

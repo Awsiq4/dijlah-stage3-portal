@@ -1,15 +1,15 @@
 import {createHash} from "node:crypto";
 import {NextRequest, NextResponse} from "next/server";
-import {checkLoginRateLimit, hashPassword} from "@/lib/server/auth";
+import {checkLoginRateLimit, csrfWriteOk, hashPassword} from "@/lib/server/auth";
 import {withTx} from "@/lib/server/db";
 import {dbConfigured} from "@/lib/server/flags";
 
 export const dynamic = "force-dynamic";
 
-// Tokens are generated out-of-band only after confirming control of the
-// existing admin email account. There is no public token issuance endpoint.
+// Recovery links are delivered to the verified owner on Telegram.
 export async function POST(req: NextRequest) {
   if (!dbConfigured()) return NextResponse.json({error: "خدمة الاستعادة غير متاحة"}, {status: 503});
+  if (req.headers.has("origin") && !csrfWriteOk(req)) return NextResponse.json({error: "forbidden"}, {status: 403});
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!(await checkLoginRateLimit("password-reset:" + ip, 5, 15 * 60_000))) {
     return NextResponse.json({error: "محاولات كثيرة. حاول لاحقًا."}, {status: 429});
@@ -28,24 +28,25 @@ export async function POST(req: NextRequest) {
   const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
   try {
     const applied = await withTx(async db => {
-      // Lock the reset row so parallel uses cannot both succeed.
-      const reset = await db.qOne<{admin_id: number}>(
-        "SELECT r.admin_id FROM portal_password_resets r " +
-        "JOIN portal_admins a ON a.id=r.admin_id " +
-        "WHERE r.token_hash=$1 AND r.used_at IS NULL AND r.expires_at>now() " +
-        "AND a.is_active=true AND a.status='active' FOR UPDATE OF r",
-        [tokenHash]
+      // Lock the account before consuming a reset, in the same order as issuance and suspension.
+      const account = await db.qOne<{id: number}>(
+        `SELECT a.id FROM portal_admins a JOIN portal_password_resets r ON r.admin_id=a.id
+         WHERE r.token_hash=$1 AND r.used_at IS NULL AND r.expires_at>now()
+         AND a.role='super_admin' AND a.is_active=true AND a.status='active' FOR UPDATE OF a`, [tokenHash]
       );
-      if (!reset) return false;
-      await db.q("UPDATE portal_admins SET password_hash=$2 WHERE id=$1",
-        [reset.admin_id, hashPassword(password)]);
-      await db.q("UPDATE portal_password_resets SET used_at=now() WHERE token_hash=$1 AND used_at IS NULL",
-        [tokenHash]);
-      await db.q("UPDATE portal_sessions SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL",
-        [reset.admin_id]);
+      if (!account) return false;
+      const used = await db.qOne(
+        `UPDATE portal_password_resets SET used_at=now() WHERE token_hash=$1
+         AND used_at IS NULL AND expires_at>now() RETURNING token_hash`, [tokenHash]
+      );
+      if (!used) return false;
+      await db.q(`UPDATE portal_admins SET password_hash=$2 WHERE id=$1`, [account.id, hashPassword(password)]);
+      await db.q(`UPDATE portal_password_resets SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [account.id]);
+      await db.q(`UPDATE portal_sessions SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL`, [account.id]);
+      await db.q(`UPDATE portal_link_tokens SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [account.id]);
       await db.q(
         "INSERT INTO portal_audit (actor, action, detail) VALUES ($1,'admin.password_reset',$2::jsonb)",
-        ["admin:" + reset.admin_id, JSON.stringify({method: "verified-email", revoked_sessions: true})]
+        ["admin:" + account.id, JSON.stringify({method: "verified-telegram", revoked_sessions: true})]
       );
       return true;
     });

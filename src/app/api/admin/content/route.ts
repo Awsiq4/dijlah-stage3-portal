@@ -1,9 +1,9 @@
 import {NextRequest, NextResponse} from "next/server";
 import {requireAdmin} from "@/lib/server/auth";
 import {listContent, deleteContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
-import {withTx, qOne} from "@/lib/server/db";
+import {withTx} from "@/lib/server/db";
 import {dbConfigured} from "@/lib/server/flags";
-import {canWriteContentRecord, canModifyContent, canManageAllContent} from "@/lib/server/rbac";
+import {canModifyContent, canManageAllContent, canUseTelegramPublishing} from "@/lib/server/rbac";
 import {applyContentUpsert} from "@/lib/server/publish";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
   if (!admin) return NextResponse.json({error: "unauthorized"}, {status: 401});
   const type = new URL(req.url).searchParams.get("type") as ContentType | null;
   if (!type || !TYPES.includes(type)) return NextResponse.json({error: "invalid type"}, {status: 400});
-  const rows = await listContent(type);
+  const privileged = canManageAllContent(admin.role);
+  if (!privileged && (!canUseTelegramPublishing(admin) || type === "subjects" || type === "telegram" || type === "schedule")) {
+    return NextResponse.json({error: "forbidden"}, {status: 403});
+  }
+  const rows = await listContent(type, undefined, privileged ? undefined : admin.id);
   return NextResponse.json({type, fromDatabase: dbConfigured(), rows});
 }
 
@@ -31,12 +35,10 @@ export async function POST(req: NextRequest) {
   if (body.type !== "telegram" && (!body.row || typeof body.row !== "object" || !body.row.id)) {
     return NextResponse.json({error: "row.id required"}, {status: 400});
   }
-  if (!canWriteContentRecord(admin, body.type, body.type === "telegram" ? undefined : body.row)) {
-    return NextResponse.json({error: "forbidden: role/scope not authorized for this content"}, {status: 403});
-  }
   try {
     await withTx(async db => {
       if (body.type === "telegram") {
+        if (!canManageAllContent(admin.role)) throw new ForbiddenError("forbidden");
         await upsertTelegram(String(body.kind || ""), String(body.key || ""), String(body.url || ""), db);
         await audit(admin.email || `admin#${admin.id}`, "content.upsert.telegram", {key: body.key}, db);
       } else {
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof ForbiddenError || e.status === 403) return NextResponse.json({error: e.message}, {status: 403});
     const msg = e.message || "error";
     const status = /مطلوب|غير صالح|JSON|قيمة غير مسموحة/.test(msg) ? 400 : 500;
-    return NextResponse.json({error: msg}, {status});
+    return NextResponse.json({error: status === 400 ? msg : "Server error"}, {status});
   }
 }
 
@@ -67,7 +69,8 @@ export async function DELETE(req: NextRequest) {
       const table = (SCHEMAS as Record<string, {table: string}>)[type]?.table;
       if (!table) throw new ForbiddenError("forbidden");
       if (!canManageAllContent(admin.role)) {
-        const row = await db.qOne<{created_by: number | null}>(`SELECT created_by FROM ${table} WHERE id=$1`, [id]);
+        if (!canUseTelegramPublishing(admin) || type === "subjects" || type === "schedule") throw new ForbiddenError("forbidden");
+        const row = await db.qOne<{created_by: number | null}>(`SELECT created_by FROM ${table} WHERE id=$1 FOR UPDATE`, [id]);
         if (!row || !canModifyContent(admin, row)) throw new ForbiddenError("forbidden: not the owner");
       }
       await deleteContent(type, id, db);
@@ -78,6 +81,6 @@ export async function DELETE(req: NextRequest) {
     if (err instanceof ForbiddenError) return NextResponse.json({error: err.message}, {status: 403});
     const msg = err instanceof Error ? err.message : "error";
     const status = /غير صالح/.test(msg) ? 400 : 500;
-    return NextResponse.json({error: msg}, {status});
+    return NextResponse.json({error: status === 400 ? msg : "Server error"}, {status});
   }
 }

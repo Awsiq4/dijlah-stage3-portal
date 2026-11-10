@@ -13,7 +13,9 @@ export async function GET(req: NextRequest) {
   if (!canManageUsers(admin.role)) return NextResponse.json({error: "forbidden: super_admin only"}, {status: 403});
   if (!dbConfigured()) return NextResponse.json({fromDatabase: false, rows: []});
   const sp = new URL(req.url).searchParams;
-  const limit = Math.min(Number(sp.get("limit") || 100), 500);
+  const requested = Number(sp.get("limit") || 100);
+  if (!Number.isSafeInteger(requested) || requested < 1) return NextResponse.json({error: "invalid limit"}, {status: 400});
+  const limit = Math.min(requested, 500);
   const rows = await q(
     `SELECT id, actor, action, detail, created_at FROM portal_audit ORDER BY id DESC LIMIT $1`,
     [limit]

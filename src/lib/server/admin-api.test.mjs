@@ -117,3 +117,16 @@ test("teacher upload: assigned subject OK, unassigned rejected, unpermitted sect
   assert.throws(() => validateUploadRequest(t, {filename: "x.pdf", contentType: "application/pdf", size: 1000, subjectId: "digital-systems"}), /not authorized/);
   assert.throws(() => validateUploadRequest(t, {filename: "x.pdf", contentType: "application/pdf", size: 1000, subjectId: "nonlinear-optics", sections: ["C"]}), /not authorized/);
 });
+
+test("scoped publishers cannot smuggle a different audience in a JSON string", async () => {
+  const pool = await makeDb();
+  await q("INSERT INTO portal_subjects (id, name) VALUES ('test-subject','Test')");
+  const base = {id: "material-1", subject_id: "test-subject", title: "Material", number: 1};
+  await assert.rejects(
+    withTx(tx => applyContentUpsert(tx, repA, "lectures", {...base, sections: '["B"]'})),
+    e => e.status === 403
+  );
+  await withTx(tx => applyContentUpsert(tx, repA, "lectures", {...base, sections: '["A"]'}));
+  assert.deepEqual((await qOne("SELECT sections FROM portal_lectures WHERE id=$1", [base.id])).sections, ["A"]);
+  await pool.end();
+});

@@ -1,3 +1,4 @@
+import {safeFileUrl} from "./safe-url.ts";
 // Pure mappers: DB rows (snake_case) -> client PortalData types (camelCase).
 // Type-only import is erased at runtime, so this file is unit-testable under node.
 import type {Announcement, Assignment, Exam, Lecture, PortalData, ScheduleSlot, Section, Subject} from "./types";
@@ -15,7 +16,7 @@ export const mapSubject = (r: Record<string, unknown>): Subject => ({
 });
 export const mapLecture = (r: Record<string, unknown>): Lecture => ({
   id: s(r.id), subjectId: s(r.subject_id), number: Number(r.number) || 1, title: s(r.title), description: s(r.description),
-  fileUrl: s(r.file_url), fileName: s(r.file_name), status: (s(r.status) === "published" ? "published" : "draft") as Lecture["status"], updatedAt: s(r.updated_at),
+  fileUrl: safeFileUrl(s(r.file_url)), fileName: s(r.file_name), status: (s(r.status) === "published" ? "published" : "draft") as Lecture["status"], updatedAt: s(r.updated_at),
 });
 export const mapAnnouncement = (r: Record<string, unknown>): Announcement => ({
   id: s(r.id), title: s(r.title), body: s(r.body), scope: (s(r.scope) || "general") as Announcement["scope"],
@@ -30,7 +31,7 @@ export const mapExam = (r: Record<string, unknown>): Exam => ({
 export const mapAssignment = (r: Record<string, unknown>): Assignment => ({
   id: s(r.id), subjectId: s(r.subject_id), title: s(r.title), instructions: s(r.instructions), assignedAt: s(r.assigned_at),
   dueAt: s(r.due_at), sections: asArray(r.sections) as Section[], submission: s(r.submission),
-  status: (s(r.status) || "active") as Assignment["status"], attachmentUrl: s(r.attachment_url),
+  status: (s(r.status) || "active") as Assignment["status"], attachmentUrl: safeFileUrl(s(r.attachment_url)),
 });
 export const mapScheduleSlot = (r: Record<string, unknown>): ScheduleSlot => ({
   id: s(r.id), section: s(r.section) as Section, day: Number(r.day) || 0, start: s(r.start), end: s(r.end),

@@ -38,7 +38,7 @@ export function signSessionToken(adminId: number, now = Date.now()): string {
   const secret = getSessionSecret();
   if (!secret) throw new Error("SESSION_SECRET (or ADMIN_API_SECRET) is not configured");
   const exp = Math.floor(now / 1000) + SESSION_TTL_SECONDS;
-  const body = `v1.${adminId}.${exp}`;
+  const body = `v2.${adminId}.${exp}.${randomBytes(24).toString("base64url")}`;
   const sig = createHmac("sha256", secret).update(body).digest("base64url");
   return `${body}.${sig}`;
 }
@@ -47,12 +47,15 @@ export function verifySessionToken(token: string, now = Date.now()): {adminId: n
   const secret = getSessionSecret();
   if (!secret || !token) return null;
   const parts = token.split(".");
-  if (parts.length !== 4 || parts[0] !== "v1") return null;
-  const [, adminIdStr, expStr, sig] = parts;
+  const legacy = parts[0] === "v1" && parts.length === 4;
+  const current = parts[0] === "v2" && parts.length === 5 && /^[A-Za-z0-9_-]{32}$/.test(parts[3]);
+  if (!legacy && !current) return null;
+  const [, adminIdStr, expStr] = parts;
+  const sig = parts.pop()!;
   const adminId = Number(adminIdStr);
   const exp = Number(expStr);
-  if (!Number.isFinite(adminId) || !Number.isFinite(exp)) return null;
-  const body = `v1.${adminIdStr}.${expStr}`;
+  if (!Number.isSafeInteger(adminId) || adminId <= 0 || !Number.isSafeInteger(exp)) return null;
+  const body = parts.join(".");
   const expected = createHmac("sha256", secret).update(body).digest();
   let given: Buffer;
   try { given = Buffer.from(sig, "base64url"); } catch { return null; }
@@ -130,7 +133,7 @@ export async function requireAdmin(req: NextRequest, opts?: {write?: boolean}): 
     try { return await getAdminFromToken(cookie); } catch { return null; }
   }
   if (viaSecret) {
-    const row = await qOne<AdminRow>(`SELECT id, email, role, is_active FROM portal_admins WHERE role='super_admin' AND is_active=true ORDER BY id LIMIT 1`);
+    const row = await qOne<AdminRow>(`SELECT id, email, role, is_active, status FROM portal_admins WHERE role='super_admin' AND is_active=true AND status='active' ORDER BY id LIMIT 1`);
     return row || null;
   }
   return null;

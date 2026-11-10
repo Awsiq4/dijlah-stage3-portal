@@ -10,7 +10,6 @@
     "verify": "node scripts/verify-structure.mjs",
     "verify:schedule": "node --experimental-strip-types scripts/verify-schedule.mjs",
     "gen:schedule-csv": "node --experimental-strip-types scripts/gen-schedule-csv.mjs",
-
     "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/public-map.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs src/lib/server/content-schema.test.mjs src/lib/server/db.test.mjs src/lib/server/public.test.mjs src/lib/server/rbac.test.mjs src/lib/server/publish.test.mjs src/lib/server/admin-api.test.mjs src/lib/server/notify.test.mjs src/lib/server/registry.test.mjs",
     "test:e2e": "node --experimental-strip-types scripts/e2e-publish-test.mjs",
     "db:schema": "node --experimental-strip-types scripts/apply-portal-schema.mjs",
@@ -38,5 +37,11 @@
     "@types/react-dom": "^19.1.0",
     "pg-mem": "^3.0.14",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "^8.5.23"
+    },
+    "zod": "^4.6.6"
   }
 }

@@ -1,4 +1,5 @@
 "use client";
+import {safeFileUrl} from "@/lib/safe-url";
 import Link from "next/link";
 import {useParams} from "next/navigation";
 import {ExternalLink as ExternalLinkIcon} from "lucide-react";
@@ -13,7 +14,7 @@ export default function Lecture() {
   const lecture = summary || data.lectures.find(item => item.id === id && item.status === "published");
   if (!lecture) return <Empty title="المحاضرة أو الملخص غير موجود"/>;
   const subject = getSubject(data, lecture.subjectId);
-  const safeUrl = /^https:\/\//.test(lecture.fileUrl) || /^\/(?![\/\\])/.test(lecture.fileUrl);
+  const safeUrl = safeFileUrl(lecture.fileUrl);
   const pdf = /\.pdf(?:$|[?#])/i.test(lecture.fileUrl) || /\.pdf$/i.test(lecture.fileName || "");
   return <>
     <Link className="back-link" href={`/subjects/${lecture.subjectId}`}>{subject?.name} ←</Link>
