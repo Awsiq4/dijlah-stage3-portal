@@ -1,0 +1,57 @@
+/* About department: isolated styling, following the portal's existing theme variables. */
+.department-about{display:flex;flex-direction:column;gap:20px;min-width:0}
+.department-about-breadcrumb{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:.77rem;font-weight:700}
+.department-about-breadcrumb a{color:var(--primary-strong);transition:color .16s ease}
+.department-about-breadcrumb a:hover{text-decoration:underline}
+.department-about-hero{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:25px 26px;border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:linear-gradient(115deg,var(--surface),var(--surface2));
+  box-shadow:var(--shadow);position:relative;overflow:hidden;
+}
+.department-about-hero::before{
+  content:"";position:absolute;inset-block:0;inset-inline-start:0;width:4px;
+  background:linear-gradient(180deg,var(--sky),var(--lime-bright));
+}
+.department-about-hero-icon{
+  flex:0 0 58px;width:58px;height:58px;display:grid;place-items:center;
+  color:var(--primary-strong);background:var(--primary-soft);border-radius:17px;
+}
+.department-about-hero-text{flex:1;min-width:180px}
+.department-about-kicker{display:block;color:var(--primary-strong);font-size:.75rem;font-weight:800;margin-bottom:3px}
+.department-about-hero h1{font-size:1.55rem;margin:0;font-weight:900}
+.department-about-hero p{margin:4px 0 0;color:var(--muted);font-size:.84rem}
+.department-about-year{
+  border:1px solid var(--border);background:var(--surface);
+  color:var(--muted);border-radius:999px;padding:6px 12px;
+  font-size:.73rem;font-weight:800;white-space:nowrap;
+}
+.department-about-card{
+  min-width:0;padding:25px 27px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);box-shadow:var(--shadow);
+}
+.department-about-card-heading{display:flex;align-items:center;gap:12px;margin-bottom:17px}
+.department-about-card-heading h2{font-size:1.12rem;line-height:1.6;margin:0;font-weight:900}
+.department-about-card-icon{
+  flex:0 0 43px;width:43px;height:43px;display:grid;place-items:center;
+  background:var(--primary-soft);color:var(--primary-strong);border-radius:13px;
+}
+.department-about-copy{color:var(--text);font-size:.87rem;line-height:2.18;overflow-wrap:anywhere}
+.department-about-copy p{margin:0 0 13px;line-height:inherit}
+.department-about-copy p:last-child{margin-bottom:0}
+.department-about-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.department-about-goals{grid-column:1/-1}
+@media(max-width:780px){
+  .department-about-grid{grid-template-columns:1fr}
+  .department-about-goals{grid-column:auto}
+}
+@media(max-width:600px){
+  .department-about{gap:15px}
+  .department-about-hero{padding:20px 18px;gap:12px}
+  .department-about-hero-icon{flex-basis:48px;width:48px;height:48px;border-radius:13px}
+  .department-about-hero h1{font-size:1.35rem}
+  .department-about-year{margin-inline-start:60px;font-size:.69rem}
+  .department-about-card{padding:20px 17px}
+  .department-about-card-heading{margin-bottom:13px}
+  .department-about-copy{font-size:.84rem;line-height:2.08}
+}
