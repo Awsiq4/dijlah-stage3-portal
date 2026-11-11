@@ -15,7 +15,8 @@ export type PublishingAccount = {
 };
 
 const SECTIONS = ["A", "B", "C", "F"];
-const PDF_LIMIT = 100 * 1024 * 1024;
+const MATERIAL_LIMIT = 100 * 1024 * 1024;
+const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 export function MaterialForm({account, initial, rows, onSaved}: {
   account: PublishingAccount;
@@ -72,32 +73,36 @@ export function MaterialForm({account, initial, rows, onSaved}: {
     setLink("");
     if (!subjectOptions.some(item => item.id === subject) || !sections.length) { setNotice("اختر مادة وشعبة متاحة للنشر."); return; }
     if (!title.trim()) { setNotice("اكتب عنوان الملف."); return; }
-    if (!file && !initial?.file_url) { setNotice("اختر ملف PDF من جهازك."); return; }
+    if (!file && !initial?.file_url) { setNotice("اختر ملف PDF أو PPTX من جهازك."); return; }
     lock.current = true;
     let saving = false;
     try {
       let fileUrl = String(initial?.file_url || "");
       if (file) {
-        const header = await file.slice(0, 5).text();
-        if (!file.size || file.size > PDF_LIMIT || !/\.pdf$/i.test(file.name) || header !== "%PDF-") {
-          setNotice("اختر ملف PDF صالحًا بحجم لا يتجاوز 100 ميغابايت.");
+        const extension = /\.pptx$/i.test(file.name) ? "pptx" : /\.pdf$/i.test(file.name) ? "pdf" : null;
+        const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+        const pdfValid = extension === "pdf" && bytes.length >= 5 && String.fromCharCode(...bytes) === "%PDF-";
+        const pptxValid = extension === "pptx" && bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+        if (!file.size || file.size > MATERIAL_LIMIT || !extension || (!pdfValid && !pptxValid)) {
+          setNotice("اختر ملف PDF أو PPTX صالحًا بحجم لا يتجاوز 100 ميغابايت.");
           return;
         }
+        const contentType = extension === "pptx" ? PPTX_MIME : "application/pdf";
         const cached = uploadCache.current;
         if (cached?.file === file && cached.subject === subject && cached.audience === selection) {
           fileUrl = cached.url;
         } else {
           setStatus("uploading");
           setProgress(0);
-          const basename = file.name.replace(/\.pdf$/i, "").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 96) || "document";
-          const pathname = `lectures/${crypto.randomUUID()}-${basename}.pdf`;
+          const basename = file.name.replace(/\.(pdf|pptx)$/i, "").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 96) || "document";
+          const pathname = `lectures/${crypto.randomUUID()}-${basename}.${extension}`;
           const blob = await upload(pathname, file, {
             access: "public",
-            contentType: "application/pdf",
+            contentType,
             handleUploadUrl: "/api/admin/upload",
             headers: {"x-portal-admin": "1"},
             multipart: file.size > 5 * 1024 * 1024,
-            clientPayload: JSON.stringify({filename: file.name, contentType: "application/pdf", size: file.size, subjectId: subject, sections}),
+            clientPayload: JSON.stringify({filename: file.name, contentType, size: file.size, subjectId: subject, sections}),
             onUploadProgress: ({percentage}) => setProgress(Math.round(percentage)),
           });
           fileUrl = blob.url;
@@ -153,12 +158,12 @@ export function MaterialForm({account, initial, rows, onSaved}: {
         <option value="summary">ملخص</option>
       </select>
     </label>
-    <label className="form-field wide"><span>ملف PDF {initial?.file_url ? "جديد (اختياري)" : "من جهازك"}</span>
-      <input ref={input} type="file" accept="application/pdf,.pdf" required={!initial?.file_url} disabled={busy} onChange={e => {
+    <label className="form-field wide"><span>ملف PDF أو PPTX {initial?.file_url ? "جديد (اختياري)" : "من جهازك"}</span>
+      <input ref={input} type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx" required={!initial?.file_url} disabled={busy} onChange={e => {
         const selected = e.target.files?.[0];
         setFile(selected);
         setNotice("");
-        if (selected && !title.trim()) setTitle(selected.name.replace(/\.pdf$/i, ""));
+        if (selected && !title.trim()) setTitle(selected.name.replace(/\.(pdf|pptx)$/i, ""));
       }}/>
       <small className="subtle">حتى 100 ميغابايت. ينرفع الملف عند الحفظ.</small>
     </label>
