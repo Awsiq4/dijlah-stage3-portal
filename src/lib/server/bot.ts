@@ -179,6 +179,25 @@ async function previewDraft(chatId: number, flow: string, d: Record<string, unkn
 
 // ---- message handling (steps of the flows) ----
 export type TgDocument = {file_id: string; file_name?: string; mime_type?: string; file_size?: number};
+type PdfUploadStage = "telegram-getFile" | "telegram-download" | "pdf-validation" | "blob-upload" | "draft-preview" | "lecture-replacement";
+function reportPdfUploadError(operation: string, stage: PdfUploadStage, error: unknown): string {
+  const trace = randomBytes(4).toString("hex");
+  const info = error as {status?: unknown; statusCode?: unknown; code?: unknown} | null;
+  const raw = error instanceof Error ? error.message : String(error);
+  // Never log Telegram bot credentials, full URLs, uploaded document IDs, or long opaque tokens.
+  const safe = (BOT_TOKEN ? raw.replaceAll(BOT_TOKEN, "[redacted]") : raw)
+    .replace(/https?:\/\/\S+/g, "[url]")
+    .replace(/[A-Za-z0-9_-]{50,}/g, "[redacted]")
+    .slice(0, 240);
+  console.error("telegram_pdf_upload_failed", {
+    trace, operation, stage,
+    name: error instanceof Error ? error.name : "UnknownError",
+    status: typeof info?.status === "number" ? info.status : typeof info?.statusCode === "number" ? info.statusCode : undefined,
+    code: typeof info?.code === "string" ? info.code.slice(0, 40) : undefined,
+    message: safe,
+  });
+  return trace;
+}
 export async function handleAdminMessage(chatId: number, userId: number, text: string, document?: TgDocument): Promise<void> {
   const admin = await getLinkedAdmin(userId);
   if (!admin) return;
@@ -220,20 +239,28 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
     if (document.mime_type !== "application/pdf") { await sendMessage(chatId, "⚠️ الملف ليس PDF."); return; }
     if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ أكبر من 20MB — استبدله من لوحة الويب."); return; }
     if (!storageConfigured()) { await sendMessage(chatId, "⚠️ التخزين غير مهيأ — استخدم لوحة الويب."); return; }
+    let stage: PdfUploadStage = "telegram-getFile";
     try {
       const g = await tgFetch<{file_path: string}>("getFile", {file_id: document.file_id});
       if (!g.ok || !g.result?.file_path) { await sendMessage(chatId, "⚠️ تعذر قراءة الملف."); return; }
+      stage = "telegram-download";
       const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${g.result.file_path}`);
-      if (!dl.ok) throw new Error("download failed");
+      if (!dl.ok) throw new Error(`Telegram download HTTP ${dl.status}`);
       const buf = Buffer.from(await dl.arrayBuffer());
+      stage = "pdf-validation";
       if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "الملف أكبر من 20MB."); return; }
       if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ ليس PDF صالحًا."); return; }
+      stage = "blob-upload";
       const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
+      stage = "lecture-replacement";
       const r = await replaceLectureFileOwn(admin, String(state.data.id), url, document.file_name || "lecture.pdf", createHash("sha256").update(buf).digest("hex"));
       if (r.ok) await clearState(chatId);
       const lecture = await qOne<{subject_id: string}>(`SELECT subject_id FROM portal_lectures WHERE id=$1`, [state.data.id]);
       await sendMessage(chatId, r.ok ? `✅ تم استبدال الملف: ${PORTAL_BASE_URL}/subjects/${lecture?.subject_id || ""}` : `⛔ ${r.error}`, {replyMarkup: adminMenu(admin)});
-    } catch { await sendMessage(chatId, "⚠️ فشل الاستبدال."); }
+    } catch (error) {
+      const trace = reportPdfUploadError("replace", stage, error);
+      await sendMessage(chatId, `⚠️ تعذّر استبدال ملف PDF (${stage === "blob-upload" ? "فشل التخزين" : stage === "telegram-download" ? "تعذّر تنزيل الملف" : "خطأ في المعالجة"}). بقي الملف القديم كما هو إذا لم تكتمل عملية الاستبدال. رمز المتابعة: ${trace}`, {replyMarkup: navigation});
+    }
     return;
   }
   if (state.flow === "lec") {
@@ -250,17 +277,34 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
         if (document.mime_type !== "application/pdf") { await sendMessage(chatId, "⚠️ الملف ليس PDF. أرسل ملف PDF أو رابط ملف محفوظ."); return; }
         if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
         if (!storageConfigured()) { await sendMessage(chatId, "⚠️ تخزين الملفات غير مهيأ على الخادم. استخدم لوحة الويب لرفع الملف."); return; }
+        let stage: PdfUploadStage = "telegram-getFile";
         try {
           const g = await tgFetch<{file_path: string}>("getFile", {file_id: document.file_id});
           if (!g.ok || !g.result?.file_path) { await sendMessage(chatId, "⚠️ تعذر قراءة الملف من Telegram."); return; }
+          stage = "telegram-download";
           const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${g.result.file_path}`);
           if (!dl.ok) { await sendMessage(chatId, "⚠️ تعذر تنزيل الملف من Telegram. أعد إرساله."); return; }
           const buf = Buffer.from(await dl.arrayBuffer());
+          stage = "pdf-validation";
           if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
           if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ الملف ليس PDF صالحًا."); return; }
+          stage = "blob-upload";
           const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
-          await previewDraft(chatId, "lec", {...d, fileUrl: url, fingerprint: createHash("sha256").update(buf).digest("hex"), pendingDoc: undefined});
-        } catch { await sendMessage(chatId, "⚠️ فشل رفع الملف — جرّب من لوحة الويب."); }
+          const draft = {...d, fileUrl: url, fingerprint: createHash("sha256").update(buf).digest("hex"), pendingDoc: undefined, step: "confirm"};
+          // Persist the uploaded URL before sending the confirmation message.
+          // If Telegram fails after storage succeeds, /start can resume this draft without re-uploading.
+          stage = "draft-preview";
+          await setState(chatId, "lec", draft);
+          await previewDraft(chatId, "lec", draft);
+        } catch (error) {
+          const trace = reportPdfUploadError("new-lecture", stage, error);
+          const message = stage === "blob-upload"
+            ? "تعذّر حفظ الملف في تخزين الموقع. احتفظ بالمسودة وأعد إرسال PDF."
+            : stage === "draft-preview"
+              ? "قد يكون الملف رُفع بنجاح، لكن تعذرت المعاينة. اضغط «القائمة الرئيسية» ثم «استئناف المسودة»؛ لا تعِد رفع الملف."
+              : "تعذّر استكمال قراءة PDF من Telegram. أعد إرسال الملف.";
+          await sendMessage(chatId, `⚠️ ${message}\\nرمز المتابعة: ${trace}`, {replyMarkup: navigation});
+        }
         return;
       }
       if (!/^\/[A-Za-z0-9_\-./]+$/.test(text) && !/^https:\/\//.test(text)) { await sendMessage(chatId, "⚠️ الرابط غير صالح. أرسل رابطًا يبدأ بـ / أو https://"); return; }

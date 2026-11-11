@@ -18,12 +18,29 @@ export async function uploadLecturePdf(buf: Buffer, filename: string): Promise<{
   if (!isPdf(buf)) throw new Error("File is not a valid PDF");
   if (buf.length > MAX_PDF_BYTES) throw new Error("File exceeds the 20MB limit");
   const safe = (filename || "lecture.pdf").replace(/[^A-Za-z0-9._-]/g, "_").slice(-80);
-  const {url} = await put(`lectures/${Date.now()}-${safe}`, buf, {
-    access: "public",
-    contentType: "application/pdf",
-    addRandomSuffix: true,
-  });
-  return {url, name: safe};
+  // Retry only transient network/service errors; invalid credentials and
+  // permanent 4xx responses must be reported, not retried.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const {url} = await put(`lectures/${Date.now()}-${safe}`, buf, {
+        access: "public",
+        contentType: "application/pdf",
+        addRandomSuffix: true,
+      });
+      return {url, name: safe};
+    } catch (error) {
+      const candidate = error as {status?: number; statusCode?: number; code?: string};
+      const status = candidate?.status ?? candidate?.statusCode;
+      const code = String(candidate?.code ?? "");
+      const msg = error instanceof Error ? error.message : "";
+      const transient = status === 429 || (typeof status === "number" && status >= 500) ||
+        /^(ECONNRESET|ETIMEDOUT|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT)$/.test(code) ||
+        /(?:fetch failed|network error|socket hang up|timed? out)/i.test(msg);
+      if (!transient || attempt > 0) throw error;
+      await new Promise(resolve => setTimeout(resolve, 400));
+    }
+  }
+  throw new Error("Unable to upload PDF after retry");
 }
 
 // Validation for the direct-to-Blob upload token request (handleUpload onBeforeGenerateToken).
