@@ -1,6 +1,7 @@
 // Telegram bot: account linking + direct publishing flows.
 // The bot uses the SAME publish service as the website (publish.ts) — one backend.
 // Conversation state is persisted in portal_bot_state (survives serverless restarts).
+import {TELEGRAM_STAFF_ROLES} from "../telegram-roles.ts";
 import {randomBytes} from "node:crypto";
 import {homeMenuFor} from "./botx.ts";
 import {q, qOne, withTx, type Queryer} from "./db.ts";
@@ -41,14 +42,14 @@ async function bindTelegramAccount(db: Queryer, account: AdminInfo, userId: numb
   return true;
 }
 
-export async function bindInvitedTeacher(userId: number): Promise<void> {
+export async function bindInvitedStaff(userId: number): Promise<void> {
   await withTx(async db => {
     const account = await db.qOne<AdminInfo>(
       `SELECT id,email,role,status,is_active FROM portal_admins
-       WHERE telegram_expected_id=$1 AND role='teacher' AND status='active' AND is_active=true FOR UPDATE`,
+       WHERE telegram_expected_id=$1 AND status='active' AND is_active=true FOR UPDATE`,
       [userId]
     );
-    if (!account) return;
+    if (!account || !TELEGRAM_STAFF_ROLES.includes(account.role)) return;
     const linked = await db.qOne(
       `SELECT 1 FROM portal_telegram_links WHERE telegram_user_id=$1 AND revoked_at IS NULL`,
       [userId]

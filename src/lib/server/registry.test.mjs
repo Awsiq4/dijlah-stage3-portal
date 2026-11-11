@@ -12,7 +12,7 @@ process.env.BOT_OWNER_ID = "424242";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const {newDb} = await import("pg-mem");
 const {setPoolForTests, q, qOne, defaultQueryer} = await import("./db.ts");
-const {bindInvitedTeacher, getLinkedAdmin} = await import("./bot.ts");
+const {bindInvitedStaff, getLinkedAdmin} = await import("./bot.ts");
 const {registerUser, isBotOwner, esc} = await import("./registry.ts");
 const {computeAnalytics, listUsers, setSetting, getSetting, ownerNotificationsEnabled, OWNER_NOTIFY_KEY} = await import("./analytics.ts");
 const {classifyBotActivity} = await import("./owner-intelligence.ts");
@@ -25,7 +25,7 @@ async function makeDb() {
   const norm = (sql) => sql.split(/;\s*(?:\n|$)/)
     .filter(st => !st.includes("portal_admins_role_check") && !st.includes("tg_subscribers_section_check"))
     .map(st => st.replace(/\s*CHECK \(sections <@[^)]*\)/, ""));
-  const base = readFileSync(path.join(root, "database/portal-schema.sql"), "utf8").replace("'super_admin','editor'", "'super_admin','editor','teacher'");
+  const base = readFileSync(path.join(root, "database/portal-schema.sql"), "utf8").replace("'super_admin','editor'", "'super_admin','editor','teacher','section_representative','general_representative'");
   const rbac = readFileSync(path.join(root, "database/portal-rbac.sql"), "utf8");
   let tg = readFileSync(path.join(root, "database/telegram-notifications.sql"), "utf8");
   tg = tg.replace("section TEXT NOT NULL CHECK (section IN ('A','B','C','F'))", "section TEXT CHECK (section IS NULL OR section IN ('A','B','C','F'))");
@@ -81,16 +81,42 @@ test("teacher Telegram binding requires the assigned ID, is idempotent and does 
     );
     await q(`INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,2002)`, [teacher.id]);
     assert.equal(await getLinkedAdmin(2001), null);
-    await bindInvitedTeacher(9999);
+    await bindInvitedStaff(9999);
     assert.equal(await getLinkedAdmin(9999), null);
-    await bindInvitedTeacher(2002);
+    await bindInvitedStaff(2002);
     assert.equal((await getLinkedAdmin(2002)).id, teacher.id);
     assert.notEqual((await getLinkedAdmin(2002)).id, other.id);
-    await bindInvitedTeacher(2001);
-    await bindInvitedTeacher(2001);
+    await bindInvitedStaff(2001);
+    await bindInvitedStaff(2001);
     assert.equal((await getLinkedAdmin(2001)).id, teacher.id);
     assert.equal(await getLinkedAdmin(2002), null);
     assert.equal((await qOne(`SELECT count(*)::int AS count FROM portal_audit WHERE action='telegram.link.bound'`)).count, 1);
+  } finally {
+    await pool.end();
+  }
+});
+
+test("both representative roles bind using their assigned Telegram ID", async () => {
+  const pool = await makeDb();
+  try {
+    for (const [role, telegramId, section] of [
+      ["section_representative", 3001, "A"],
+      ["general_representative", 3002, null],
+      ["viewer", 3003, null],
+    ]) {
+      await q(
+        `INSERT INTO portal_admins (email, password_hash, role, status, assigned_section, telegram_expected_id)
+         VALUES ($1, 'test', $2, 'active', $3, $4)`, [role + "@example.test", role, section, telegramId]
+      );
+      await bindInvitedStaff(telegramId);
+      const linked = await getLinkedAdmin(telegramId);
+      if (role === "viewer") {
+        assert.equal(linked, null);
+      } else {
+        assert.equal(linked.role, role);
+        assert.equal(linked.assigned_section, section);
+      }
+    }
   } finally {
     await pool.end();
   }

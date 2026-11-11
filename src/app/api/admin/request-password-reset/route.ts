@@ -1,3 +1,4 @@
+import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import {createHash, randomBytes} from "node:crypto";
 import {NextRequest, NextResponse} from "next/server";
 import {checkLoginRateLimit, csrfWriteOk} from "@/lib/server/auth";
@@ -34,10 +35,10 @@ export async function POST(req: NextRequest) {
          JOIN portal_telegram_links l ON l.admin_id=a.id AND l.revoked_at IS NULL
          WHERE a.status='active' AND a.is_active=true
            AND ((a.role='super_admin' AND l.telegram_user_id=$2 AND ($1='' OR a.email=$1))
-             OR (a.role='teacher' AND a.email=$1
+             OR (a.role=ANY($3::text[]) AND a.email=$1
                AND (a.telegram_expected_id IS NULL OR a.telegram_expected_id=l.telegram_user_id)))
          LIMIT 1 FOR UPDATE OF a`,
-        [email, ownerId]
+        [email, ownerId, TELEGRAM_STAFF_ROLES]
       );
       if (!admin) return {issued: false} as const;
       const recent = await db.qOne(

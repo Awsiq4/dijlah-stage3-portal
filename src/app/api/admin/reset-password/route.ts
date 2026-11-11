@@ -1,3 +1,4 @@
+import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import {createHash} from "node:crypto";
 import {NextRequest, NextResponse} from "next/server";
 import {checkLoginRateLimit, csrfWriteOk, hashPassword} from "@/lib/server/auth";
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
       const account = await db.qOne<{id: number}>(
         `SELECT a.id FROM portal_admins a JOIN portal_password_resets r ON r.admin_id=a.id
          WHERE r.token_hash=$1 AND r.used_at IS NULL AND r.expires_at>now()
-         AND a.role IN ('super_admin','teacher') AND a.is_active=true AND a.status='active' FOR UPDATE OF a`, [tokenHash]
+         AND (a.role='super_admin' OR a.role=ANY($2::text[])) AND a.is_active=true AND a.status='active' FOR UPDATE OF a`, [tokenHash, TELEGRAM_STAFF_ROLES]
       );
       if (!account) return false;
       const used = await db.qOne(
