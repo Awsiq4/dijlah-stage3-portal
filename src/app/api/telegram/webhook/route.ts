@@ -1,5 +1,6 @@
 import {after, NextRequest, NextResponse} from "next/server";
 import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTION_SECRET, botConfigured, webhookAuthorized} from "@/lib/server/flags";
+import {issueOwnerEnrollment} from "@/lib/server/owner-mfa";
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
 import {sendMessage, tgFetch} from "@/lib/server/telegram";
@@ -159,7 +160,11 @@ export async function POST(req: NextRequest) {
     if (message?.chat?.id && (message.text || message.document || message.photo)) {
       const text = String(message.text || message.caption || "");
       const arg = text.split(" ").slice(1).join(" ").trim();
-      if (text.startsWith("/start") && arg.startsWith("sd_")) {
+      if (text.trim().split("@")[0] === "/mfa_setup" && message.from?.id && message.from.id === message.chat.id) {
+        const code = await issueOwnerEnrollment(Number(message.from.id));
+        if (code) await sendMessage(Number(message.chat.id),
+          "🔐 رمز إعداد التحقق بخطوتين صالح لعشر دقائق. أدخله فقط في صفحة تسجيل دخول البوابة.\n\n" + code);
+      } else if (text.startsWith("/start") && arg.startsWith("sd_")) {
         await redeemSiteSupport(Number(message.chat.id),Number(message.from?.id || message.chat.id),arg.slice(3),message.from);
       } else if (text.startsWith("/start") && arg.startsWith("link_")) {
         await handleLinkStart(Number(message.chat.id), Number(message.from?.id || message.chat.id), arg);

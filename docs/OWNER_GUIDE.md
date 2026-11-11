@@ -8,7 +8,7 @@ PR #13 (draft) · فرع `vibe/phase1-secure-backend-fbb429` · كل الإعد�
 |---|---|---|---|---|
 | `DATABASE_URL` | Project → Settings → Environment Variables → Custom Env `phase1-preview` (branch `vibe/phase1-secure-backend-fbb429`) | نعم | Neon Console → المشروع → Connection string (pooled) | `/api/health` → `databaseConnected:true, migrationApplied:true` |
 | `SESSION_SECRET` | نفس الـenv | نعم | `openssl rand -hex 32` | تسجيل دخول Admin يعمل |
-| `ADMIN_API_SECRET` | نفس الـenv | نعم | `openssl rand -hex 32` | mismos header `x-admin-secret` يعمل |
+| `OWNER_MFA_SECRET` | Vercel Production | نعم | `openssl rand -hex 32` | مفتاح مستقل لتشفير بيانات تطبيق المصادقة |
 | `BLOB_READ_WRITE_TOKEN` | نفس الـenv | لرفع PDF | Vercel → Storage → Blob → Create token | رفع PDF من اللوحة ينجح |
 | `PORTAL_BASE_URL` | نفس الـenv | نعم | رابط الـpreview | CSRF على عمليات الكتابة يعمل |
 | `PORTAL_ALLOWED_ORIGINS` | نفس الـenv | اختياري | origins إضافية | — |
@@ -48,3 +48,14 @@ PR #13 (draft) · فرع `vibe/phase1-secure-backend-fbb429` · كل الإعد�
 ## 5. ملاحظات
 الفرع `vibe/phase1-secure-backend-fbb429` يجب أن تبقى draft حتى review المالك.
 - لا توجد واجهة إدارة AI في المشروع (أُزيلت سابقًا) — من backlog إن لزم لاحقًا.
+
+
+## التحقق بخطوتين لحساب المالك
+
+1. بعد ربط حساب Telegram، أرسل الأمر `/mfa_setup` في المحادثة الخاصة مع بوت البوابة.
+2. افتح [تسجيل دخول الإدارة](https://dj3.top/admin/login). أدخل البريد وكلمة المرور، ثم رمز الإعداد من البوت خلال عشر دقائق.
+3. أضف المفتاح المعروض إلى تطبيق المصادقة كمفتاح يستند إلى الوقت، ثم أدخل رمز التطبيق. احفظ رموز الاسترداد المعروضة مرة واحدة.
+4. للدخول لاحقًا، أدخل كلمة المرور ورمز التطبيق. يمكن استخدام رمز استرداد مرة واحدة عند تعذّر الوصول إلى التطبيق.
+5. لتغيير التطبيق، اختر «تغيير تطبيق المصادقة» في مرحلة التحقق. يتطلب التغيير رمز إعداد جديدًا من البوت ورمز التطبيق الحالي أو رمز استرداد صالحًا. يلغي التغيير الجلسات والرموز السابقة.
+
+صلاحيات المالك على الموقع تتطلب جلسة جرى التحقق منها بخطوتين. استخدم مفتاح `OWNER_MFA_SECRET` نفسه عند إعادة نشر الخدمة. لاستعادة الوصول في بيئة معزولة، استخدم حسابًا ومفتاحًا مستقلين عن الإنتاج.

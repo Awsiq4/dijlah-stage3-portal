@@ -1,5 +1,5 @@
 import {NextRequest, NextResponse} from "next/server";
-import {ADMIN_SECRET, timingSafeEqual, telegramServiceEnabled, botConfigured, dbConfigured, PORTAL_BASE_URL, WEBHOOK_SECRET} from "@/lib/server/flags";
+import {telegramServiceEnabled, botConfigured, dbConfigured, PORTAL_BASE_URL, WEBHOOK_SECRET} from "@/lib/server/flags";
 import {q} from "@/lib/server/db";
 import {getMe, setWebhook, tgFetch} from "@/lib/server/telegram";
 import {requireAdmin} from "@/lib/server/auth";
@@ -7,14 +7,9 @@ import {publishAndDeliver} from "@/lib/server/notify";
 
 export const dynamic = "force-dynamic";
 
-function authorized(req: NextRequest): boolean {
-  if (!ADMIN_SECRET) return false;
-  return timingSafeEqual(req.headers.get("x-admin-secret") || "", ADMIN_SECRET);
-}
-
 export async function GET(req: NextRequest) {
   const caller = await requireAdmin(req);
-  if (!authorized(req) && caller?.role !== "super_admin") return NextResponse.json({error: "forbidden"}, {status: 403});
+  if (caller?.role !== "super_admin") return NextResponse.json({error: "forbidden"}, {status: 403});
   const enabled = telegramServiceEnabled();
   const bot = botConfigured() ? await getMe() : null;
   let stats: unknown = null;
@@ -39,10 +34,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const admin = await requireAdmin(req, {write: true});
+  if (admin?.role !== "super_admin") return NextResponse.json({error: "forbidden"}, {status: 403});
   const body = await req.json().catch(() => ({}));
   if (body?.action === "configure-webhook") {
-    const admin = await requireAdmin(req, {write: true});
-    if (admin?.role !== "super_admin") return NextResponse.json({error: "forbidden"}, {status: 403});
     if (!telegramServiceEnabled() || !WEBHOOK_SECRET) {
       return NextResponse.json({error: "bot configuration incomplete"}, {status: 503});
     }
@@ -73,7 +68,6 @@ export async function POST(req: NextRequest) {
       lastErrorAt: info.result?.last_error_date || null,
     });
   }
-  if (!authorized(req)) return NextResponse.json({error: "forbidden"}, {status: 403});
   if (!telegramServiceEnabled()) return NextResponse.json({error: "service disabled (flag/db/bot missing)"}, {status: 503});
   if (body?.action !== "test") return NextResponse.json({error: "unknown action"}, {status: 400});
   const result = await publishAndDeliver({

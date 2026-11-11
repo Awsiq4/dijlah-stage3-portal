@@ -33,7 +33,7 @@ export async function GET() {
     migrationApplied: await migrationApplied(),
     telegramBotConfigured: botConfigured(),
     telegramServiceEnabled: telegramServiceEnabled(),
-    adminAuthConfigured: Boolean(process.env.SESSION_SECRET || process.env.ADMIN_API_SECRET) && dbConfigured(),
+    adminAuthConfigured: Boolean(process.env.SESSION_SECRET) && dbConfigured(),
     ragConnected: false,
   });
 }

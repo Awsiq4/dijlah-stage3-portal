@@ -2,6 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import {qOne, withTx} from "@/lib/server/db";
 import {checkLoginRateLimit, csrfWriteOk, sha256Hex, verifyPassword, createSession, SESSION_COOKIE, SESSION_TTL_SECONDS} from "@/lib/server/auth";
 import {auditBestEffort} from "@/lib/server/content";
+import {verifyOwnerLogin} from "@/lib/server/owner-mfa";
 import {dbConfigured} from "@/lib/server/flags";
 
 // Run the same KDF for unknown accounts to avoid a timing-based account lookup.
@@ -33,20 +34,38 @@ export async function POST(req: NextRequest) {
     );
     const passwordValid = verifyPassword(password, admin?.password_hash || DUMMY_PASSWORD_HASH);
     const valid = admin && admin.is_active && admin.status === "active" && passwordValid;
-    // Login-attempt logging is best-effort by documented policy: it must never block a login or leak error details.
-    await auditBestEffort(valid ? email : `unknown:${email}`, valid ? "admin.login.success" : "admin.login.failed", {ip});
-    if (!valid) return NextResponse.json({error: "Invalid credentials"}, {status: 401});
+    if (!valid) {
+      await auditBestEffort(`unknown:${email}`, "admin.login.failed", {ip});
+      return NextResponse.json({error: "Invalid credentials"}, {status: 401});
+    }
 
-    const token = await withTx(async db => {
-      const current = await db.qOne(
-        `UPDATE portal_admins SET last_login_at=now() WHERE id=$1 AND password_hash=$2
-         AND is_active=true AND status='active' RETURNING id`, [admin.id, admin.password_hash]
+    const result = await withTx(async db => {
+      const current = await db.qOne<{role: string}>(
+        `SELECT role FROM portal_admins WHERE id=$1 AND password_hash=$2
+         AND is_active AND status='active' FOR UPDATE`, [admin.id, admin.password_hash]
       );
-      return current ? createSession(admin.id, db) : null;
+      if (!current) return {kind: "invalid_factor"} as const;
+      const owner = current.role === "super_admin";
+      const verification = owner ? await verifyOwnerLogin(db, admin.id, {
+        code: typeof body?.code === "string" ? body.code.slice(0, 64) : "",
+        enrollmentToken: typeof body?.enrollmentToken === "string" ? body.enrollmentToken.slice(0, 64).trim() : "",
+        existingCode: typeof body?.existingCode === "string" ? body.existingCode.slice(0, 64) : "",
+      }) : {kind: "verified", recoveryCodes: undefined} as const;
+      if (verification.kind !== "verified") return verification;
+      await db.q(`UPDATE portal_admins SET last_login_at=now() WHERE id=$1`, [admin.id]);
+      return {...verification, token: await createSession(admin.id, db, owner), role: current.role} as const;
     });
-    if (!token) return NextResponse.json({error: "Invalid credentials"}, {status: 401});
-    const res = NextResponse.json({ok: true, email: admin.email, role: admin.role});
-    res.cookies.set(SESSION_COOKIE, token, {
+    if (result.kind !== "verified") {
+      if (result.kind === "invalid_factor") {
+        await auditBestEffort(email, "admin.login.factor_failed", {ip});
+        return NextResponse.json({step: result.kind}, {status: 401});
+      }
+      const setupKey = result.kind === "configure_authenticator" ? result.setupKey : undefined;
+      return NextResponse.json({step: result.kind, setupKey}, {status: 202});
+    }
+    await auditBestEffort(email, "admin.login.success", {ip, ownerMfa: result.role === "super_admin"});
+    const res = NextResponse.json({ok: true, email: admin.email, role: result.role, recoveryCodes: result.recoveryCodes});
+    res.cookies.set(SESSION_COOKIE, result.token, {
       httpOnly: true,
       sameSite: "lax",
       secure: true,
@@ -54,8 +73,8 @@ export async function POST(req: NextRequest) {
       maxAge: SESSION_TTL_SECONDS,
     });
     return res;
-  } catch (err) {
-    console.error("admin login error", err instanceof Error ? err.message : err);
+  } catch {
+    console.error("admin login failed");
     return NextResponse.json({error: "Server error"}, {status: 500});
   }
 }

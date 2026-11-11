@@ -26,22 +26,28 @@ test("session token: sign+verify roundtrip", () => {
 
 test("session token: tampering, expiry, garbage all rejected", () => {
   const t = signSessionToken(7, 1_000_000_000);
-  const [v, id, exp] = t.split(".");
-  assert.equal(verifySessionToken(`${v}.8.${exp}.${t.split(".")[3]}`, 1_000_000_000), null); // id tampered
-  const flipped = t.slice(0, -2) + (t.endsWith("aa") ? "bb" : "aa");
-  assert.equal(verifySessionToken(flipped, 1_000_000_000), null); // sig tampered
+  const [v, id, exp, nonce, signature] = t.split(".");
+  assert.equal(verifySessionToken(`${v}.8.${exp}.${nonce}.${signature}`, 1_000_000_000), null);
+  const flipped = (signature[0] === "A" ? "B" : "A") + signature.slice(1);
+  assert.equal(verifySessionToken(`${v}.${id}.${exp}.${nonce}.${flipped}`, 1_000_000_000), null);
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const alias = signature.slice(0, -1) + alphabet[alphabet.indexOf(signature.at(-1)) + 1];
+  assert.deepEqual(Buffer.from(alias, "base64url"), Buffer.from(signature, "base64url"));
+  assert.equal(verifySessionToken(`${v}.${id}.${exp}.${nonce}.${alias}`, 1_000_000_000), null);
   assert.equal(verifySessionToken(t, 1_000_000_000 + 8 * 24 * 3600 * 1000), null); // expired (TTL 7d)
   assert.equal(verifySessionToken("garbage", 1_000_000_000), null);
   assert.equal(verifySessionToken("v2.1.2.sig", 1_000_000_000), null);
   assert.equal(verifySessionToken("", 1_000_000_000), null);
 });
 
-test("session token: falls back to ADMIN_API_SECRET when SESSION_SECRET is unset", () => {
+test("session tokens require the separate session secret", () => {
   const saved = process.env.SESSION_SECRET;
-  delete process.env.SESSION_SECRET;
-  const t = signSessionToken(3, 1_000_000_000); // must not throw: ADMIN_API_SECRET is set
-  assert.deepEqual(verifySessionToken(t, 1_000_000_000), {adminId: 3});
-  process.env.SESSION_SECRET = saved;
+  try {
+    delete process.env.SESSION_SECRET;
+    assert.throws(() => signSessionToken(3, 1_000_000_000), /SESSION_SECRET/);
+  } finally {
+    process.env.SESSION_SECRET = saved;
+  }
 });
 
 test("sha256Hex is deterministic and hex", () => {
@@ -80,6 +86,8 @@ test("requireAdmin: no cookie and no header -> null; wrong secret header -> null
   assert.equal(await requireAdmin(req, {write: true}), null);
   const bad = {cookies: {get: () => undefined}, headers: {get: n => (n === "x-admin-secret" ? "wrong" : null)}};
   assert.equal(await requireAdmin(bad), null);
+  const legacySecret = {cookies: {get: () => undefined}, headers: {get: n => n === "x-admin-secret" ? process.env.ADMIN_API_SECRET : null}};
+  assert.equal(await requireAdmin(legacySecret), null);
 });
 
 test("sessions issued for one account in the same second are distinct", () => {
@@ -102,4 +110,14 @@ test("navigation and file links reject unsafe protocols and URL parsing ambiguit
   for (const url of ["javascript:alert(1)", "//external.test/a.pdf", "/a\\b.pdf", "https://user@external.test/a.pdf"]) {
     assert.equal(safeFileUrl(url), "");
   }
+});
+
+test("owner requires a verified MFA session, ordinary staff keep their sessions", async () => {
+  const {getAdminFromToken} = await import("./auth.ts");
+  const row = {id: 7, role: "super_admin", is_active: true, status: "active", revoked: 0, expired: 0};
+  const db = {qOne: async () => row};
+  assert.equal(await getAdminFromToken(signSessionToken(7), db), null);
+  assert.equal((await getAdminFromToken(signSessionToken(7, Date.now(), true), db)).id, 7);
+  row.role = "teacher";
+  assert.equal((await getAdminFromToken(signSessionToken(7), db)).id, 7);
 });

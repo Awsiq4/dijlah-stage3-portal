@@ -42,12 +42,12 @@ try {
     if (t) await pool.query(t);
   }
 
-  // 1. sign in as Super Admin (same checks as /api/admin/login)
+  // 1. create a test-only Super Admin session after verifying the fixture password
   const admin = await qOne(`SELECT id,email,role,is_active,password_hash FROM portal_admins WHERE email=$1`, [EMAIL]);
   const signedIn = admin && admin.is_active && verifyPassword(PASSWORD, admin.password_hash);
   step('1. Super Admin sign-in (password verified against scrypt hash)', Boolean(signedIn));
   if (!signedIn) throw new Error('cannot continue without a valid super admin — run npm run create:super-admin first');
-  const token = await createSession(admin.id);
+  const token = await createSession(admin.id, undefined, true);
   const sessionAdmin = await getAdminFromToken(token);
   step('1b. session token resolves to the admin in DB', sessionAdmin?.id === admin.id);
 
