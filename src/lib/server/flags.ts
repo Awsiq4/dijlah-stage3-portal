@@ -5,7 +5,7 @@ export const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 export const SUBSCRIPTION_SECRET = process.env.SUBSCRIPTION_SECRET || "";
 export const WORKER_SECRET = process.env.WORKER_SECRET || "";
 export const DATABASE_URL = process.env.DATABASE_URL || "";
-export const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || "https://dijlah-stage3-portal.vercel.app";
+export const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || "https://dj3.top";
 export const PORTAL_ALLOWED_ORIGINS: string[] = (process.env.PORTAL_ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean);
 export const QSTASH_TOKEN = process.env.QSTASH_TOKEN || "";
 export const QSTASH_URL = process.env.QSTASH_URL || "";
