@@ -186,7 +186,7 @@ function reportPdfUploadError(operation: string, stage: PdfUploadStage, error: u
   const raw = error instanceof Error ? error.message : String(error);
   // Never log Telegram bot credentials, full URLs, uploaded document IDs, or long opaque tokens.
   const safe = (BOT_TOKEN ? raw.replaceAll(BOT_TOKEN, "[redacted]") : raw)
-    .replace(/https?:\\/\\/\\S+/g, "[url]")
+    .replace(/https?:\/\/\S+/g, "[url]")
     .replace(/[A-Za-z0-9_-]{50,}/g, "[redacted]")
     .slice(0, 240);
   console.error("telegram_pdf_upload_failed", {
