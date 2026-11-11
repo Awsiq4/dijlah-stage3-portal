@@ -11,7 +11,7 @@ import {hashToken, isActive, canUseTelegramPublishing, teacherSections, type Adm
 import {publishAnnouncement, publishLecture, updateAnnouncementOwn, updateLectureMetaOwn, replaceLectureFileOwn} from "./publish.ts";
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {tgFetch} from "./telegram.ts";
-import {uploadLecturePdf, isPdf, MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
+import {uploadLectureFile, validMaterialFile, materialMime, MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
 
 
 export type LinkedAdmin = AdminInfo & {link_id: number};
@@ -160,7 +160,7 @@ export async function resumeDraft(chatId: number, userId: number): Promise<void>
   if (d.step === "subject") { await askSubjects(chatId, admin, state.flow === "ann" ? "ann:subj:" : "lec:subj:"); return; }
   if (d.step === "audience") { await sendMessage(chatId, "اختر الشعبة:", {replyMarkup: audienceKeyboard(admin, String(d.subjectId || ""))}); return; }
   if (state.flow === "pendingpdf") { await sendMessage(chatId, "الملف محفوظ. هل نبدأ نشره؟", {replyMarkup: {inline_keyboard: [[{text: "إنشاء ملزمة", callback_data: "pdf:new"}], ...navigation.inline_keyboard]}}); return; }
-  const prompt = state.flow === "repfile" || d.step === "file" ? "أرسل ملف PDF." : d.step === "body" ? "اكتب نص التبليغ." : d.step === "desc" ? "اكتب الوصف الجديد، أو أرسل تخطي." : "اكتب العنوان.";
+  const prompt = state.flow === "repfile" || d.step === "file" ? "أرسل ملف PDF أو PowerPoint (PPTX)." : d.step === "body" ? "اكتب نص التبليغ." : d.step === "desc" ? "اكتب الوصف الجديد، أو أرسل تخطي." : "اكتب العنوان.";
   await sendMessage(chatId, prompt, {replyMarkup: navigation});
 }
 async function askSubjects(chatId: number, admin: AdminInfo, prefix: string) {
@@ -179,7 +179,7 @@ async function previewDraft(chatId: number, flow: string, d: Record<string, unkn
 
 // ---- message handling (steps of the flows) ----
 export type TgDocument = {file_id: string; file_name?: string; mime_type?: string; file_size?: number};
-type PdfUploadStage = "telegram-getFile" | "telegram-download" | "pdf-validation" | "blob-upload" | "draft-preview" | "lecture-replacement";
+type PdfUploadStage = "telegram-getFile" | "telegram-download" | "file-validation" | "blob-upload" | "draft-preview" | "lecture-replacement";
 function reportPdfUploadError(operation: string, stage: PdfUploadStage, error: unknown): string {
   const trace = randomBytes(4).toString("hex");
   const info = error as {status?: unknown; statusCode?: unknown; code?: unknown} | null;
@@ -235,8 +235,8 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
     }
   }
   if (state.flow === "repfile") {
-    if (!document) { await sendMessage(chatId, "⚠️ أرسل ملف PDF."); return; }
-    if (document.mime_type !== "application/pdf") { await sendMessage(chatId, "⚠️ الملف ليس PDF."); return; }
+    if (!document) { await sendMessage(chatId, "⚠️ أرسل ملف PDF أو PPTX."); return; }
+    if (!materialMime(document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير مدعوم. أرسل PDF أو PPTX."); return; }
     if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ أكبر من 20MB — استبدله من لوحة الويب."); return; }
     if (!storageConfigured()) { await sendMessage(chatId, "⚠️ التخزين غير مهيأ — استخدم لوحة الويب."); return; }
     let stage: PdfUploadStage = "telegram-getFile";
@@ -247,11 +247,11 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
       const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${g.result.file_path}`);
       if (!dl.ok) throw new Error(`Telegram download HTTP ${dl.status}`);
       const buf = Buffer.from(await dl.arrayBuffer());
-      stage = "pdf-validation";
+      stage = "file-validation";
       if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "الملف أكبر من 20MB."); return; }
-      if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ ليس PDF صالحًا."); return; }
+      if (!validMaterialFile(buf, document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير صالح. أرسل PDF أو PPTX سليمًا."); return; }
       stage = "blob-upload";
-      const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
+      const {url} = await uploadLectureFile(buf, document.file_name || "lecture.pdf");
       stage = "lecture-replacement";
       const r = await replaceLectureFileOwn(admin, String(state.data.id), url, document.file_name || "lecture.pdf", createHash("sha256").update(buf).digest("hex"));
       if (r.ok) await clearState(chatId);
@@ -270,11 +270,11 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
       if (d.fileUrl) { await previewDraft(chatId, "lec", next); return; }
       await setState(chatId, "lec", next);
       if (d.pendingDoc) { await handleAdminMessage(chatId, userId, "", d.pendingDoc as TgDocument); return; }
-      await sendMessage(chatId, "أرسل ملف PDF هنا (حتى 20MB).", {replyMarkup: navigation}); return;
+      await sendMessage(chatId, "أرسل ملف PDF أو PPTX هنا (حتى 20MB).", {replyMarkup: navigation}); return;
     }
     if (d.step === "file") {
       if (document) {
-        if (document.mime_type !== "application/pdf") { await sendMessage(chatId, "⚠️ الملف ليس PDF. أرسل ملف PDF أو رابط ملف محفوظ."); return; }
+        if (!materialMime(document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير مدعوم. أرسل PDF أو PPTX أو رابط ملف محفوظ."); return; }
         if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
         if (!storageConfigured()) { await sendMessage(chatId, "⚠️ تخزين الملفات غير مهيأ على الخادم. استخدم لوحة الويب لرفع الملف."); return; }
         let stage: PdfUploadStage = "telegram-getFile";
@@ -285,11 +285,11 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
           const dl = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${g.result.file_path}`);
           if (!dl.ok) { await sendMessage(chatId, "⚠️ تعذر تنزيل الملف من Telegram. أعد إرساله."); return; }
           const buf = Buffer.from(await dl.arrayBuffer());
-          stage = "pdf-validation";
+          stage = "file-validation";
           if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
-          if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ الملف ليس PDF صالحًا."); return; }
+          if (!validMaterialFile(buf, document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير صالح. أرسل PDF أو PPTX سليمًا."); return; }
           stage = "blob-upload";
-          const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
+          const {url} = await uploadLectureFile(buf, document.file_name || "lecture.pdf");
           const draft = {...d, fileUrl: url, fileName: (document.file_name || "lecture.pdf").slice(0, 120), fingerprint: createHash("sha256").update(buf).digest("hex"), pendingDoc: undefined, step: "confirm"};
           // Persist the uploaded URL before sending the confirmation message.
           // If Telegram fails after storage succeeds, /start can resume this draft without re-uploading.
@@ -299,10 +299,10 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
         } catch (error) {
           const trace = reportPdfUploadError("new-lecture", stage, error);
           const message = stage === "blob-upload"
-            ? "تعذّر حفظ الملف في تخزين الموقع. احتفظ بالمسودة وأعد إرسال PDF."
+            ? "تعذّر حفظ الملف في تخزين الموقع. احتفظ بالمسودة وأعد إرسال PDF أو PPTX."
             : stage === "draft-preview"
               ? "قد يكون الملف رُفع بنجاح، لكن تعذرت المعاينة. اضغط «القائمة الرئيسية» ثم «استئناف المسودة»؛ لا تعِد رفع الملف."
-              : "تعذّر استكمال قراءة PDF من Telegram. أعد إرسال الملف.";
+              : "تعذّر استكمال قراءة الملف من Telegram. أعد إرساله.";
           await sendMessage(chatId, `⚠️ ${message}\\nرمز المتابعة: ${trace}`, {replyMarkup: navigation});
         }
         return;

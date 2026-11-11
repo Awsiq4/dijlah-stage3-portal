@@ -3,7 +3,7 @@ import {readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {safeFileUrl} from "../safe-url.ts";
 import {defaultQueryer, type Queryer} from "./db.ts";
-import {MAX_PDF_BYTES_DIRECT, isPdf} from "./storage.ts";
+import {MAX_PDF_BYTES_DIRECT, isPdf, isPptxHeader} from "./storage.ts";
 import {canModifyContent, canPublishAnnouncement, canPublishMaterial, canPublishSubjectContent, SECTIONS, type AdminInfo} from "./rbac.ts";
 
 export type PublicationKind = "lectures" | "announcements";
@@ -32,15 +32,15 @@ export async function lockPublication(db: Pick<Queryer, "q">, kind: PublicationK
 
 export async function pdfFingerprint(fileUrl: string): Promise<string | null> {
   const url = safeFileUrl(fileUrl);
-  if (/^\/lectures\/[a-z0-9_.-]+\.pdf$/i.test(url)) {
+  if (/^\/lectures\/[a-z0-9_.-]+\.(?:pdf|pptx)$/i.test(url)) {
     const file = await readFile(join(process.cwd(), "public", url.slice(1))).catch(() => null);
-    return file && isPdf(file) ? createHash("sha256").update(file).digest("hex") : null;
+    return file && (/\.pptx$/i.test(url) ? isPptxHeader(file) : isPdf(file)) ? createHash("sha256").update(file).digest("hex") : null;
   }
   if (!url.startsWith("https://")) return null;
   const blob = new URL(url);
   if (blob.port || !blob.hostname.endsWith(".public.blob.vercel-storage.com") || !blob.pathname.startsWith("/lectures/")) return null;
   const response = await fetch(blob, {redirect: "error", signal: AbortSignal.timeout(20_000)});
-  if (!response.ok || !response.body) throw new Error("تعذّر التحقق من ملف PDF. حاول مرة ثانية.");
+  if (!response.ok || !response.body) throw new Error("تعذّر التحقق من الملف. حاول مرة ثانية.");
   const reader = response.body.getReader();
   const hash = createHash("sha256");
   const header = Buffer.alloc(6);
@@ -51,13 +51,14 @@ export async function pdfFingerprint(fileUrl: string): Promise<string | null> {
       if (done) break;
       if (bytes < header.length) header.set(value.subarray(0, header.length - bytes), bytes);
       bytes += value.length;
-      if (bytes > MAX_PDF_BYTES_DIRECT) throw new Error("حجم ملف PDF غير صالح.");
+      if (bytes > MAX_PDF_BYTES_DIRECT) throw new Error("حجم الملف غير صالح.");
       hash.update(value);
     }
   } finally {
     await reader.cancel();
   }
-  if (bytes < header.length || !isPdf(header)) throw new Error("ملف PDF غير صالح.");
+  const valid = /\.pptx$/i.test(blob.pathname) ? isPptxHeader(header) : /\.pdf$/i.test(blob.pathname) && isPdf(header);
+  if (bytes < header.length || !valid) throw new Error("ملف PDF أو PPTX غير صالح.");
   return hash.digest("hex");
 }
 

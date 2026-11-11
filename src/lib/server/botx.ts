@@ -164,7 +164,7 @@ export async function handleManageCallback(chatId: number, userId: number, data:
   }
   if (data.startsWith("it:rep:")) {
     const [, , id] = data.split(":");
-    await sendMessage(chatId, "📎 أرسل ملف PDF الجديد الآن — سيستبدل الملف الحالي مع بقاء نفس رابط المحاضرة.", {replyMarkup: backHome});
+    await sendMessage(chatId, "📎 أرسل ملف PDF أو PPTX الجديد الآن — سيستبدل الملف الحالي مع بقاء نفس رابط المحاضرة.", {replyMarkup: backHome});
     // store pending replace in bot state
     const {setFlowState} = await import("./bot.ts");
     await setFlowState(chatId, "repfile", {id});
@@ -187,7 +187,7 @@ export async function handleManageCallback(chatId: number, userId: number, data:
     const kb = {inline_keyboard: [
       [{text: "✏️ تعديل", callback_data: `it:edit:${type}:${id}`}],
       [{text: row.archived_at ? "♻️ استعادة" : "🗄 أرشفة", callback_data: `it:arch:${type}:${id}`}],
-      ...(type === "lectures" ? [[{text: "📎 استبدال ملف PDF", callback_data: `it:rep:${id}`}]] : []),
+      ...(type === "lectures" ? [[{text: "📎 استبدال الملف", callback_data: `it:rep:${id}`}]] : []),
       [{text: "🗑 حذف نهائي", callback_data: `it:del:${type}:${id}`}],
       [{text: "🔙 رجوع", callback_data: `page:my:${type}:0`}],
     ]};
@@ -234,14 +234,14 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
   if (data === "adm:new") {
     await sendMessage(chatId, "✍️ نشر جديد — اختر النوع:", {replyMarkup: {inline_keyboard: [
       [{text: "📢 تبليغ", callback_data: "adm:ann"}],
-      [{text: "📚 محاضرة / ملزمة (PDF)", callback_data: "adm:lec"}],
+      [{text: "📚 محاضرة / ملزمة (PDF أو PPTX)", callback_data: "adm:lec"}],
       [{text: "🏠 رجوع", callback_data: "nav:home"}],
     ]}});
     return;
   }
-  // Flow B: a PDF sent directly (no active flow) -> offer to start a material draft
+  // Flow B: a PDF/PPTX sent directly (no active flow) -> offer to start a material draft
   if (document && admin && !(await hasActiveFlow(chatId))) {
-    await sendMessage(chatId, `📎 استلمت ملف PDF${document.file_name ? `: ${document.file_name}` : ""}.\nهل تريد إنشاء «محاضرة/ملزمة» جديدة بهذا الملف؟`, {replyMarkup: {inline_keyboard: [
+    await sendMessage(chatId, `📎 استلمت ملفًا${document.file_name ? `: ${document.file_name}` : ""}.\nهل تريد إنشاء «محاضرة/ملزمة» جديدة بهذا الملف؟`, {replyMarkup: {inline_keyboard: [
       [{text: "✅ نعم، إنشاء مادة بهذا الملف", callback_data: "pdf:new"}],
       [{text: "❌ لا", callback_data: "flow:discard"}],
     ]}});
