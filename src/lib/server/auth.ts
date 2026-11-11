@@ -157,4 +157,29 @@ export async function checkLoginRateLimit(key: string, limit = 5, windowMs = 10 
   return (row?.count ?? 1) <= limit;
 }
 
+type LoginAttempt = {key: string; window: string};
+
+// Reserve a slot before checking a credential so concurrent guesses share the
+// same limit. Release it only when that credential or setup step is accepted.
+export async function reserveLoginAttempt(key: string, limit: number, windowMs: number, db: Queryer = defaultQueryer): Promise<LoginAttempt | null> {
+  const row = await db.qOne<{window: string}>(
+    `INSERT INTO portal_login_attempts (key,count,reset_at) VALUES ($1,1,$2)
+     ON CONFLICT (key) DO UPDATE SET
+       count = CASE WHEN portal_login_attempts.reset_at <= now() THEN 1 ELSE portal_login_attempts.count+1 END,
+       reset_at = CASE WHEN portal_login_attempts.reset_at <= now() THEN EXCLUDED.reset_at ELSE portal_login_attempts.reset_at END
+     WHERE portal_login_attempts.reset_at <= now() OR portal_login_attempts.count < $3
+     RETURNING reset_at::text AS window`,
+    [key, new Date(Date.now() + windowMs).toISOString(), limit]
+  );
+  return row ? {key, window: row.window} : null;
+}
+
+export async function releaseLoginAttempt(attempt: LoginAttempt, db: Queryer = defaultQueryer): Promise<void> {
+  await db.q(
+    `UPDATE portal_login_attempts SET count=count-1
+     WHERE key=$1 AND reset_at=$2::timestamptz AND reset_at>now() AND count>0`,
+    [attempt.key, attempt.window]
+  );
+}
+
 export {q, qOne};
