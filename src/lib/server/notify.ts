@@ -38,12 +38,14 @@ export async function drainQueue(limit = 100, eventIds?: readonly number[]): Pro
   if (!telegramServiceEnabled() || eventIds?.length === 0) return {sent: 0, failed: 0, retried: 0, skipped: 0};
   const due = await q<{
     id: number; event_id: number; subscriber_id: number; attempts: number;
-    type: string; title: string; body: string | null; url: string | null; scope: string; section: string | null; priority: string;
+    type: string; title: string; body: string | null; url: string | null; scope: string; section: string | null; priority: string; subject_name: string | null;
     chat_id: number;
   }>(
-    `SELECT d.id, d.event_id, d.subscriber_id, d.attempts, e.type, e.title, e.body, e.url, e.scope, e.section, e.priority, s.chat_id
+    `SELECT d.id, d.event_id, d.subscriber_id, d.attempts, e.type, e.title, e.body, e.url, e.scope, e.section, e.priority,
+            p.name AS subject_name, s.chat_id
      FROM tg_deliveries d
      JOIN tg_events e ON e.id = d.event_id
+     LEFT JOIN portal_subjects p ON p.id = e.subject_id
      JOIN tg_subscribers s ON s.id = d.subscriber_id
      WHERE d.status = 'pending' AND d.next_attempt_at <= now()
        ${eventIds ? "AND d.event_id = ANY($2::bigint[])" : ""}
@@ -55,7 +57,7 @@ export async function drainQueue(limit = 100, eventIds?: readonly number[]): Pro
     const claim = await qOne(`UPDATE tg_deliveries SET next_attempt_at=now() + interval '2 minutes'
       WHERE id=$1 AND status='pending' AND next_attempt_at<=now() RETURNING id`, [d.id]);
     if (!claim) { skipped++; continue; }
-    const event: TgEvent & {title: string; body: string | null; url: string | null} = {type: d.type as TgEvent["type"], scope: d.scope as TgEvent["scope"], section: d.section, priority: d.priority, title: d.title, body: d.body, url: d.url};
+    const event: TgEvent & {title: string; body: string | null; url: string | null; subjectName: string | null} = {type: d.type as TgEvent["type"], scope: d.scope as TgEvent["scope"], section: d.section, priority: d.priority, title: d.title, body: d.body, url: d.url, subjectName: d.subject_name};
     const msg = renderMessage(event, PORTAL_BASE_URL);
     const res = await sendMessage(d.chat_id, msg.text, {parseMode: msg.parseMode});
     if (res.ok) {
