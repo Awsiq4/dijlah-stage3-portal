@@ -56,6 +56,30 @@ test("templates: render Arabic message with portal link, escapes HTML", () => {
   assert.equal(m.parseMode, "HTML");
 });
 
+test("lecture notification: real academic subject, lecture title and canonical direct link", () => {
+  const m = renderMessage({
+    type: "lecture", scope: "general", title: "محاضرة رقم (1)",
+    subjectName: "تطبيقات الليزر الصناعية", body: "",
+    url: "/lectures/lec-tg-123",
+  }, "https://dj3.top");
+  assert.match(m.text, /المادة: <b>تطبيقات الليزر الصناعية<\/b>/);
+  assert.match(m.text, /المحاضرة: <b>محاضرة رقم \(1\)<\/b>/);
+  assert.match(m.text, /جميع الشعب \(A, B, C, F\)/);
+  assert.ok(m.text.includes('href="https://dj3.top/lectures/lec-tg-123"'));
+  assert.ok(!m.text.includes("المادة: محاضرة رقم"));
+});
+
+test("lecture notification: section targeting and escaped untrusted subject/title", () => {
+  const m = renderMessage({
+    type: "lecture", scope: "section", section: "F", title: "<New lecture>",
+    subjectName: "<Laser & optics>", url: "/lectures/lec-1",
+  }, "https://dj3.top");
+  assert.ok(m.text.includes("&lt;Laser &amp; optics&gt;"));
+  assert.ok(m.text.includes("&lt;New lecture&gt;"));
+  assert.ok(m.text.includes("الجمهور: شعبة F"));
+  assert.ok(!m.text.includes("جميع الشعب"));
+});
+
 test("backoff: exponential with cap, respects retry_after, caps attempts", () => {
   assert.ok(nextDelayMs(1) < nextDelayMs(3));
   assert.ok(nextDelayMs(20) <= 5 * 60 * 1000);
