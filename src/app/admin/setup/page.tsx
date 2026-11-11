@@ -42,6 +42,7 @@ function AdminSetupInner(){
         {error&&<p className="subtle small" style={{color:"var(--st-danger-text)"}} role="alert">{error}</p>}
         <button className="action-button" style={{justifySelf:"stretch",width:"100%"}} disabled={busy||!token}><Lock size={16}/> {busy?"جارٍ التفعيل…":"تفعيل الحساب"}</button>
       </form>
+      <p><a className="text-link" href="/admin/login">عندي حساب، سجّل دخول</a></p>
       <p className="subtle small" style={{marginTop:12,display:"flex",gap:6,alignItems:"center"}}><ShieldCheck size={15}/> كلمة المرور تُجزأ بـscrypt ولا تظهر في أي مكان.</p>
     </div></div>
   </div>;

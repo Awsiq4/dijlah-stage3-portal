@@ -3,7 +3,7 @@ import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTI
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
 import {sendMessage, tgFetch} from "@/lib/server/telegram";
-import {getLinkedAdmin, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow, adminMenu} from "@/lib/server/bot";
+import {getLinkedAdmin, bindInvitedTeacher, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow, adminMenu} from "@/lib/server/bot";
 import {handleStudentCallback, handleManageCallback, handleNavCallback} from "@/lib/server/botx";
 import {handleOwnerCallback} from "@/lib/server/botowner";
 import {registerUser, notifyOwnerNewUser, touchActivity, isBotOwner} from "@/lib/server/registry";
@@ -166,6 +166,9 @@ export async function POST(req: NextRequest) {
         // a linked admin mid-flow may send a file URL starting with "/" — route by active flow first
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
         if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
+          if (Number(message.from?.id) === Number(message.chat.id)) {
+            await bindInvitedTeacher(Number(message.from.id));
+          }
           await clearSupportDraft(Number(message.chat.id)); // only transient typing; saved tickets are untouched
           // every /start registers the user (idempotent; owner notified only when genuinely new)
           const reg = await registerUser(Number(message.chat.id), Number(message.from?.id || message.chat.id), message.from?.username, message.from?.first_name, message.from?.last_name, null);

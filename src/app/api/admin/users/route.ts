@@ -22,11 +22,11 @@ export async function GET(req: NextRequest) {
   if (!canManageUsers(admin.role)) return NextResponse.json({error: "forbidden: super_admin only"}, {status: 403});
   const users = await q(
     `SELECT a.id, a.email, a.name, a.role, a.status, a.is_active, a.assigned_section, a.assigned_subjects, a.perms,
-            a.last_login_at, a.created_at,
+            a.last_login_at, a.created_at, a.telegram_expected_id, a.telegram_expected_username,
             (SELECT l.telegram_user_id FROM portal_telegram_links l WHERE l.admin_id=a.id AND l.revoked_at IS NULL LIMIT 1) AS telegram_user_id
      FROM portal_admins a ORDER BY a.id`
   );
-  const invitations = await q(`SELECT id, email, name, role, assigned_section, expires_at, used_at, created_at FROM portal_invitations ORDER BY id DESC LIMIT 50`);
+  const invitations = await q(`SELECT id, email, name, role, assigned_section, expires_at, used_at, created_at, telegram_expected_id, telegram_expected_username FROM portal_invitations ORDER BY id DESC LIMIT 50`);
   return NextResponse.json({fromDatabase: true, users, invitations});
 }
 
@@ -47,16 +47,33 @@ export async function POST(req: NextRequest) {
   const perms = body?.perms && typeof body.perms === "object" ? body.perms : {};
   if (!name) return NextResponse.json({error: "name required"}, {status: 400});
 
+  const telegramId = String(body?.telegram_user_id ?? "").trim();
+  const telegramUsername = String(body?.telegram_username ?? "").trim().replace(/^@/, "");
+  if ((telegramId || telegramUsername) && (
+    role !== "teacher" || !/^[1-9][0-9]{0,15}$/.test(telegramId) ||
+    !Number.isSafeInteger(Number(telegramId)) ||
+    (telegramUsername && !/^[A-Za-z0-9_]{1,32}$/.test(telegramUsername))
+  )) return NextResponse.json({error: "أدخل رقم Telegram ID صالحًا للتدريسي. اسم المستخدم اختياري."}, {status: 400});
+
   const token = newToken();
   const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
-  await withTx(async db => {
+  const issued = await withTx(async db => {
+    if (telegramId && await db.qOne(
+      `SELECT 1 FROM portal_admins WHERE telegram_expected_id=$1
+       UNION ALL SELECT 1 FROM portal_telegram_links WHERE telegram_user_id=$1 AND revoked_at IS NULL
+       UNION ALL SELECT 1 FROM portal_invitations WHERE telegram_expected_id=$1 AND email<>$2
+         AND used_at IS NULL AND expires_at>now() LIMIT 1`,
+      [telegramId, email]
+    )) return false;
     await db.q(
-      `INSERT INTO portal_invitations (email, name, role, assigned_section, assigned_subjects, perms, token_hash, expires_at, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [email, name, role, section, JSON.stringify(subjects), JSON.stringify(perms), hashToken(token), expires, admin.id]
+      `INSERT INTO portal_invitations (email, name, role, assigned_section, assigned_subjects, perms, token_hash, expires_at, created_by, telegram_expected_id, telegram_expected_username)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [email, name, role, section, JSON.stringify(subjects), JSON.stringify(perms), hashToken(token), expires, admin.id, telegramId || null, telegramUsername || null]
     );
-    await audit(admin.email, "users.invite", {email, role, section, subjects}, db);
+    await audit(admin.email, "users.invite", {email, role, section, subjects, telegram_preassigned: Boolean(telegramId)}, db);
+    return true;
   });
+  if (!issued) return NextResponse.json({error: "رقم Telegram ID مسجّل لحساب آخر أو لدعوة فعّالة."}, {status: 409});
   return NextResponse.json({ok: true, email, role, setupUrl: `${PORTAL_BASE_URL}/admin/setup?token=${encodeURIComponent(token)}`});
 }
 

@@ -12,6 +12,7 @@ process.env.BOT_OWNER_ID = "424242";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const {newDb} = await import("pg-mem");
 const {setPoolForTests, q, qOne, defaultQueryer} = await import("./db.ts");
+const {bindInvitedTeacher, getLinkedAdmin} = await import("./bot.ts");
 const {registerUser, isBotOwner, esc} = await import("./registry.ts");
 const {computeAnalytics, listUsers, setSetting, getSetting, ownerNotificationsEnabled, OWNER_NOTIFY_KEY} = await import("./analytics.ts");
 const {classifyBotActivity} = await import("./owner-intelligence.ts");
@@ -24,14 +25,15 @@ async function makeDb() {
   const norm = (sql) => sql.split(/;\s*(?:\n|$)/)
     .filter(st => !st.includes("portal_admins_role_check") && !st.includes("tg_subscribers_section_check"))
     .map(st => st.replace(/\s*CHECK \(sections <@[^)]*\)/, ""));
-  let base = readFileSync(path.join(root, "database/portal-schema.sql"), "utf8");
+  const base = readFileSync(path.join(root, "database/portal-schema.sql"), "utf8").replace("'super_admin','editor'", "'super_admin','editor','teacher'");
   const rbac = readFileSync(path.join(root, "database/portal-rbac.sql"), "utf8");
   let tg = readFileSync(path.join(root, "database/telegram-notifications.sql"), "utf8");
   tg = tg.replace("section TEXT NOT NULL CHECK (section IN ('A','B','C','F'))", "section TEXT CHECK (section IS NULL OR section IN ('A','B','C','F'))");
+  const recovery = readFileSync(path.join(root, "database/portal-password-recovery.sql"), "utf8");
   const own = readFileSync(path.join(root, "database/portal-owner-analytics.sql"), "utf8");
   // pg-mem: no sequences / no DO blocks — emulate reg_seq with a plain column + counter table
   const ownPgmem = own.replace(/DO \$\$[\s\S]*?\$\$;/g, ""); // pg-mem supports sequences; skip only the DO backfill block
-  for (const stmt of norm(base + ";" + rbac + ";" + tg + ";" + ownPgmem)) {
+  for (const stmt of norm(base + ";" + rbac + ";" + tg + ";" + ownPgmem + ";" + recovery)) {
     const t = stmt.replace(/--[^\n]*/g, "").trim();
     if (t) await pool.query(t);
   }
@@ -64,6 +66,34 @@ test("registration: concurrent first-time registrations get unique sequence numb
   assert.deepEqual(seqs, [1, 2, 3, 4, 5]);
   assert.ok(results.every(r => r.isNew));
   await pool.end();
+});
+
+test("teacher Telegram binding requires the assigned ID, is idempotent and does not replace another account", async () => {
+  const pool = await makeDb();
+  try {
+    const teacher = await qOne(
+      `INSERT INTO portal_admins (email, password_hash, role, status, telegram_expected_id, telegram_expected_username)
+       VALUES ('teacher@example.test', 'test', 'teacher', 'active', 2001, 'teacher') RETURNING id`
+    );
+    const other = await qOne(
+      `INSERT INTO portal_admins (email, password_hash, role, status, telegram_expected_id)
+       VALUES ('other@example.test', 'test', 'teacher', 'active', 2002) RETURNING id`
+    );
+    await q(`INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,2002)`, [teacher.id]);
+    assert.equal(await getLinkedAdmin(2001), null);
+    await bindInvitedTeacher(9999);
+    assert.equal(await getLinkedAdmin(9999), null);
+    await bindInvitedTeacher(2002);
+    assert.equal((await getLinkedAdmin(2002)).id, teacher.id);
+    assert.notEqual((await getLinkedAdmin(2002)).id, other.id);
+    await bindInvitedTeacher(2001);
+    await bindInvitedTeacher(2001);
+    assert.equal((await getLinkedAdmin(2001)).id, teacher.id);
+    assert.equal(await getLinkedAdmin(2002), null);
+    assert.equal((await qOne(`SELECT count(*)::int AS count FROM portal_audit WHERE action='telegram.link.bound'`)).count, 1);
+  } finally {
+    await pool.end();
+  }
 });
 
 test("owner authorization: only BOT_OWNER_ID passes; esc() neutralizes HTML injection", () => {

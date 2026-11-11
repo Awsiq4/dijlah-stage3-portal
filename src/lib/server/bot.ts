@@ -3,7 +3,7 @@
 // Conversation state is persisted in portal_bot_state (survives serverless restarts).
 import {randomBytes} from "node:crypto";
 import {homeMenuFor} from "./botx.ts";
-import {q, qOne, withTx} from "./db.ts";
+import {q, qOne, withTx, type Queryer} from "./db.ts";
 import {sendMessage} from "./telegram.ts";
 import {hashToken, isActive, canUseTelegramPublishing, teacherSections, type AdminInfo} from "./rbac.ts";
 import {publishAnnouncement, publishLecture, updateAnnouncementOwn, updateLectureMetaOwn, replaceLectureFileOwn} from "./publish.ts";
@@ -25,33 +25,61 @@ export async function getLinkedAdmin(telegramUserId: number): Promise<LinkedAdmi
   return row;
 }
 
+async function bindTelegramAccount(db: Queryer, account: AdminInfo, userId: number): Promise<boolean> {
+  const link = await db.qOne(
+    `INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,$2)
+     ON CONFLICT (telegram_user_id) DO UPDATE SET admin_id=EXCLUDED.admin_id, revoked_at=NULL, linked_at=now()
+     WHERE portal_telegram_links.revoked_at IS NOT NULL OR portal_telegram_links.admin_id=EXCLUDED.admin_id
+     RETURNING id`, [account.id, userId]
+  );
+  if (!link) return false;
+  const replaced = await db.qOne(`UPDATE portal_telegram_links SET revoked_at=now()
+    WHERE admin_id=$1 AND telegram_user_id<>$2 AND revoked_at IS NULL RETURNING id`, [account.id, userId]);
+  if (replaced) await db.q(`UPDATE portal_password_resets SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [account.id]);
+  await db.q(`UPDATE portal_link_tokens SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [account.id]);
+  await db.q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [account.email, "telegram.link.bound", {telegram_user_id: userId}]);
+  return true;
+}
+
+export async function bindInvitedTeacher(userId: number): Promise<void> {
+  await withTx(async db => {
+    const account = await db.qOne<AdminInfo>(
+      `SELECT id,email,role,status,is_active FROM portal_admins
+       WHERE telegram_expected_id=$1 AND role='teacher' AND status='active' AND is_active=true FOR UPDATE`,
+      [userId]
+    );
+    if (!account) return;
+    const linked = await db.qOne(
+      `SELECT 1 FROM portal_telegram_links WHERE telegram_user_id=$1 AND revoked_at IS NULL`,
+      [userId]
+    );
+    if (!linked) await bindTelegramAccount(db, account, userId);
+  });
+}
+
 // ---- /start link_<payload> : bind this Telegram user to the invited admin account ----
 export async function handleLinkStart(chatId: number, userId: number, arg: string): Promise<void> {
   const raw = arg.replace(/^link_/, "");
   const digest = hashToken(raw);
   const admin = await withTx(async db => {
     // Serialize linking, unlinking and suspension against the same account row.
-    const account = await db.qOne<AdminInfo>(
+    const account = await db.qOne<AdminInfo & {telegram_expected_id: string | null}>(
       `SELECT a.* FROM portal_admins a JOIN portal_link_tokens t ON t.admin_id=a.id
        WHERE t.token_hash=$1 AND t.used_at IS NULL AND t.expires_at>now() FOR UPDATE OF a`,
       [digest]
     );
     if (!account || !canUseTelegramPublishing(account)) return null;
+    if (account.telegram_expected_id && String(account.telegram_expected_id) !== String(userId)) return null;
+    const reserved = await db.qOne(
+      `SELECT 1 FROM portal_admins WHERE telegram_expected_id=$1 AND id<>$2`, [userId, account.id]
+    );
+    if (reserved) return null;
     const used = await db.qOne(
       `UPDATE portal_link_tokens SET used_at=now()
        WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now() RETURNING token_hash`, [digest]
     );
     if (!used) return null;
-    const link = await db.qOne(
-      `INSERT INTO portal_telegram_links (admin_id, telegram_user_id) VALUES ($1,$2)
-       ON CONFLICT (telegram_user_id) DO UPDATE SET admin_id=EXCLUDED.admin_id, revoked_at=NULL, linked_at=now()
-       WHERE portal_telegram_links.revoked_at IS NOT NULL OR portal_telegram_links.admin_id=EXCLUDED.admin_id
-       RETURNING id`, [account.id, userId]
-    );
-    if (!link) return null;
-    await db.q(`UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=$1 AND telegram_user_id<>$2 AND revoked_at IS NULL`, [account.id, userId]);
-    await db.q(`UPDATE portal_link_tokens SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [account.id]);
-    await db.q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [account.email, "telegram.link.bound", {telegram_user_id: userId}]);
+    if (!await bindTelegramAccount(db, account, userId)) return null;
     return account;
   });
   if (!admin) {
