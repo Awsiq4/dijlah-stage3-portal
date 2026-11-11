@@ -2,7 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import {del} from "@vercel/blob";
 import {handleUpload, type HandleUploadBody} from "@vercel/blob/client";
 import {checkLoginRateLimit, requireAdmin} from "@/lib/server/auth";
-import {validateUploadRequest, UploadRejectedError, MAX_PDF_BYTES_DIRECT, isPdf} from "@/lib/server/storage";
+import {validateUploadRequest, UploadRejectedError, MAX_PDF_BYTES_DIRECT, isPdf, isPptxHeader, PPTX_MIME} from "@/lib/server/storage";
 import {audit} from "@/lib/server/content";
 import {dbConfigured} from "@/lib/server/flags";
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       body,
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        if (!admin || !/^lectures\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}-[A-Za-z0-9._-]{1,96}\.pdf$/i.test(pathname)) {
+        if (!admin || !/^lectures\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}-[A-Za-z0-9._-]{1,96}\.(?:pdf|pptx)$/i.test(pathname)) {
           throw new UploadRejectedError("invalid upload path");
         }
         let info: Record<string, unknown> = {};
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
         }
         validateUploadRequest(admin, info); // throws UploadRejectedError (403) on any violation
         return {
-          allowedContentTypes: ["application/pdf"],
+          allowedContentTypes: ["application/pdf", PPTX_MIME],
           maximumSizeInBytes: MAX_PDF_BYTES_DIRECT,
           addRandomSuffix: false,
           allowOverwrite: false,
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
         });
         if (!response.ok || !response.body) {
           await response.body?.cancel();
-          throw new Error("PDF verification unavailable");
+          throw new Error("File verification unavailable");
         }
         const reader = response.body.getReader();
         const header = Buffer.alloc(6);
@@ -82,13 +82,17 @@ export async function POST(req: NextRequest) {
         } finally {
           await reader.cancel();
         }
-        if (!isPdf(header.subarray(0, bytes))) {
+        const isPresentation = /\.pptx$/i.test(fileUrl.pathname);
+        const valid = isPresentation
+          ? blob.contentType === PPTX_MIME && isPptxHeader(header.subarray(0, bytes))
+          : /\.pdf$/i.test(fileUrl.pathname) && blob.contentType === "application/pdf" && isPdf(header.subarray(0, bytes));
+        if (!valid) {
           await del(fileUrl.href, {token: process.env.BLOB_READ_WRITE_TOKEN});
-          if (dbConfigured()) await audit(payload.email || `admin#${payload.adminId}`, "upload.pdf.rejected", {subjectId: payload.subjectId});
+          if (dbConfigured()) await audit(payload.email || `admin#${payload.adminId}`, "upload.file.rejected", {subjectId: payload.subjectId});
           return;
         }
         if (dbConfigured()) {
-          await audit(payload.email || `admin#${payload.adminId}`, "upload.pdf.direct", {
+          await audit(payload.email || `admin#${payload.adminId}`, "upload.file.direct", {
             url: blob.url, contentType: blob.contentType, subjectId: payload.subjectId,
           });
         }
