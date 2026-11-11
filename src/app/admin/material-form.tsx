@@ -2,6 +2,7 @@
 
 import {useEffect, useRef, useState} from "react";
 import {upload} from "@vercel/blob/client";
+import {usePublicationRequest} from "./publication-review";
 import {Send} from "lucide-react";
 
 type Row = Record<string, unknown>;
@@ -14,7 +15,6 @@ export type PublishingAccount = {
 };
 
 const SECTIONS = ["A", "B", "C", "F"];
-const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"};
 const PDF_LIMIT = 100 * 1024 * 1024;
 
 export function MaterialForm({account, initial, rows, onSaved}: {
@@ -23,6 +23,7 @@ export function MaterialForm({account, initial, rows, onSaved}: {
   rows: Row[];
   onSaved: () => void;
 }) {
+  const {request, review} = usePublicationRequest();
   const teacher = account.role === "teacher";
   const sectionRep = account.role === "section_representative";
   const [subjects, setSubjects] = useState<{id: string; name: string}[]>([]);
@@ -114,13 +115,13 @@ export function MaterialForm({account, initial, rows, onSaved}: {
         file_name: file?.name || String(initial?.file_name || ""), sections,
         status: initial?.status || "published", updated_at: new Date().toISOString().slice(0, 10),
       };
-      const response = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type: "lectures", row})});
+      const {response, data} = await request("lectures", row);
       if (!response.ok) {
-        setNotice(response.status === 401 ? "انتهت جلسة الدخول. سجّل الدخول مجددًا." : response.status === 403 ? "حسابك لا يملك صلاحية النشر لهذه المادة أو الشعبة." : "تعذّر حفظ المنشور. جرّب مرة ثانية من نفس الشاشة.");
+        setNotice(data.issue ? data.error || "" : response.status === 401 ? "انتهت جلسة الدخول. سجّل الدخول مجددًا." : response.status === 403 ? "حسابك لا يملك صلاحية النشر لهذه المادة أو الشعبة." : data.error || "تعذّر حفظ المنشور. جرّب مرة ثانية من نفس الشاشة.");
         return;
       }
-      setNotice(initial ? "تم حفظ التعديلات." : "تم نشر الملف.");
-      if (row.status === "published" && !initial?.archived_at) setLink(`/lectures/${row.id}`);
+      setNotice(data.action === "expanded" ? "تم نشر الملف للشعب الإضافية." : data.action === "updated" || initial ? "تم حفظ التعديلات." : "تم نشر الملف.");
+      if (row.status === "published" && !initial?.archived_at) setLink(data.url || `/lectures/${encodeURIComponent(data.id || row.id)}?section=${encodeURIComponent(sections[0])}`);
       if (!initial) {
         setFile(undefined);
         setTitle("");
@@ -139,7 +140,7 @@ export function MaterialForm({account, initial, rows, onSaved}: {
     }
   }
 
-  return <form className="admin-form" onSubmit={save} aria-busy={busy}>
+  return <>{review}<form className="admin-form" onSubmit={save} aria-busy={busy}>
     <label className="form-field"><span>المادة</span>
       <select required value={subject} disabled={busy} onChange={e => setSubject(e.target.value)}>
         <option value="">اختر المادة</option>
@@ -174,5 +175,5 @@ export function MaterialForm({account, initial, rows, onSaved}: {
     {status === "uploading" && <label className="form-field wide"><span>جارٍ الرفع… {progress}٪</span><progress max={100} value={progress}/></label>}
     {notice && <p className="note form-field wide" role="status">{notice} {link && <a className="text-link" href={link}>عرض الملف على الموقع</a>}</p>}
     <button className="action-button" disabled={busy || !subjectOptions.length}><Send size={16}/> {status === "uploading" ? "جارٍ الرفع…" : status === "saving" ? "جارٍ الحفظ…" : initial ? "حفظ التعديلات" : "نشر الملف"}</button>
-  </form>;
+  </form></>;
 }

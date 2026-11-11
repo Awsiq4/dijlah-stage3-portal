@@ -1,4 +1,4 @@
-import {q, qOne} from "./db.ts";
+import {q, qOne, defaultQueryer, type Queryer} from "./db.ts";
 import {selectRecipients, eventKey, type TgEvent, type TgSubscriber} from "./targeting.ts";
 import {renderMessage} from "./templates.ts";
 import {sendMessage} from "./telegram.ts";
@@ -13,29 +13,29 @@ export type CreateEventInput = TgEvent & {
   url?: string;
 };
 
-export async function createEvent(input: CreateEventInput): Promise<{created: boolean; eventId?: number; recipients: number}> {
+export async function createEvent(input: CreateEventInput, db: Queryer = defaultQueryer): Promise<{created: boolean; eventId?: number; recipients: number}> {
   const key = eventKey(input.type, input.refId, input.version);
-  const row = await qOne<{id: number}>(
+  const row = await db.qOne<{id: number}>(
     `INSERT INTO tg_events (event_key, type, title, body, url, scope, section, subject_id, priority)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (event_key) DO NOTHING RETURNING id`,
     [key, input.type, input.title, input.body || null, input.url || null, input.scope, input.section ?? null, input.subject_id ?? null, input.priority || "normal"]
   );
   if (!row) return {created: false, recipients: 0};
-  const subs = await q<TgSubscriber>(`SELECT id, chat_id, section, status, prefs FROM tg_subscribers WHERE status='active'`);
+  const subs = await db.q<TgSubscriber>(`SELECT id, chat_id, section, status, prefs FROM tg_subscribers WHERE status='active'`);
   const recipients = selectRecipients(input, subs);
   for (const s of recipients) {
-    await q(
+    await db.q(
       `INSERT INTO tg_deliveries (event_id, subscriber_id) VALUES ($1,$2) ON CONFLICT (event_id, subscriber_id) DO NOTHING`,
       [row.id, s.id]
     );
   }
-  await q(`INSERT INTO tg_audit (action, detail) VALUES ($1,$2)`, ["event.created", {event_key: key, recipients: recipients.length}]);
+  await db.q(`INSERT INTO tg_audit (action, detail) VALUES ($1,$2)`, ["event.created", {event_key: key, recipients: recipients.length}]);
   return {created: true, eventId: row.id, recipients: recipients.length};
 }
 
-export async function drainQueue(limit = 100): Promise<{sent: number; failed: number; retried: number; skipped: number}> {
-  if (!telegramServiceEnabled()) return {sent: 0, failed: 0, retried: 0, skipped: 0};
+export async function drainQueue(limit = 100, eventIds?: readonly number[]): Promise<{sent: number; failed: number; retried: number; skipped: number}> {
+  if (!telegramServiceEnabled() || eventIds?.length === 0) return {sent: 0, failed: 0, retried: 0, skipped: 0};
   const due = await q<{
     id: number; event_id: number; subscriber_id: number; attempts: number;
     type: string; title: string; body: string | null; url: string | null; scope: string; section: string | null; priority: string;
@@ -46,11 +46,15 @@ export async function drainQueue(limit = 100): Promise<{sent: number; failed: nu
      JOIN tg_events e ON e.id = d.event_id
      JOIN tg_subscribers s ON s.id = d.subscriber_id
      WHERE d.status = 'pending' AND d.next_attempt_at <= now()
+       ${eventIds ? "AND d.event_id = ANY($2::bigint[])" : ""}
      ORDER BY d.id LIMIT $1`,
-    [limit]
+    eventIds ? [limit, eventIds] : [limit]
   );
   let sent = 0, failed = 0, retried = 0, skipped = 0;
   for (const d of due) {
+    const claim = await qOne(`UPDATE tg_deliveries SET next_attempt_at=now() + interval '2 minutes'
+      WHERE id=$1 AND status='pending' AND next_attempt_at<=now() RETURNING id`, [d.id]);
+    if (!claim) { skipped++; continue; }
     const event: TgEvent & {title: string; body: string | null; url: string | null} = {type: d.type as TgEvent["type"], scope: d.scope as TgEvent["scope"], section: d.section, priority: d.priority, title: d.title, body: d.body, url: d.url};
     const msg = renderMessage(event, PORTAL_BASE_URL);
     const res = await sendMessage(d.chat_id, msg.text, {parseMode: msg.parseMode});

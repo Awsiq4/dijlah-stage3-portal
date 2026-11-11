@@ -1,8 +1,9 @@
 // Telegram bot: account linking + direct publishing flows.
 // The bot uses the SAME publish service as the website (publish.ts) — one backend.
 // Conversation state is persisted in portal_bot_state (survives serverless restarts).
+import type {PublicationIssue, PublicationOptions} from "./publication-dedup.ts";
 import {TELEGRAM_STAFF_ROLES} from "../telegram-roles.ts";
-import {randomBytes} from "node:crypto";
+import {createHash, randomBytes} from "node:crypto";
 import {homeMenuFor} from "./botx.ts";
 import {q, qOne, withTx, type Queryer} from "./db.ts";
 import {sendMessage} from "./telegram.ts";
@@ -228,7 +229,7 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
       if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "الملف أكبر من 20MB."); return; }
       if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ ليس PDF صالحًا."); return; }
       const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
-      const r = await replaceLectureFileOwn(admin, String(state.data.id), url, document.file_name || "lecture.pdf");
+      const r = await replaceLectureFileOwn(admin, String(state.data.id), url, document.file_name || "lecture.pdf", createHash("sha256").update(buf).digest("hex"));
       if (r.ok) await clearState(chatId);
       const lecture = await qOne<{subject_id: string}>(`SELECT subject_id FROM portal_lectures WHERE id=$1`, [state.data.id]);
       await sendMessage(chatId, r.ok ? `✅ تم استبدال الملف: ${PORTAL_BASE_URL}/subjects/${lecture?.subject_id || ""}` : `⛔ ${r.error}`, {replyMarkup: adminMenu(admin)});
@@ -258,19 +259,43 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
           if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
           if (!isPdf(buf)) { await sendMessage(chatId, "⚠️ الملف ليس PDF صالحًا."); return; }
           const {url} = await uploadLecturePdf(buf, document.file_name || "lecture.pdf");
-          await previewDraft(chatId, "lec", {...d, fileUrl: url, pendingDoc: undefined});
+          await previewDraft(chatId, "lec", {...d, fileUrl: url, fingerprint: createHash("sha256").update(buf).digest("hex"), pendingDoc: undefined});
         } catch { await sendMessage(chatId, "⚠️ فشل رفع الملف — جرّب من لوحة الويب."); }
         return;
       }
       if (!/^\/[A-Za-z0-9_\-./]+$/.test(text) && !/^https:\/\//.test(text)) { await sendMessage(chatId, "⚠️ الرابط غير صالح. أرسل رابطًا يبدأ بـ / أو https://"); return; }
-      await previewDraft(chatId, "lec", {...d, fileUrl: text});
+      await previewDraft(chatId, "lec", {...d, fileUrl: text, fingerprint: undefined});
       return;
     }
   }
 }
 
+async function showPublicationIssue(
+  chatId: number, admin: AdminInfo, kind: string, draft: Record<string, unknown>, issue: PublicationIssue,
+) {
+  const url = PORTAL_BASE_URL + issue.url;
+  const buttons = [[{text: "فتح المنشور الموجود", url}]];
+  if (issue.kind === "duplicate") {
+    await clearState(chatId);
+    await sendMessage(chatId, `ℹ️ منشور مسبقًا: ${issue.title}`, {replyMarkup: {inline_keyboard: [...buttons, ...adminMenu(admin).inline_keyboard]}});
+    return;
+  }
+  const nonce = randomBytes(6).toString("hex");
+  await setState(chatId, kind, {...draft, step: "confirm", nonce, publicationIssue: issue});
+  const actions = issue.kind === "expand"
+    ? [[{text: "نشر للشعب الإضافية", callback_data: `pub:${kind}:${nonce}:expand`}]]
+    : [
+      ...(issue.canUpdate ? [[{text: "تحديث المنشور الموجود", callback_data: `pub:${kind}:${nonce}:replace`}]] : []),
+      [{text: "نشر كمنشور جديد", callback_data: `pub:${kind}:${nonce}:reviewed`}],
+    ];
+  const message = issue.kind === "expand"
+    ? `الملزمة «${issue.title}» موجودة. تضيفها إلى الشعب ${issue.addedSections?.join("، ")}؟`
+    : `يوجد منشور مشابه بعنوان «${issue.title}». راجعه قبل النشر.`;
+  await sendMessage(chatId, message, {replyMarkup: {inline_keyboard: [...buttons, ...actions, ...navigation.inline_keyboard]}});
+}
+
 // ---- callback handling (menus, subject picker, confirm) ----
-export async function handleAdminCallback(chatId: number, userId: number, data: string): Promise<void> {
+export async function handleAdminCallback(chatId: number, userId: number, data: string, onPublished?: (eventIds: number[]) => void): Promise<void> {
   const admin = await getLinkedAdmin(userId);
   if (!admin) { await sendMessage(chatId, "⚠️ حساب Telegram غير مربوط. استخدم «ربط حساب Telegram» من إعدادات الحساب في الموقع."); return; }
 
@@ -318,14 +343,23 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
     const [, field, nonce] = data.split(":");
     if (state.data.step !== "confirm" || nonce !== state.data.nonce) { await sendMessage(chatId, "زر قديم. افتح المسودة مجددًا.", {replyMarkup: adminMenu(admin)}); return; }
     if (!["title", "body", "file", "subject", "audience"].includes(field)) return;
-    await setState(chatId, state.flow!, {...state.data, nonce: undefined, step: field, ...(field === "file" ? {fileUrl: undefined, pendingDoc: undefined} : {})});
+    await setState(chatId, state.flow!, {...state.data, nonce: undefined, step: field, ...(field === "file" ? {fileUrl: undefined, fingerprint: undefined, pendingDoc: undefined} : {})});
     await resumeDraft(chatId, userId); return;
   }
   if (data.startsWith("pub:")) {
     const state = await getState(chatId);
-    const [, kind, nonce] = data.split(":");
+    const [, kind, nonce, action] = data.split(":");
     if (!state?.flow || state.flow !== kind || state.data.step !== "confirm" || !nonce || nonce !== state.data.nonce) {
       await sendMessage(chatId, "هذا الزر قديم أو انتهت صلاحيته. افتح المسودة من القائمة الرئيسية.", {replyMarkup: adminMenu(admin)}); return;
+    }
+    const issue = state.data.publicationIssue as PublicationIssue | undefined;
+    const options: PublicationOptions = {};
+    if (action) {
+      if (!issue) return;
+      if (action === "expand" && issue.kind === "expand") options.expand = issue.id;
+      else if (action === "replace" && issue.kind === "similar" && issue.canUpdate) options.replace = issue.id;
+      else if (action === "reviewed" && issue.kind === "similar") options.reviewed = issue.id;
+      else return;
     }
     const claimed = await q(`UPDATE portal_bot_state SET data=$3 WHERE chat_id=$1 AND data->>'nonce'=$2 AND data->>'step'='confirm' RETURNING chat_id`, [chatId, nonce, JSON.stringify({...state.data, step: "publishing"})]);
     if (!claimed.length) return;
@@ -335,10 +369,12 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       // re-check permissions immediately before publishing
       const scope = admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general";
       const section = admin.role === "section_representative" ? String(admin.assigned_section) : admin.role === "teacher" ? String(d.section) : "all";
-      const r = await publishAnnouncement(admin, {id: String(d.draftId || undefined), title: String(d.title || ""), body: String(d.body || ""), scope, section, subjectId: d.subjectId as string | undefined, priority: "normal", source: "telegram"});
+      const r = await publishAnnouncement(admin, {id: typeof d.draftId === "string" ? d.draftId : undefined, title: String(d.title || ""), body: String(d.body || ""), scope, section, subjectId: d.subjectId as string | undefined, priority: "normal", source: "telegram", options});
+      if (r.ok && r.notificationEvents?.length) onPublished?.(r.notificationEvents);
+      if (!r.ok && r.issue) { await showPublicationIssue(chatId, admin, kind, d, r.issue); return; }
       if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
-        ? (r.inserted ? `✅ تم نشر التبليغ.\n🔗 ${PORTAL_BASE_URL}/announcements` : "ℹ️ هذا التبليغ منشور مسبقًا (لا تكرار).")
+        ? (r.action === "updated" ? "✅ تم تحديث التبليغ الموجود." : r.inserted ? `✅ تم نشر التبليغ.\n🔗 ${PORTAL_BASE_URL}/announcements` : "ℹ️ هذا التبليغ منشور مسبقًا (لا تكرار).")
         : `⛔ تعذر النشر: ${r.error}`, {replyMarkup: adminMenu(admin)});
       return;
     }
@@ -348,10 +384,12 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu(admin)}); return; }
       const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
       const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
-      const r = await publishLecture(fresh, {id: String(d.draftId || undefined), subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), sections, source: "telegram"});
+      const r = await publishLecture(fresh, {id: typeof d.draftId === "string" ? d.draftId : undefined, subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), sections, source: "telegram", options, fingerprint: typeof d.fingerprint === "string" ? d.fingerprint : undefined});
+      if (r.ok && r.notificationEvents?.length) onPublished?.(r.notificationEvents);
+      if (!r.ok && r.issue) { await showPublicationIssue(chatId, admin, kind, d, r.issue); return; }
       if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
-        ? (r.inserted ? `✅ تم نشر المادة في <b>${escapeHtml(d.subjectId)}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/subjects/${escapeHtml(d.subjectId)}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
+        ? (r.action ? `✅ ${r.action === "expanded" ? "تم توسيع جمهور الملزمة" : "تم تحديث الملزمة الموجودة"}.\n🔗 ${PORTAL_BASE_URL}${r.url || "/lectures/" + encodeURIComponent(r.id)}` : r.inserted ? `✅ تم نشر المادة في <b>${escapeHtml(d.subjectId)}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/subjects/${escapeHtml(d.subjectId)}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
         : `⛔ تعذر النشر: ${r.error}`, {parseMode: "HTML", replyMarkup: adminMenu(admin)});
       return;
     }

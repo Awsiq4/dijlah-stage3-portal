@@ -3,6 +3,7 @@ import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTI
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
 import {sendMessage, tgFetch} from "@/lib/server/telegram";
+import {drainQueue} from "@/lib/server/notify";
 import {getLinkedAdmin, bindInvitedStaff, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow, adminMenu} from "@/lib/server/bot";
 import {handleStudentCallback, handleManageCallback, handleNavCallback} from "@/lib/server/botx";
 import {handleOwnerCallback} from "@/lib/server/botowner";
@@ -221,7 +222,9 @@ export async function POST(req: NextRequest) {
       } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || data === "adm:new" || data === "pdf:new") {
         await handleNavCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
-        await handleAdminCallback(Number(callback.message.chat.id), userId, data);
+        await handleAdminCallback(Number(callback.message.chat.id), userId, data, eventIds => {
+          after(() => drainQueue(200, eventIds).then(() => undefined));
+        });
       } else {
         await handleCallback(Number(callback.message.chat.id), data, callback.from);
       }
