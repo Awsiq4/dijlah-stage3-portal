@@ -547,3 +547,76 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   *,*::before,*::after{transition:none!important;animation:none!important}
   html{scroll-behavior:auto}
 }
+
+
+/* ---------- Optoelectronics-only YouTube explanations ---------- */
+.opto-videos{margin-bottom:20px}
+.opto-videos-heading{
+  display:flex;align-items:center;gap:14px;padding:19px 21px;margin-bottom:16px;
+  background:linear-gradient(115deg,color-mix(in srgb,var(--primary) 10%,var(--surface)),var(--surface) 74%);
+  border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow)
+}
+.opto-videos-mark{
+  width:50px;height:50px;flex:none;display:grid;place-items:center;border-radius:15px;
+  background:color-mix(in srgb,var(--primary) 14%,var(--surface));color:var(--primary-strong)
+}
+.opto-videos-heading .grow{min-width:0}
+.opto-videos-heading h2{font-size:1.06rem;margin:0 0 3px;line-height:1.6}
+.opto-videos-heading p{font-size:.78rem;color:var(--muted);margin:0}
+.opto-videos-count{
+  flex:none;border-radius:100px;padding:5px 12px;color:var(--primary-strong);
+  background:var(--primary-soft);border:1px solid var(--border);font-weight:800;font-size:.78rem
+}
+.opto-videos-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}
+.opto-video-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:19px;
+  box-shadow:var(--shadow);overflow:hidden;min-width:0;
+  transition:border-color .2s ease,box-shadow .2s ease,transform .2s ease
+}
+.opto-video-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.opto-video-media{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#152746,#135b78);overflow:hidden}
+.opto-video-media iframe{width:100%;height:100%;display:block;border:0}
+.opto-video-cover{width:100%;height:100%;border:0;display:block;padding:0;position:relative;background:transparent;color:white}
+.opto-video-cover img{display:block;width:100%;height:100%;object-fit:cover;filter:brightness(.82);transition:transform .24s ease,filter .24s ease}
+.opto-video-cover:hover img,.opto-video-cover:focus-visible img{transform:scale(1.04);filter:brightness(.65)}
+.opto-video-cover:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 58%,rgba(8,26,43,.25))}
+.opto-video-play{
+  position:absolute;z-index:1;inset:50% auto auto 50%;transform:translate(-50%,-50%);
+  width:63px;height:63px;display:grid;place-items:center;border-radius:50%;
+  background:rgba(8,31,52,.88);border:2px solid rgba(255,255,255,.85);color:white;
+  box-shadow:0 8px 28px rgba(0,0,0,.25);transition:background .2s ease,transform .2s ease
+}
+.opto-video-cover:hover .opto-video-play{background:#078daf;transform:translate(-50%,-50%) scale(1.08)}
+.opto-video-info{padding:16px 17px 17px}
+.opto-video-title-line{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.opto-video-title-line strong{display:block;color:var(--text);font-weight:900;font-size:.93rem}
+.opto-video-title-line p{margin:2px 0 0;color:var(--muted);font-size:.75rem}
+.opto-video-number{
+  flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;
+  background:var(--primary-soft);color:var(--primary-strong);font-size:.85rem;font-weight:900
+}
+.opto-video-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.opto-video-watch,.opto-video-youtube{
+  min-height:40px;border-radius:11px;display:inline-flex;justify-content:center;
+  align-items:center;gap:7px;padding:8px 13px;font-size:.78rem;font-weight:800;
+  transition:var(--trans)
+}
+.opto-video-watch{background:var(--primary);color:var(--on-primary);border:1px solid var(--primary)}
+.opto-video-watch:hover{background:var(--primary-strong);border-color:var(--primary-strong)}
+.opto-video-youtube{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.opto-video-youtube:hover{border-color:var(--primary);color:var(--primary-strong)}
+@media(max-width:860px){.opto-videos-grid{grid-template-columns:1fr}}
+@media(max-width:480px){
+  .opto-videos-heading{padding:14px;gap:9px;flex-wrap:wrap}
+  .opto-videos-mark{width:41px;height:41px;border-radius:12px}
+  .opto-videos-heading h2{font-size:.9rem}
+  .opto-videos-heading p{font-size:.72rem}
+  .opto-videos-count{margin-inline-start:auto;font-size:.7rem}
+  .opto-video-info{padding:13px}
+  .opto-video-watch{flex:1}
+  .opto-video-youtube{flex:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .opto-video-card,.opto-video-cover img,.opto-video-play{transition:none}
+  .opto-video-card:hover,.opto-video-cover:hover img{transform:none}
+}
