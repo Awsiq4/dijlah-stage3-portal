@@ -5,7 +5,9 @@ import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogO
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./workspace";
 
-type Me = {authenticated: boolean; email?: string; role?: string};
+import {MaterialForm, type PublishingAccount} from "./material-form";
+
+type Me = PublishingAccount & {authenticated: boolean; email?: string};
 type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentAudit?: {actor: string; action: string; created_at: string}[]};
 type Row = Record<string, unknown>;
 
@@ -23,7 +25,7 @@ type TabId = (typeof TABS)[number]["id"] | "users" | "tgcenter" | "audit";
 type WritableTab = "subjects" | "announcements" | "lectures" | "exams" | "assignments" | "schedule";
 
 type Field = {k: string; label: string; area?: boolean; select?: string[]; num?: boolean; json?: boolean; req?: boolean};
-const FIELDS: Record<WritableTab, Field[]> = {
+const FIELDS: Record<Exclude<WritableTab, "lectures">, Field[]> = {
   subjects: [
     {k: "id", label: "المعرّف (id)", req: true},
     {k: "name", label: "اسم المادة", req: true},
@@ -32,25 +34,13 @@ const FIELDS: Record<WritableTab, Field[]> = {
     {k: "description", label: "الوصف", area: true},
     {k: "color", label: "اللون (مثل #3586d9)"},
   ],
-  lectures: [
-    {k: "id", label: "المعرّف (id)", req: true},
-    {k: "subject_id", label: "معرّف المادة", req: true},
-    {k: "number", label: "رقم المحاضرة", num: true, req: true},
-    {k: "title", label: "العنوان", req: true},
-    {k: "description", label: "الوصف", area: true},
-    {k: "file_url", label: "رابط الملف"},
-    {k: "file_name", label: "اسم الملف"},
-    {k: "material_kind", label: "نوع المحتوى", select: ["lecture", "summary"]},
-    {k: "status", label: "الحالة", select: ["published", "draft"]},
-    {k: "updated_at", label: "تاريخ التحديث"},
-  ],
   announcements: [
     {k: "id", label: "المعرّف (id)", req: true},
     {k: "title", label: "العنوان", req: true},
     {k: "body", label: "المحتوى", area: true},
     {k: "scope", label: "النطاق", select: ["general", "section", "teacher"]},
     {k: "section", label: "الشعبة", select: ["all", "A", "B", "C", "F"]},
-    {k: "subject_id", label: "معرّف المادة (للتبليغ التدريسي)"},
+    {k: "subject_id", label: "المادة (للتبليغ التدريسي)"},
     {k: "author", label: "الجهة"},
     {k: "priority", label: "الأولوية", select: ["normal", "important", "urgent"]},
     {k: "published_at", label: "تاريخ النشر"},
@@ -58,25 +48,25 @@ const FIELDS: Record<WritableTab, Field[]> = {
   ],
   exams: [
     {k: "id", label: "المعرّف (id)", req: true},
-    {k: "subject_id", label: "معرّف المادة"},
+    {k: "subject_id", label: "المادة"},
     {k: "title", label: "العنوان", req: true},
     {k: "type", label: "النوع (كوز/نصف سنوي...)"},
     {k: "date", label: "التاريخ"},
     {k: "start_time", label: "وقت البدء"},
     {k: "room", label: "القاعة"},
-    {k: "sections", label: "الشعب (JSON مثل [\"A\"])", json: true},
+    {k: "sections", label: "الشعب", json: true},
     {k: "topics", label: "المواضيع", area: true},
     {k: "notes", label: "ملاحظات", area: true},
     {k: "status", label: "الحالة", select: ["confirmed", "provisional", "cancelled"]},
   ],
   assignments: [
     {k: "id", label: "المعرّف (id)", req: true},
-    {k: "subject_id", label: "معرّف المادة"},
+    {k: "subject_id", label: "المادة"},
     {k: "title", label: "العنوان", req: true},
     {k: "instructions", label: "التعليمات", area: true},
     {k: "assigned_at", label: "تاريخ التكليف"},
     {k: "due_at", label: "موعد التسليم"},
-    {k: "sections", label: "الشعب (JSON)", json: true},
+    {k: "sections", label: "الشعب", json: true},
     {k: "submission", label: "طريقة التسليم"},
     {k: "status", label: "الحالة", select: ["active", "closed", "cancelled"]},
     {k: "attachment_url", label: "رابط المرفق"},
@@ -87,7 +77,7 @@ const FIELDS: Record<WritableTab, Field[]> = {
     {k: "day", label: "اليوم (0=الأحد … 6=السبت)", num: true, req: true},
     {k: "start", label: "وقت البدء", req: true},
     {k: "end", label: "وقت الانتهاء", req: true},
-    {k: "subject_id", label: "معرّف المادة"},
+    {k: "subject_id", label: "المادة"},
     {k: "teacher", label: "التدريسي"},
     {k: "room", label: "القاعة"},
     {k: "kind", label: "النوع", select: ["theory", "practical"]},
@@ -97,6 +87,15 @@ const FIELDS: Record<WritableTab, Field[]> = {
   ],
 };
 
+function readSections(value: string | undefined): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.filter((section): section is string => typeof section === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"};
 
 export default function AdminDashboard(){
@@ -104,6 +103,7 @@ export default function AdminDashboard(){
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabId>("overview");
+  const [subjects, setSubjects] = useState<Row[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [notice, setNotice] = useState("");
@@ -129,13 +129,23 @@ export default function AdminDashboard(){
   }, [router]);
 
   useEffect(() => { if (me?.authenticated) loadTab(tab); }, [me, tab, loadTab]);
+  useEffect(() => {
+    if (!me?.authenticated || !["super_admin", "editor"].includes(me.role || "")) return;
+    fetch("/api/public/content?type=subjects", {cache: "no-store"})
+      .then(r => r.json()).then(j => setSubjects(j.content?.subjects || [])).catch(() => {});
+  }, [me]);
 
   const logout = async () => {
     await fetch("/api/admin/logout", {method: "POST", headers: WRITE_HEADERS});
     router.push("/admin/login");
   };
 
-  const startAdd = () => { setEditing({}); setForm({}); };
+  const startAdd = () => {
+    setEditing({});
+    setForm(tab === "announcements" ? {scope: "general", section: "all", priority: "normal", pinned: "false"}
+      : tab === "exams" ? {status: "provisional", sections: JSON.stringify(["A", "B", "C", "F"])}
+      : tab === "assignments" ? {status: "active", sections: JSON.stringify(["A", "B", "C", "F"])} : {});
+  };
   const startEdit = (row: Row) => {
     setEditing(row);
     const f: Record<string, string> = {};
@@ -144,16 +154,18 @@ export default function AdminDashboard(){
   };
   const cancelEdit = () => { setEditing(null); setForm({}); };
 
-  const submit = async (e: React.FormEvent, type: WritableTab) => {
+  const submit = async (e: React.FormEvent, type: Exclude<WritableTab, "lectures">) => {
     e.preventDefault();
     setBusy(true); setNotice("");
     try {
-      const row: Row = {};
+      const row: Row = {id: editing?.id || form.id || `web-${crypto.randomUUID()}`};
       for (const f of FIELDS[type]) {
+        if (f.k === "id" && type !== "subjects") continue;
         const v = (form[f.k] ?? "").trim();
         if (f.num) row[f.k] = v === "" ? null : Number(v);
-        else if (f.json) row[f.k] = v === "" ? null : JSON.parse(v);
-        else row[f.k] = v;
+        else if (f.json) row[f.k] = v === "" ? [] : JSON.parse(v);
+        else if (f.k === "published_at") row[f.k] = v || new Date().toISOString();
+        else if (v || !f.select) row[f.k] = v;
       }
       const res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
       const j = await res.json().catch(() => ({}));
@@ -190,6 +202,7 @@ export default function AdminDashboard(){
     {notice && <p className="note" role="status">{notice}</p>}
 
     {tab === "overview" && <>
+      <button className="action-button" onClick={() => {setTab("lectures"); startAdd();}}><Plus size={16}/> نشر محاضرة أو ملخص</button>
       <div className="stats">
         <div className="stat"><Database size={21}/><span>قاعدة البيانات</span><strong>{stats?.databaseConfigured ? "متصلة" : "غير مهيأة"}</strong></div>
         {stats?.counts?.filter(c => c.table.startsWith("portal_")).map(c => (
@@ -220,10 +233,23 @@ export default function AdminDashboard(){
         {canWrite && (editing === null ? <button className="action-button" onClick={startAdd}><Plus size={15}/> إضافة جديد</button> : <button className="action-button secondary" onClick={cancelEdit}><X size={15}/> إلغاء</button>)}
       </div>
       <div className="panel-body">
-        {canWrite && editing !== null && <form className="admin-form" onSubmit={e => submit(e, tab as WritableTab)} style={{marginBottom: 18}}>
-          {FIELDS[tab as WritableTab].map(f => (
+        {canWrite && editing !== null && tab === "lectures" && <MaterialForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} rows={rows || []} onSaved={() => loadTab("lectures")}/>}
+        {canWrite && editing !== null && tab !== "lectures" && <form className="admin-form" onSubmit={e => submit(e, tab)} style={{marginBottom: 18}}>
+          {FIELDS[tab].filter(f => (f.k !== "id" || tab === "subjects") && (f.k !== "published_at" || !!editing.id)).map(f => (
             <label className={"form-field" + (f.area ? " wide" : "")} key={f.k}><span>{f.label}{f.req ? " *" : ""}</span>
-              {f.select ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
+              {f.k === "subject_id" ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
+                <option value="">اختر المادة</option>
+                {subjects.map(subject => <option key={String(subject.id)} value={String(subject.id)}>{String(subject.name)}</option>)}
+                {form[f.k] && !subjects.some(subject => subject.id === form[f.k]) && <option value={form[f.k]}>{form[f.k]}</option>}
+              </select> : f.k === "sections" ? <div className="section-pills">
+                {["A", "B", "C", "F"].map(section => <label key={section}>
+                  <input type="checkbox" checked={readSections(form.sections).includes(section)} onChange={e => {
+                    const selected = readSections(form.sections);
+                    const next = e.target.checked ? [...selected, section] : selected.filter(value => value !== section);
+                    setForm(v => ({...v, sections: JSON.stringify(next)}));
+                  }}/> {section}
+                </label>)}
+              </div> : f.select ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
                 <option value="">—</option>
                 {f.select.map(o => <option key={o} value={o}>{f.k === "material_kind" ? (o === "summary" ? "ملخص" : "محاضرة / ملزمة") : o}</option>)}
               </select>

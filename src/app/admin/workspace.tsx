@@ -2,145 +2,78 @@
 import React,{useCallback,useEffect,useState} from "react";
 import {BookOpen,ClipboardList,FileQuestion,Megaphone,Paperclip,Plus,Send,Trash2,Users,Link2,Unlink} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
-import {upload} from "@vercel/blob/client";
+import {MaterialForm, type PublishingAccount} from "./material-form";
 
-type Me = {authenticated: boolean; email?: string; role?: string; name?: string; assigned_section?: string | null; assigned_subjects?: string[] | null; perms?: {teacher_sections?: Record<string, string[]>}};
+type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
 type Row = Record<string, unknown>;
 const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"};
 
 // ---------- role-specific workspace (representatives & teachers) ----------
 export function RoleWorkspace({me}: {me: Me}) {
   const isRep = me.role === "section_representative" || me.role === "general_representative";
-  const isTeacher = me.role === "teacher";
+  const [type, setType] = useState<"announcements" | "lectures">("lectures");
   const [rows, setRows] = useState<Row[] | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [subjectId, setSubjectId] = useState("");
-  const [materialKind, setMaterialKind] = useState<"lecture" | "summary">("lecture");
-  const [number, setNumber] = useState("1");
-  const [fileUrl, setFileUrl] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [subjects, setSubjects] = useState<Row[]>([]);
-  const [audience, setAudience] = useState<"own" | "all">("own");
-  useEffect(() => {
-    fetch("/api/public/content?type=subjects", {cache: "no-store"}).then(r => r.json()).then(j => setSubjects(j.content?.subjects || [])).catch(() => setSubjects([]));
-  }, []);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [lastLink, setLastLink] = useState("");
-  const [kind, setKind] = useState<"ann" | "mat">(isRep ? "ann" : "mat");
-
-  const type = kind === "ann" ? "announcements" : "lectures";
   const load = useCallback(() => {
-    fetch(`/api/admin/content?type=${type}`, {cache: "no-store"}).then(r => r.json()).then(j => setRows(j.rows || [])).catch(() => setRows([]));
+    let active = true;
+    fetch(`/api/admin/content?type=${type}`, {cache: "no-store"})
+      .then(response => response.json())
+      .then(data => { if (active) setRows(data.rows || []); })
+      .catch(() => { if (active) setRows([]); });
+    return () => { active = false; };
   }, [type]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => load(), [load]);
 
-  const publish = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setNotice("");
-    const sections = isTeacher && materialKind === "summary"
-      ? (me.perms?.teacher_sections?.[subjectId] ?? ["A", "B", "C", "F"])
-      : audience === "all" ? ["A", "B", "C", "F"] : [me.assigned_section || "A"];
-    if (isTeacher && materialKind === "summary" && !sections.length) {
-      setNotice("لا توجد شعب مسموح بالنشر لها في هذه المادة.");
-      setBusy(false);
-      return;
-    }
+  async function publishAnnouncement(event: React.FormEvent) {
+    event.preventDefault();
+    if (!title.trim() || !body.trim() || busy) return;
+    setBusy(true);
+    setNotice("");
+    const ownSection = me.role === "section_representative";
+    const row = {
+      id: `web-${crypto.randomUUID()}`, title: title.trim(), body: body.trim(),
+      scope: ownSection ? "section" : "general", section: ownSection ? me.assigned_section : "all",
+      priority: "normal", published_at: new Date().toISOString(), pinned: "false",
+    };
     try {
-      let url = fileUrl;
-      if (kind === "mat" && file) {
-        // direct-to-Blob upload: bypasses the 4.5MB function limit; the route validates role/subject/AUDIENCE/type/size
-        try {
-          const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-100);
-          const blob = await upload(`lectures/${crypto.randomUUID()}-${safeName}`, file, {
-            access: "public",
-            handleUploadUrl: "/api/admin/upload",
-            contentType: "application/pdf",
-            clientPayload: JSON.stringify({filename: file.name, contentType: "application/pdf", size: file.size, subjectId, sections}),
-          });
-          url = blob.url;
-        } catch (err) {
-          // upload failure: keep title/subject/audience/file for retry, show a distinct Arabic error
-          const msg = err instanceof Error && err.message ? err.message : "";
-          setNotice(`⛔ فشل رفع ملف PDF: ${msg || "تحقق من أن الملف PDF صالح وأقل من 100MB"} — لم يُحفظ أي محتوى، يمكنك إعادة المحاولة.`);
-          return;
-        }
-      }
-      if (kind === "mat" && !url) { setNotice("⚠️ اختر ملف PDF أو أدخل رابطًا"); return; }
-      const row = isRep && kind === "ann"
-        ? {id: `web-${Date.now()}`, title, body, scope: me.role === "section_representative" ? "section" : "general", section: me.role === "section_representative" ? me.assigned_section : "all", priority: "normal", published_at: new Date().toISOString(), pinned: "false"}
-        : {id: `web-${Date.now()}`, subject_id: subjectId, number: materialKind === "summary" ? 1 : Number(number) || 1, ...(materialKind === "summary" ? {material_kind: "summary"} : {}), title, description: body, file_url: url, file_name: (file?.name || url.split("/").pop() || ""), sections, status: "published", updated_at: new Date().toISOString().slice(0, 10)};
-      let res;
-      try {
-        res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
-      } catch {
-        setNotice("⛔ تعذر الاتصال بالخادم أثناء حفظ المحتوى — لم يُحفظ شيء، أعد المحاولة.");
-        return;
-      }
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // publishing failure (distinct from upload failure); form values are kept for retry
-        setNotice(`⛔ فشل حفظ المحتوى في قاعدة البيانات: ${j.error || "خطأ غير معروف"} — رابط الملف محفوظ، أعد الضغط على "نشر الآن".`);
-        return;
-      }
-      // success only after the content record is saved — include a link to the published item
-      const link = kind === "ann" ? "/announcements" : materialKind === "summary" ? `/lectures/${row.id}` : `/subjects/${subjectId}`;
-      setNotice(`✅ تم نشر المحتوى بنجاح — سيصل إشعار Telegram عند تفعيل الخدمة. 🔗 عرض المنشور: ${link}`);
-      setLastLink(link);
-      setTitle(""); setBody(""); setFileUrl(""); setFile(null);
-      load();
-    } finally { setBusy(false); }
-  };
+      const response = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
+      if (!response.ok) throw Error();
+      setTitle(""); setBody(""); setNotice("تم نشر التبليغ."); load();
+    } catch { setNotice("تعذّر نشر التبليغ. حاول مرة ثانية."); }
+    finally { setBusy(false); }
+  }
 
-  const remove = async (id: string) => {
+  async function remove(id: string) {
     if (!confirm("حذف هذا المحتوى؟")) return;
-    await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(id)}`, {method: "DELETE", headers: WRITE_HEADERS});
-    load();
-  };
+    const response = await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(id)}`, {method: "DELETE", headers: WRITE_HEADERS});
+    if (response.ok) load();
+    else setNotice("تعذّر حذف المحتوى.");
+  }
 
   return <>
-    <PageHeading title={kind === "ann" ? "نشر تبليغ" : "نشر محاضرة / ملزمة"} description={`${me.name || me.email} · ${me.role}${me.assigned_section ? ` · الشعبة ${me.assigned_section}` : ""}${me.assigned_subjects?.length ? ` · المواد: ${me.assigned_subjects.join("، ")}` : ""}`}/>
-    {notice && <p className="note" role="status">{notice}{lastLink && <><br/><a href={lastLink} className="action-button secondary" style={{display:"inline-flex",marginTop:6}}>🔗 فتح المنشور ({lastLink})</a></>}</p>}
-    {isRep && <div className="tabs admin-tabs" style={{marginBottom: 14}}>
-      <button className={kind === "ann" ? "selected" : ""} onClick={() => setKind("ann")}>📢 تبليغ</button>
-      <button className={kind === "mat" ? "selected" : ""} onClick={() => setKind("mat")}>📚 محاضرة / ملزمة</button>
+    <PageHeading title={type === "lectures" ? "نشر ملف PDF" : "نشر تبليغ"} description={me.name || me.email}/>
+    {isRep && <div className="tabs admin-tabs">
+      <button className={type === "lectures" ? "selected" : ""} onClick={() => {setType("lectures"); setRows(null); setNotice("");}}>محاضرة أو ملخص</button>
+      <button className={type === "announcements" ? "selected" : ""} onClick={() => {setType("announcements"); setRows(null); setNotice("");}}>تبليغ</button>
     </div>}
     <div className="panel"><div className="panel-body">
-      <form className="admin-form" onSubmit={publish}>
-        {kind === "mat" && <>
-          <label className="form-field"><span>المادة *</span>
-            <select value={subjectId} onChange={e => setSubjectId(e.target.value)} required>
-              <option value="">— اختر المادة —</option>
-              {(isTeacher ? (me.assigned_subjects || []).map(id => ({id, name: String(subjects.find(s => s.id === id)?.name || id)})) : subjects.map(s => ({id: String(s.id), name: String(s.name)}))).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select></label>
-          <label className="form-field"><span>نوع المحتوى</span>
-            <select value={materialKind} onChange={e => setMaterialKind(e.target.value as "lecture" | "summary")}>
-              <option value="lecture">محاضرة / ملزمة</option>
-              <option value="summary">ملخص</option>
-            </select>
-          </label>
-          {materialKind === "lecture" && <label className="form-field"><span>رقم المحاضرة/الملزمة</span><input type="number" min={1} value={number} onChange={e => setNumber(e.target.value)}/></label>}
-          {isRep && <label className="form-field"><span>الجمهور *</span>
-            <select value={audience} onChange={e => setAudience(e.target.value as "own" | "all")}>
-              <option value="own">📌 شعبتي ({me.assigned_section})</option>
-              <option value="all">🌐 جميع الشعب (A, B, C, F)</option>
-            </select></label>}
-        </>}
-        <label className="form-field wide"><span>العنوان *</span><input value={title} onChange={e => setTitle(e.target.value)} required/></label>
-        <label className="form-field wide"><span>{kind === "ann" ? "نص التبليغ" : "الوصف"}</span><textarea rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
-        {kind === "mat" && <>
-          <label className="form-field wide"><span>ملف PDF (رفع من الجهاز)</span><input type="file" accept="application/pdf,.pdf" onChange={e => { setFile(e.target.files?.[0] || null); setFileUrl(""); }}/></label>
-          <label className="form-field wide"><span>…أو رابط ملف محفوظ</span><input dir="ltr" placeholder="https://…pdf" value={fileUrl} onChange={e => { setFileUrl(e.target.value); setFile(null); }}/></label>
-        </>}
-        <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}} disabled={busy}><Send size={15}/> {busy ? "جارٍ النشر…" : "نشر الآن"}</button>
-      </form>
+      {type === "lectures" ? <MaterialForm account={me} rows={rows || []} onSaved={() => { load(); }}/> :
+        <form className="admin-form" onSubmit={publishAnnouncement}>
+          <label className="form-field wide"><span>العنوان</span><input required value={title} onChange={e => setTitle(e.target.value)}/></label>
+          <label className="form-field wide"><span>نص التبليغ</span><textarea required rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
+          <button className="action-button" disabled={busy}><Send size={15}/> {busy ? "جارٍ النشر…" : "نشر التبليغ"}</button>
+        </form>}
+      {notice && <p className="note" role="status">{notice}</p>}
     </div></div>
-    <div className="panel"><div className="panel-heading"><h2>{kind === "ann" ? "تبليغاتي" : "موادي المنشورة"}</h2></div><div className="panel-body">
-      {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map((r, i) => <div className="list-row" key={String(r.id || i)}>
-        <div className="grow"><strong>{r.material_kind === "summary" ? "ملخص · " : ""}{String(r.title || r.id)}</strong><p className="subtle small">{String(r.section || r.subject_id || "")}</p></div>
-        <button className="action-button secondary" title="حذف" onClick={() => remove(String(r.id))}><Trash2 size={14}/></button>
-      </div>)}</div> : <Empty description="لا يوجد محتوى بعد."/>}
+    <div className="panel"><div className="panel-heading"><h2>{type === "lectures" ? "ملفاتي" : "تبليغاتي"}</h2></div><div className="panel-body">
+      {rows === null ? <Empty description="جارٍ التحميل…"/> : !rows.length ? <Empty description="لا يوجد محتوى منشور بعد."/> : rows.map(row =>
+        <div className="list-row" key={String(row.id)}>
+          <div className="grow"><strong>{String(row.title || row.id)}</strong></div>
+          <button className="action-button secondary" aria-label="حذف" onClick={() => remove(String(row.id))}><Trash2 size={14}/></button>
+        </div>)}
     </div></div>
   </>;
 }
