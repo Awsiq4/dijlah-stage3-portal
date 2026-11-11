@@ -26,6 +26,10 @@ export async function uploadLecturePdf(buf: Buffer, filename: string): Promise<{
         access: "public",
         contentType: "application/pdf",
         addRandomSuffix: true,
+        // The store's OIDC project connection covers Preview only. An explicit
+        // server-side read/write token takes precedence over Vercel's OIDC
+        // credentials until Production is added to that connection.
+        token: process.env.BLOB_READ_WRITE_TOKEN,
       });
       return {url, name: safe};
     } catch (error) {

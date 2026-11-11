@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
   }
   try {
     const json = await handleUpload({
+      // The production Blob connection does not allow OIDC yet; use the
+      // server-only read/write token for browser token issuance and callbacks.
+      token: process.env.BLOB_READ_WRITE_TOKEN,
       body,
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
@@ -80,7 +83,7 @@ export async function POST(req: NextRequest) {
           await reader.cancel();
         }
         if (!isPdf(header.subarray(0, bytes))) {
-          await del(fileUrl.href);
+          await del(fileUrl.href, {token: process.env.BLOB_READ_WRITE_TOKEN});
           if (dbConfigured()) await audit(payload.email || `admin#${payload.adminId}`, "upload.pdf.rejected", {subjectId: payload.subjectId});
           return;
         }
