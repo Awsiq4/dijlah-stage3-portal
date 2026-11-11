@@ -8,7 +8,7 @@ import {canPublishAnnouncement, canPublishSubjectContent, canPublishMaterial, ca
 import {checkPublication, indexLegacyPdfFiles, lockPublication, pdfFingerprint, publicationUrl, PublicationConflict, type PublicationIssue, type PublicationKind, type PublicationOptions} from "./publication-dedup.ts";
 import {telegramServiceEnabled} from "./flags.ts";
 
-export type PublishOk = {ok: true; id: string; inserted: boolean; action?: "expanded" | "updated"; url?: string};
+export type PublishOk = {ok: true; id: string; inserted: boolean; action?: "expanded" | "updated"; url?: string; notificationEvents?: number[]};
 export type PublishFail = {ok: false; error: string; issue?: PublicationIssue};
 export type PublishResult = PublishOk | PublishFail;
 
@@ -43,10 +43,9 @@ async function insertWithOwnership(
       await tx.q("UPDATE portal_lectures SET file_sha256=$2 WHERE id=$1", [row.id, hash]);
     }
     await audit(admin.email || `admin#${admin.id}`, `publish.${type}`, {id: row.id, source, role: admin.role}, tx);
-    if (inserted && newPublication && telegramServiceEnabled()) {
-      await enqueueNewPublication(tx, type, row);
-    }
-    return {ok: true, id: String(row.id), inserted} as PublishOk;
+    const notificationEvents = inserted && newPublication && telegramServiceEnabled()
+      ? await enqueueNewPublication(tx, type, row) : [];
+    return {ok: true, id: String(row.id), inserted, notificationEvents} as PublishOk;
   });
 }
 
@@ -68,15 +67,17 @@ async function preparePublication(
   const decision = await checkPublication(db, admin, type, effective, hash, existing ? {} : options, !existing);
   if (decision.expanded && decision.addedSections) {
     const {id, title, subject_id} = decision.expanded;
+    const notificationEvents: number[] = [];
     if (telegramServiceEnabled()) {
       const {createEvent} = await import("./notify.ts");
       for (const section of decision.addedSections) {
-        await createEvent({type: "lecture", refId: id, version: "audience-" + section,
+        const event = await createEvent({type: "lecture", refId: id, version: "audience-" + section,
           title, url: publicationUrl("lectures", {id, sections: [section]}), scope: "section", section, subject_id: String(subject_id)}, db);
+        if (event.eventId) notificationEvents.push(event.eventId);
       }
     }
     await audit(admin.email || `admin#${admin.id}`, "content.audience_expanded", {id, sections: decision.addedSections}, db);
-    return {...prepared, result: {ok: true, id, inserted: false, action: "expanded", url: publicationUrl(type, decision.expanded)}};
+    return {...prepared, result: {ok: true, id, inserted: false, action: "expanded", url: publicationUrl(type, decision.expanded), notificationEvents}};
   }
   if (decision.replacement) {
     const {id} = decision.replacement;
@@ -99,21 +100,27 @@ function handlePublicationConflict(error: unknown): PublishFail {
 
 async function enqueueNewPublication(db: Queryer, type: WritableContentType, row: Record<string, unknown>) {
   const {createEvent} = await import("./notify.ts");
+  const eventIds: number[] = [];
+  const enqueue = async (event: Parameters<typeof createEvent>[0]) => {
+    const result = await createEvent(event, db);
+    if (result.eventId) eventIds.push(result.eventId);
+  };
   const refId = String(row.id);
   const title = String(row.title);
   const subject_id = String(row.subject_id || "");
   if (type === "announcements") {
     const scope = row.scope === "teacher" || row.scope === "section" ? row.scope : "general";
-    await createEvent({type: "announcement", refId, version: 1, title, body: String(row.body || ""), url: publicationUrl("announcements", {id: refId, section: row.section}),
-      scope, section: String(row.section || "all"), subject_id, priority: String(row.priority || "normal")}, db);
+    await enqueue({type: "announcement", refId, version: 1, title, body: String(row.body || ""), url: publicationUrl("announcements", {id: refId, section: row.section}),
+      scope, section: String(row.section || "all"), subject_id, priority: String(row.priority || "normal")});
   } else if (type === "lectures" && row.status === "published") {
     const sections = Array.isArray(row.sections) && row.sections.length ? [...new Set(row.sections.map(String))] : ["A", "B", "C", "F"];
     const info = {type: "lecture" as const, refId, title, body: String(row.description || ""), url: "/lectures/" + encodeURIComponent(refId), subject_id};
-    if (sections.length === 4) await createEvent({...info, version: 1, scope: "general"}, db);
+    if (sections.length === 4) await enqueue({...info, version: 1, scope: "general"});
     else for (const section of sections) {
-      await createEvent({...info, url: publicationUrl("lectures", {id: refId, sections: [section]}), version: "audience-" + section, scope: "section", section}, db);
+      await enqueue({...info, url: publicationUrl("lectures", {id: refId, sections: [section]}), version: "audience-" + section, scope: "section", section});
     }
   }
+  return eventIds;
 }
 
 async function notifyIfEnabled(input: {
@@ -267,7 +274,7 @@ export async function applyContentUpsert(
   if (type === "lectures") await tx.q("UPDATE portal_lectures SET file_sha256=$2 WHERE id=$1", [id, hash]);
   await audit(admin.email || `admin#${admin.id}`, `content.upsert.${type}`, {id, source}, tx);
   if (newPublication && telegramServiceEnabled()) {
-    await enqueueNewPublication(tx, type, clean);
+    return {ok: true, id, inserted: true, notificationEvents: await enqueueNewPublication(tx, type, clean)};
   }
 }
 

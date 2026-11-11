@@ -301,3 +301,27 @@ test("PDF fingerprint comes from server-read bytes rather than filename", async 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("workers claim the same notification once and leave unrelated events queued", async () => {
+  const pool = await makeDb();
+  const originalFetch = globalThis.fetch;
+  const sent = [];
+  try {
+    const {createEvent, drainQueue} = await import("./notify.ts");
+    await q("INSERT INTO tg_subscribers (chat_id,section) VALUES (2001,'A')");
+    const event = {type: "lecture", title: "ملزمة", version: 1, scope: "section", section: "A"};
+    const target = await createEvent({...event, refId: "target"});
+    const unrelated = await createEvent({...event, refId: "unrelated"});
+    globalThis.fetch = async (url, request) => {
+      sent.push(JSON.parse(request.body).chat_id);
+      return Response.json({ok: true, result: {message_id: 1}});
+    };
+    await Promise.all([drainQueue(20, [target.eventId]), drainQueue(20, [target.eventId])]);
+    assert.deepEqual(sent, [2001]);
+    assert.equal((await qOne("SELECT status FROM tg_deliveries WHERE event_id=$1", [target.eventId])).status, "sent");
+    assert.equal((await qOne("SELECT status FROM tg_deliveries WHERE event_id=$1", [unrelated.eventId])).status, "pending");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await pool.end();
+  }
+});

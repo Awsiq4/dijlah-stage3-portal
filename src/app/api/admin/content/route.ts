@@ -1,4 +1,4 @@
-import {NextRequest, NextResponse} from "next/server";
+import {after, NextRequest, NextResponse} from "next/server";
 import {requireAdmin} from "@/lib/server/auth";
 import {listContent, deleteContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
 import {withTx} from "@/lib/server/db";
@@ -6,6 +6,7 @@ import {dbConfigured} from "@/lib/server/flags";
 import {canModifyContent, canManageAllContent, canUseTelegramPublishing, canWriteContentRecord} from "@/lib/server/rbac";
 import {indexLegacyPdfFiles, pdfFingerprint, lockPublication, PublicationConflict} from "@/lib/server/publication-dedup";
 import {sanitizeRow} from "@/lib/server/content-schema";
+import {drainQueue} from "@/lib/server/notify";
 import {applyContentUpsert} from "@/lib/server/publish";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,10 @@ export async function POST(req: NextRequest) {
         return applyContentUpsert(db, admin, body.type, body.row, "web", options, hash);
       }
     });
-    return NextResponse.json(result || {ok: true});
+    if (!result) return NextResponse.json({ok: true});
+    const {notificationEvents, ...publication} = result;
+    if (notificationEvents?.length) after(() => drainQueue(200, notificationEvents).then(() => undefined));
+    return NextResponse.json(publication);
   } catch (err) {
     if (err instanceof PublicationConflict) return NextResponse.json({error: err.message, issue: err.issue}, {status: 409});
     const e = err as Error & {status?: number};

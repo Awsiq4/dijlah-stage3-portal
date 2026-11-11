@@ -115,7 +115,7 @@ export async function checkPublication(
     const requested = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : [...SECTIONS];
     const previous = Array.isArray(exact.sections) && exact.sections.length ? exact.sections.map(String) : [...SECTIONS];
     const added = kind === "lectures" ? requested.filter(section => !previous.includes(section)) : [];
-    const mayExpand = added.length > 0 && !options.replace && canPublishMaterial(admin, String(row.subject_id), requested);
+    const mayExpand = checkSimilar && added.length > 0 && !options.replace && canPublishMaterial(admin, String(row.subject_id), requested);
     if (mayExpand && options.expand === exact.id) {
       const sections = SECTIONS.filter(section => previous.includes(section) || requested.includes(section));
       await db.q(`UPDATE portal_lectures SET sections=$2 WHERE id=$1`, [exact.id, JSON.stringify(sections)]);

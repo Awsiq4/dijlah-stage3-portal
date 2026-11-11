@@ -34,8 +34,8 @@ export async function createEvent(input: CreateEventInput, db: Queryer = default
   return {created: true, eventId: row.id, recipients: recipients.length};
 }
 
-export async function drainQueue(limit = 100): Promise<{sent: number; failed: number; retried: number; skipped: number}> {
-  if (!telegramServiceEnabled()) return {sent: 0, failed: 0, retried: 0, skipped: 0};
+export async function drainQueue(limit = 100, eventIds?: readonly number[]): Promise<{sent: number; failed: number; retried: number; skipped: number}> {
+  if (!telegramServiceEnabled() || eventIds?.length === 0) return {sent: 0, failed: 0, retried: 0, skipped: 0};
   const due = await q<{
     id: number; event_id: number; subscriber_id: number; attempts: number;
     type: string; title: string; body: string | null; url: string | null; scope: string; section: string | null; priority: string;
@@ -46,11 +46,15 @@ export async function drainQueue(limit = 100): Promise<{sent: number; failed: nu
      JOIN tg_events e ON e.id = d.event_id
      JOIN tg_subscribers s ON s.id = d.subscriber_id
      WHERE d.status = 'pending' AND d.next_attempt_at <= now()
+       ${eventIds ? "AND d.event_id = ANY($2::bigint[])" : ""}
      ORDER BY d.id LIMIT $1`,
-    [limit]
+    eventIds ? [limit, eventIds] : [limit]
   );
   let sent = 0, failed = 0, retried = 0, skipped = 0;
   for (const d of due) {
+    const claim = await qOne(`UPDATE tg_deliveries SET next_attempt_at=now() + interval '2 minutes'
+      WHERE id=$1 AND status='pending' AND next_attempt_at<=now() RETURNING id`, [d.id]);
+    if (!claim) { skipped++; continue; }
     const event: TgEvent & {title: string; body: string | null; url: string | null} = {type: d.type as TgEvent["type"], scope: d.scope as TgEvent["scope"], section: d.section, priority: d.priority, title: d.title, body: d.body, url: d.url};
     const msg = renderMessage(event, PORTAL_BASE_URL);
     const res = await sendMessage(d.chat_id, msg.text, {parseMode: msg.parseMode});

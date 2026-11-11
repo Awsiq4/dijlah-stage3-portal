@@ -295,7 +295,7 @@ async function showPublicationIssue(
 }
 
 // ---- callback handling (menus, subject picker, confirm) ----
-export async function handleAdminCallback(chatId: number, userId: number, data: string): Promise<void> {
+export async function handleAdminCallback(chatId: number, userId: number, data: string, onPublished?: (eventIds: number[]) => void): Promise<void> {
   const admin = await getLinkedAdmin(userId);
   if (!admin) { await sendMessage(chatId, "⚠️ حساب Telegram غير مربوط. استخدم «ربط حساب Telegram» من إعدادات الحساب في الموقع."); return; }
 
@@ -370,6 +370,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       const scope = admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general";
       const section = admin.role === "section_representative" ? String(admin.assigned_section) : admin.role === "teacher" ? String(d.section) : "all";
       const r = await publishAnnouncement(admin, {id: typeof d.draftId === "string" ? d.draftId : undefined, title: String(d.title || ""), body: String(d.body || ""), scope, section, subjectId: d.subjectId as string | undefined, priority: "normal", source: "telegram", options});
+      if (r.ok && r.notificationEvents?.length) onPublished?.(r.notificationEvents);
       if (!r.ok && r.issue) { await showPublicationIssue(chatId, admin, kind, d, r.issue); return; }
       if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
@@ -384,6 +385,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
       const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
       const r = await publishLecture(fresh, {id: typeof d.draftId === "string" ? d.draftId : undefined, subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), sections, source: "telegram", options, fingerprint: typeof d.fingerprint === "string" ? d.fingerprint : undefined});
+      if (r.ok && r.notificationEvents?.length) onPublished?.(r.notificationEvents);
       if (!r.ok && r.issue) { await showPublicationIssue(chatId, admin, kind, d, r.issue); return; }
       if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
