@@ -22,7 +22,7 @@ const TEAM = process.env.VERCEL_TEAM_ID || '';
 if (!TOKEN) {
   console.error('SKIP: VERCEL_TOKEN is not set in this environment — no authorized Vercel access.');
   console.error('Manual minimum: Vercel dashboard → Project → Settings → Environment Variables → add the keys below with target Preview + branch scope, never Production:');
-  console.error('  DATABASE_URL, SESSION_SECRET, ADMIN_API_SECRET, TELEGRAM_BOT_ENABLED=false');
+  console.error('  DATABASE_URL, SESSION_SECRET, OWNER_MFA_SECRET, TELEGRAM_BOT_ENABLED=false');
   process.exit(0);
 }
 
@@ -43,15 +43,15 @@ if (!DATABASE_URL) { console.error('ERROR: DATABASE_URL missing — put it in .e
 
 let SESSION_SECRET = get('SESSION_SECRET');
 if (!SESSION_SECRET) { SESSION_SECRET = randomBytes(32).toString('hex'); persistLocal('SESSION_SECRET', SESSION_SECRET); console.log('generated SESSION_SECRET -> .env.local only (value never printed)'); }
-let ADMIN_API_SECRET = get('ADMIN_API_SECRET');
-if (!ADMIN_API_SECRET) { ADMIN_API_SECRET = randomBytes(32).toString('hex'); persistLocal('ADMIN_API_SECRET', ADMIN_API_SECRET); console.log('generated ADMIN_API_SECRET -> .env.local only (value never printed)'); }
+let OWNER_MFA_SECRET = get('OWNER_MFA_SECRET');
+if (!OWNER_MFA_SECRET) { OWNER_MFA_SECRET = randomBytes(32).toString('hex'); persistLocal('OWNER_MFA_SECRET', OWNER_MFA_SECRET); console.log('generated OWNER_MFA_SECRET -> .env.local only (value never printed)'); }
 
 // NOTE: these are written ONLY to the branch-scoped preview custom environment.
 // Never add them to Production. Values are never printed.
 const VARS = [
   {key: 'DATABASE_URL', value: DATABASE_URL},
   {key: 'SESSION_SECRET', value: SESSION_SECRET},
-  {key: 'ADMIN_API_SECRET', value: ADMIN_API_SECRET},
+  {key: 'OWNER_MFA_SECRET', value: OWNER_MFA_SECRET},
   {key: 'TELEGRAM_BOT_ENABLED', value: 'false'}, // hard guarantee: bot stays disabled
   {key: 'PORTAL_BASE_URL', value: get('PORTAL_BASE_URL') || `https://dijlah-stage3-portal-git-${BRANCH.slice(6, 30)}-awsiq4.vercel.app`},
   {key: 'PORTAL_ALLOWED_ORIGINS', value: get('PORTAL_ALLOWED_ORIGINS') || ''},

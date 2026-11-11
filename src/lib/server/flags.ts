@@ -3,7 +3,6 @@ export const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 export const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || "";
 export const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 export const SUBSCRIPTION_SECRET = process.env.SUBSCRIPTION_SECRET || "";
-export const ADMIN_SECRET = process.env.ADMIN_API_SECRET || "";
 export const WORKER_SECRET = process.env.WORKER_SECRET || "";
 export const DATABASE_URL = process.env.DATABASE_URL || "";
 export const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || "https://dijlah-stage3-portal.vercel.app";

@@ -17,7 +17,6 @@ type AdminResp = {
 };
 
 export default function TelegramAdmin(){
-  const [secret, setSecret] = useState("");
   const [data, setData] = useState<AdminResp | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -25,8 +24,8 @@ export default function TelegramAdmin(){
   const load = async () => {
     setBusy(true); setMsg("");
     try {
-      const res = await fetch("/api/telegram/admin", {headers: {"x-admin-secret": secret}, cache: "no-store"});
-      if (res.status === 403) { setMsg("مفتاح الإدارة غير صحيح."); setData(null); }
+      const res = await fetch("/api/telegram/admin", {cache: "no-store"});
+      if (res.status === 403) { setMsg("هذه العملية تتطلب جلسة المالك."); setData(null); }
       else setData(await res.json());
     } catch { setMsg("تعذّر الاتصال."); }
     finally { setBusy(false); }
@@ -37,7 +36,7 @@ export default function TelegramAdmin(){
     try {
       const res = await fetch("/api/telegram/admin", {
         method: "POST",
-        headers: {"content-type": "application/json", "x-admin-secret": secret},
+        headers: {"content-type": "application/json", "x-portal-admin": "1"},
         body: JSON.stringify({action: "test"}),
       });
       const j = await res.json();
@@ -51,14 +50,11 @@ export default function TelegramAdmin(){
     <div className="panel-body">
       <p className="subtle small">إدارة خدمة إشعارات البوت (Webhook + قاعدة بيانات + طابور التسليم). مفاتيح API تُقرأ من متغيرات بيئة Vercel فقط — لا تُخزن هنا.</p>
       <div className="admin-actions">
-        <label className="form-field"><span>مفتاح الإدارة (ADMIN_API_SECRET)</span>
-          <input type="password" value={secret} onChange={e => setSecret(e.target.value)} placeholder="••••••"/>
-        </label>
-        <button className="action-button secondary" onClick={load} disabled={busy || !secret}><RefreshCw size={16}/> تحميل الحالة</button>
-        <button className="action-button" onClick={testNotify} disabled={busy || !secret}><FlaskConical size={16}/> إرسال إشعار اختبار</button>
+        <button className="action-button secondary" onClick={load} disabled={busy}><RefreshCw size={16}/> تحميل الحالة</button>
+        <button className="action-button" onClick={testNotify} disabled={busy}><FlaskConical size={16}/> إرسال إشعار اختبار</button>
       </div>
       {msg && <p className="note" role="status">{msg}</p>}
-      {!data && <Empty description="أدخل مفتاح الإدارة واضغط «تحميل الحالة»."/>}
+      {!data && <Empty description="اضغط «تحميل الحالة»."/>}
       {data && <>
         <div className="stats">
           <div className="stat"><BellRing size={21}/><span>المشتركين النشطين</span><strong>{data.stats?.subs.active ?? "—"}</strong></div>

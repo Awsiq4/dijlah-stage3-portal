@@ -1,7 +1,7 @@
 import {createHmac, randomBytes, scryptSync, timingSafeEqual} from "node:crypto";
 import type {NextRequest} from "next/server";
 import {q, qOne, type Queryer, defaultQueryer} from "./db.ts";
-import {ADMIN_SECRET, PORTAL_BASE_URL, PORTAL_ALLOWED_ORIGINS, dbConfigured, timingSafeEqual as tse} from "./flags.ts";
+import {PORTAL_BASE_URL, PORTAL_ALLOWED_ORIGINS, dbConfigured} from "./flags.ts";
 
 export const SESSION_COOKIE = "portal_session";
 export const SESSION_TTL_SECONDS = 7 * 24 * 3600;
@@ -14,7 +14,7 @@ export function canModify(role: string): boolean {
   return WRITE_ROLES.has(role);
 }
 
-const getSessionSecret = () => process.env.SESSION_SECRET || ADMIN_SECRET || "";
+const getSessionSecret = () => process.env.SESSION_SECRET || "";
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
@@ -34,11 +34,11 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
-export function signSessionToken(adminId: number, now = Date.now()): string {
+export function signSessionToken(adminId: number, now = Date.now(), ownerVerified = false): string {
   const secret = getSessionSecret();
-  if (!secret) throw new Error("SESSION_SECRET (or ADMIN_API_SECRET) is not configured");
+  if (!secret) throw new Error("SESSION_SECRET is not configured");
   const exp = Math.floor(now / 1000) + SESSION_TTL_SECONDS;
-  const body = `v2.${adminId}.${exp}.${randomBytes(24).toString("base64url")}`;
+  const body = `${ownerVerified ? "v3" : "v2"}.${adminId}.${exp}.${randomBytes(24).toString("base64url")}`;
   const sig = createHmac("sha256", secret).update(body).digest("base64url");
   return `${body}.${sig}`;
 }
@@ -48,7 +48,7 @@ export function verifySessionToken(token: string, now = Date.now()): {adminId: n
   if (!secret || !token) return null;
   const parts = token.split(".");
   const legacy = parts[0] === "v1" && parts.length === 4;
-  const current = parts[0] === "v2" && parts.length === 5 && /^[A-Za-z0-9_-]{32}$/.test(parts[3]);
+  const current = (parts[0] === "v2" || parts[0] === "v3") && parts.length === 5 && /^[A-Za-z0-9_-]{32}$/.test(parts[3]);
   if (!legacy && !current) return null;
   const [, adminIdStr, expStr] = parts;
   const sig = parts.pop()!;
@@ -75,8 +75,8 @@ export type AdminRow = {
   assigned_section?: string | null; assigned_subjects?: string[] | null; perms?: Record<string, unknown> | null;
 };
 
-export async function createSession(adminId: number, db: Queryer = defaultQueryer): Promise<string> {
-  const token = signSessionToken(adminId);
+export async function createSession(adminId: number, db: Queryer = defaultQueryer, ownerVerified = false): Promise<string> {
+  const token = signSessionToken(adminId, Date.now(), ownerVerified);
   const exp = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
   await db.qOne(
     `INSERT INTO portal_sessions (admin_id, token_hash, expires_at) VALUES ($1,$2,$3)`,
@@ -103,15 +103,14 @@ export async function getAdminFromToken(token: string, db: Queryer = defaultQuer
   );
   if (!row || row.revoked || row.expired || !row.is_active) return null;
   // suspended accounts (and pending invitations) must never authenticate
-  if ((row.status ?? "active") !== "active") return null;
+  if ((row.status ?? "active") !== "active" || (row.role === "super_admin" && !token.startsWith("v3."))) return null;
   const {revoked, expired, password_hash, ...admin} = row as AdminRow & {revoked: unknown; expired: unknown; password_hash?: string};
   return admin;
 }
 
 // CSRF protection for cookie-authenticated state-changing requests:
 // cross-site requests cannot set the custom header (no CORS) and their Origin
-// will not match the portal origin. Machine-to-machine calls using
-// x-admin-secret bypass this (not browser-borne).
+// will not match the portal origin.
 export function csrfWriteOk(req: {headers: {get: (name: string) => string | null}}): boolean {
   const origin = req.headers.get("origin");
   if (origin) {
@@ -126,17 +125,8 @@ export function csrfWriteOk(req: {headers: {get: (name: string) => string | null
 
 export async function requireAdmin(req: NextRequest, opts?: {write?: boolean}): Promise<AdminRow | null> {
   const cookie = req.cookies.get(SESSION_COOKIE)?.value;
-  const headerSecret = req.headers.get("x-admin-secret");
-  const viaSecret = Boolean(ADMIN_SECRET && headerSecret && tse(headerSecret, ADMIN_SECRET));
-  if (cookie) {
-    if (opts?.write && !viaSecret && !csrfWriteOk(req)) return null;
-    try { return await getAdminFromToken(cookie); } catch { return null; }
-  }
-  if (viaSecret) {
-    const row = await qOne<AdminRow>(`SELECT id, email, role, is_active, status FROM portal_admins WHERE role='super_admin' AND is_active=true AND status='active' ORDER BY id LIMIT 1`);
-    return row || null;
-  }
-  return null;
+  if (!cookie || (opts?.write && !csrfWriteOk(req))) return null;
+  try { return await getAdminFromToken(cookie); } catch { return null; }
 }
 
 // ---- Login rate limiting ----

@@ -29,7 +29,7 @@ export function middleware(req: NextRequest) {
     if (pathname === "/api/admin/login" || pathname === "/api/admin/health" || pathname === "/api/admin/setup" || pathname === "/api/admin/reset-password" || pathname === "/api/admin/request-password-reset") return NextResponse.next();
     // The upload route authenticates browser issuance and verifies Blob callbacks itself.
     if (pathname === "/api/admin/upload") return NextResponse.next();
-    if (!hasSession && !req.headers.get("x-admin-secret")) {
+    if (!hasSession) {
       return NextResponse.json({error: "unauthorized"}, {status: 401});
     }
     return NextResponse.next();
