@@ -1,4 +1,5 @@
 "use client";
+import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import React,{useCallback,useEffect,useState} from "react";
 import {BookOpen,ClipboardList,FileQuestion,Megaphone,Paperclip,Plus,Send,Trash2,Users,Link2,Unlink} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
@@ -87,6 +88,7 @@ export function UsersTab() {
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState({email: "", name: "", role: "section_representative", assigned_section: "A", telegram_user_id: "", telegram_username: ""});
   const [busy, setBusy] = useState(false);
+  const canAssignTelegram = TELEGRAM_STAFF_ROLES.includes(form.role);
 
   const load = useCallback(() => {
     fetch("/api/admin/users", {cache: "no-store"}).then(r => r.json()).then(j => { setUsers(j.users || []); setInvitations(j.invitations || []); }).catch(() => setUsers([]));
@@ -103,8 +105,8 @@ export function UsersTab() {
       email: form.email, name: form.name, role: form.role,
       assigned_section: form.role === "section_representative" ? form.assigned_section : null,
       assigned_subjects: form.role === "teacher" ? selectedSubjects : [],
-      telegram_user_id: form.role === "teacher" ? form.telegram_user_id : "",
-      telegram_username: form.role === "teacher" ? form.telegram_username : "",
+      telegram_user_id: canAssignTelegram ? form.telegram_user_id : "",
+      telegram_username: canAssignTelegram ? form.telegram_username : "",
     })});
     const j = await res.json().catch(() => ({}));
     setBusy(false);
@@ -137,7 +139,7 @@ export function UsersTab() {
           <select value={form.assigned_section} onChange={e => setForm(f => ({...f, assigned_section: e.target.value}))}>
             {["A", "B", "C", "F"].map(s => <option key={s} value={s}>شعبة {s}</option>)}
           </select></label>}
-        {form.role === "teacher" && <>
+        {canAssignTelegram && <>
           <label className="form-field"><span>رقم Telegram ID (اختياري)</span>
             <input dir="ltr" inputMode="numeric" value={form.telegram_user_id}
               onChange={e => setForm(f => ({...f, telegram_user_id: e.target.value}))}/>
@@ -146,7 +148,7 @@ export function UsersTab() {
             <input dir="ltr" placeholder="@username" value={form.telegram_username}
               onChange={e => setForm(f => ({...f, telegram_username: e.target.value}))}/>
           </label>
-          <p className="subtle small wide">أدخل الرقم ليرتبط الحساب عند فتح التدريسي البوت بعد تفعيل الدعوة. اسم المستخدم للتعريف فقط.</p>
+          <p className="subtle small wide">أدخل الرقم ليرتبط الحساب عند فتح البوت بعد تفعيل الدعوة. اسم المستخدم للتعريف فقط.</p>
         </>}
         {form.role === "teacher" && <div className="form-field wide"><span>المواد المسندة (من قاعدة البيانات)</span>
           <div style={{display: "flex", flexWrap: "wrap", gap: 8}}>

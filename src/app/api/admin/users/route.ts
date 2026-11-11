@@ -1,3 +1,4 @@
+import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import {NextRequest, NextResponse} from "next/server";
 import {requireAdmin} from "@/lib/server/auth";
 import {canManageUsers, newToken, hashToken, ROLES, SECTIONS} from "@/lib/server/rbac";
@@ -50,10 +51,10 @@ export async function POST(req: NextRequest) {
   const telegramId = String(body?.telegram_user_id ?? "").trim();
   const telegramUsername = String(body?.telegram_username ?? "").trim().replace(/^@/, "");
   if ((telegramId || telegramUsername) && (
-    role !== "teacher" || !/^[1-9][0-9]{0,15}$/.test(telegramId) ||
+    !TELEGRAM_STAFF_ROLES.includes(role) || !/^[1-9][0-9]{0,15}$/.test(telegramId) ||
     !Number.isSafeInteger(Number(telegramId)) ||
     (telegramUsername && !/^[A-Za-z0-9_]{1,32}$/.test(telegramUsername))
-  )) return NextResponse.json({error: "أدخل رقم Telegram ID صالحًا للتدريسي. اسم المستخدم اختياري."}, {status: 400});
+  )) return NextResponse.json({error: "أدخل رقم Telegram ID صالحًا. اسم المستخدم اختياري."}, {status: 400});
 
   const token = newToken();
   const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
