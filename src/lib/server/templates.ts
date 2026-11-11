@@ -4,15 +4,23 @@ export type RenderedMessage = {text: string; parseMode: "HTML"};
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-export function renderMessage(event: TgEvent & {title: string; body?: string | null; url?: string | null}, baseUrl: string): RenderedMessage {
+export function renderMessage(event: TgEvent & {title: string; body?: string | null; url?: string | null; subjectName?: string | null}, baseUrl: string): RenderedMessage {
   const link = event.url ? `${baseUrl}${event.url}` : baseUrl;
   const section = event.section && event.section !== "all" ? `\nالشعبة: <b>${esc(event.section)}</b>` : "";
   const btn = `<a href="${esc(link)}">فتح في البوابة</a>`;
   let text = "";
   switch (event.type) {
-    case "lecture":
-      text = `📚 <b>محاضرة جديدة</b>\nالمادة: ${esc(event.title)}${section}\n\n${esc(event.body || "تمت إضافة/تحديث محاضرة جديدة.")}\n\n📎 ${btn}`;
+    case "lecture": {
+      // Keep the subject and lecture title separate: event.title is the lecture,
+      // while subjectName is the real academic subject resolved from the database.
+      const subject = event.subjectName?.trim();
+      const audience = event.scope === "general"
+        ? "\n🎯 الجمهور: جميع الشعب (A, B, C, F)"
+        : event.section && event.section !== "all" ? `\n🎯 الجمهور: شعبة ${esc(event.section)}` : "";
+      const description = event.body?.trim() ? `\n\n${esc(event.body.trim())}` : "";
+      text = `📚 <b>محاضرة جديدة</b>${subject ? `\n📘 المادة: <b>${esc(subject)}</b>` : ""}\n📄 المحاضرة: <b>${esc(event.title)}</b>${audience}${description}\n\n📎 <a href="${esc(link)}">فتح المحاضرة</a>`;
       break;
+    }
     case "exam":
       text = `📢 <b>تحديث امتحان/كويز</b>\nالمادة: ${esc(event.title)}${section}\n\n${esc(event.body || "تم تعديل تفاصيل الامتحان.")}\n\n${btn}`;
       break;
