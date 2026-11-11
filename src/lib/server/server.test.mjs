@@ -3,9 +3,25 @@ import assert from "node:assert/strict";
 import {signSubscribeToken, verifySubscribeToken} from "./tokens.ts";
 import {selectRecipients, eventKey} from "./targeting.ts";
 import {renderMessage} from "./templates.ts";
+import {materialMime, PDF_MIME, PPTX_MIME, isPptx, isPdf, validMaterialFile} from "./storage.ts";
 import {nextDelayMs, shouldRetry, isBlockedError, MAX_ATTEMPTS} from "./backoff.ts";
 
 const SECRET = "test-secret-123";
+
+test("material files: recognize genuine-looking PPTX packages without accepting arbitrary ZIPs", () => {
+  const zip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("header ... [Content_Types].xml ... ppt/presentation.xml ...")]);
+  const wrongZip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("word/document.xml")]);
+  assert.equal(materialMime("Lecture.PPTX"), PPTX_MIME);
+  assert.equal(materialMime("Lecture.pdf"), PDF_MIME);
+  assert.equal(materialMime("Lecture.pptm"), null);
+  assert.equal(isPptx(zip), true);
+  assert.equal(isPptx(wrongZip), false);
+  assert.equal(validMaterialFile(zip, "slides.pptx"), true);
+  assert.equal(validMaterialFile(wrongZip, "slides.pptx"), false);
+  assert.equal(validMaterialFile(zip, "slides.pdf"), false);
+  assert.equal(isPdf(Buffer.from("%PDF-1.7")), true);
+  assert.equal(validMaterialFile(Buffer.from("%PDF-1.7"), "slides.pdf"), true);
+});
 
 test("token: sign+verify roundtrip", () => {
   const t = signSubscribeToken("B", SECRET, 900, 1_000_000);
