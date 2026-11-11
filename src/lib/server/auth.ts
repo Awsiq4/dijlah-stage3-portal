@@ -59,7 +59,7 @@ export function verifySessionToken(token: string, now = Date.now()): {adminId: n
   const expected = createHmac("sha256", secret).update(body).digest();
   let given: Buffer;
   try { given = Buffer.from(sig, "base64url"); } catch { return null; }
-  if (given.length !== expected.length) return null;
+  if (given.length !== expected.length || given.toString("base64url") !== sig) return null;
   if (!timingSafeEqual(expected, given)) return null;
   if (Math.floor(now / 1000) > exp) return null;
   return {adminId};

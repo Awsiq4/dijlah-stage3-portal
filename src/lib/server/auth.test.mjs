@@ -26,10 +26,14 @@ test("session token: sign+verify roundtrip", () => {
 
 test("session token: tampering, expiry, garbage all rejected", () => {
   const t = signSessionToken(7, 1_000_000_000);
-  const [v, id, exp] = t.split(".");
-  assert.equal(verifySessionToken(`${v}.8.${exp}.${t.split(".")[3]}`, 1_000_000_000), null); // id tampered
-  const flipped = t.slice(0, -2) + (t.endsWith("aa") ? "bb" : "aa");
-  assert.equal(verifySessionToken(flipped, 1_000_000_000), null); // sig tampered
+  const [v, id, exp, nonce, signature] = t.split(".");
+  assert.equal(verifySessionToken(`${v}.8.${exp}.${nonce}.${signature}`, 1_000_000_000), null);
+  const flipped = (signature[0] === "A" ? "B" : "A") + signature.slice(1);
+  assert.equal(verifySessionToken(`${v}.${id}.${exp}.${nonce}.${flipped}`, 1_000_000_000), null);
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const alias = signature.slice(0, -1) + alphabet[alphabet.indexOf(signature.at(-1)) + 1];
+  assert.deepEqual(Buffer.from(alias, "base64url"), Buffer.from(signature, "base64url"));
+  assert.equal(verifySessionToken(`${v}.${id}.${exp}.${nonce}.${alias}`, 1_000_000_000), null);
   assert.equal(verifySessionToken(t, 1_000_000_000 + 8 * 24 * 3600 * 1000), null); // expired (TTL 7d)
   assert.equal(verifySessionToken("garbage", 1_000_000_000), null);
   assert.equal(verifySessionToken("v2.1.2.sig", 1_000_000_000), null);
