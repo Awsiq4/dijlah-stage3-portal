@@ -85,7 +85,7 @@ export function UsersTab() {
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [invitations, setInvitations] = useState<Row[] | null>(null);
   const [notice, setNotice] = useState("");
-  const [form, setForm] = useState({email: "", name: "", role: "section_representative", assigned_section: "A", assigned_subjects: ""});
+  const [form, setForm] = useState({email: "", name: "", role: "section_representative", assigned_section: "A", telegram_user_id: "", telegram_username: ""});
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -103,12 +103,14 @@ export function UsersTab() {
       email: form.email, name: form.name, role: form.role,
       assigned_section: form.role === "section_representative" ? form.assigned_section : null,
       assigned_subjects: form.role === "teacher" ? selectedSubjects : [],
+      telegram_user_id: form.role === "teacher" ? form.telegram_user_id : "",
+      telegram_username: form.role === "teacher" ? form.telegram_username : "",
     })});
     const j = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setNotice(j.error || "فشل إنشاء الدعوة"); return; }
     setNotice(`✅ تم إنشاء الدعوة. رابط التفعيل (مرة واحدة): ${j.setupUrl}`);
-    setForm({email: "", name: "", role: "section_representative", assigned_section: "A", assigned_subjects: ""});
+    setForm({email: "", name: "", role: "section_representative", assigned_section: "A", telegram_user_id: "", telegram_username: ""});
     load();
   };
 
@@ -135,6 +137,17 @@ export function UsersTab() {
           <select value={form.assigned_section} onChange={e => setForm(f => ({...f, assigned_section: e.target.value}))}>
             {["A", "B", "C", "F"].map(s => <option key={s} value={s}>شعبة {s}</option>)}
           </select></label>}
+        {form.role === "teacher" && <>
+          <label className="form-field"><span>رقم Telegram ID (اختياري)</span>
+            <input dir="ltr" inputMode="numeric" value={form.telegram_user_id}
+              onChange={e => setForm(f => ({...f, telegram_user_id: e.target.value}))}/>
+          </label>
+          <label className="form-field"><span>اسم مستخدم Telegram (اختياري)</span>
+            <input dir="ltr" placeholder="@username" value={form.telegram_username}
+              onChange={e => setForm(f => ({...f, telegram_username: e.target.value}))}/>
+          </label>
+          <p className="subtle small wide">أدخل الرقم ليرتبط الحساب عند فتح التدريسي البوت بعد تفعيل الدعوة. اسم المستخدم للتعريف فقط.</p>
+        </>}
         {form.role === "teacher" && <div className="form-field wide"><span>المواد المسندة (من قاعدة البيانات)</span>
           <div style={{display: "flex", flexWrap: "wrap", gap: 8}}>
             {subjects.map(sub => <label key={String(sub.id)} style={{display: "flex", gap: 6, alignItems: "center", border: "1px solid var(--border)", borderRadius: 10, padding: "6px 10px"}}>
@@ -148,7 +161,7 @@ export function UsersTab() {
 
     <div className="panel"><div className="panel-heading"><h2><Users size={18}/> الحسابات</h2></div><div className="panel-body">
       {users === null ? <Empty description="جارٍ التحميل…"/> : users.length ? <div className="stack">{users.map(u => <div className="list-row" key={String(u.id)}>
-        <div className="grow"><strong>{String(u.name || u.email)}</strong><p className="subtle small">{String(u.email)} · {String(u.role)} · {String(u.assigned_section || "")} {u.telegram_user_id ? "· 🔗 Telegram" : ""}</p></div>
+        <div className="grow"><strong>{String(u.name || u.email)}</strong><p className="subtle small">{String(u.email)} · {String(u.role)} · {String(u.assigned_section || "")} {u.telegram_user_id ? "· Telegram مربوط" : u.telegram_expected_id ? "· بانتظار فتح البوت" : ""}</p></div>
         <Status tone={u.status === "suspended" ? "danger" : "success"}>{String(u.status || "active")}</Status>
         {u.status !== "suspended"
           ? <button className="action-button secondary" onClick={() => setStatus(Number(u.id), "suspended")}>تعليق</button>
@@ -158,7 +171,7 @@ export function UsersTab() {
 
     <div className="panel"><div className="panel-heading"><h2>الدعوات</h2></div><div className="panel-body">
       {invitations === null ? <Empty description="…"/> : invitations.length ? <div className="stack">{invitations.map(v => <div className="list-row" key={String(v.id)}>
-        <div className="grow"><strong>{String(v.email)}</strong><p className="subtle small">{String(v.role)} · {String(v.assigned_section || "")} · تنتهي ${new Date(String(v.expires_at)).toLocaleString("ar-IQ")}</p></div>
+        <div className="grow"><strong>{String(v.email)}</strong><p className="subtle small">{String(v.role)} · {String(v.assigned_section || "")} · تنتهي {new Date(String(v.expires_at)).toLocaleString("ar-IQ")}{Boolean(v.telegram_expected_id) && <> · Telegram ID <bdi>{String(v.telegram_expected_id)}</bdi>{v.telegram_expected_username ? <> · <bdi>@{String(v.telegram_expected_username)}</bdi></> : null}</>}</p></div>
         <Status tone={v.used_at ? "muted" : "success"}>{v.used_at ? "مستخدمة" : "فعالة"}</Status>
       </div>)}</div> : <Empty description="لا توجد دعوات."/>}
     </div></div>

@@ -42,6 +42,8 @@ export async function DELETE(req: NextRequest) {
     await db.qOne(`SELECT id FROM portal_admins WHERE id=$1 FOR UPDATE`, [admin.id]);
     await db.q(`UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL`, [admin.id]);
     await db.q(`UPDATE portal_link_tokens SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [admin.id]);
+    await db.q(`UPDATE portal_password_resets SET used_at=now() WHERE admin_id=$1 AND used_at IS NULL`, [admin.id]);
+    await db.q(`UPDATE portal_admins SET telegram_expected_id=NULL, telegram_expected_username=NULL WHERE id=$1`, [admin.id]);
     await audit(admin.email || `admin#${admin.id}`, "telegram.link.revoked_self", {}, db);
   });
   return NextResponse.json({ok: true});

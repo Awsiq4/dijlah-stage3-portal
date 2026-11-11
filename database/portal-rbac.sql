@@ -81,3 +81,10 @@ ALTER TABLE portal_announcements ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPT
 ALTER TABLE portal_lectures ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 ALTER TABLE portal_exams ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 ALTER TABLE portal_assignments ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
+-- Owner-provided Telegram identity is pending until the teacher starts the bot.
+ALTER TABLE portal_invitations ADD COLUMN IF NOT EXISTS telegram_expected_id BIGINT;
+ALTER TABLE portal_invitations ADD COLUMN IF NOT EXISTS telegram_expected_username TEXT;
+ALTER TABLE portal_admins ADD COLUMN IF NOT EXISTS telegram_expected_id BIGINT;
+ALTER TABLE portal_admins ADD COLUMN IF NOT EXISTS telegram_expected_username TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portal_admins_telegram_expected_id ON portal_admins (telegram_expected_id);
