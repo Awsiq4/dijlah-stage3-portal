@@ -88,3 +88,7 @@ ALTER TABLE portal_invitations ADD COLUMN IF NOT EXISTS telegram_expected_userna
 ALTER TABLE portal_admins ADD COLUMN IF NOT EXISTS telegram_expected_id BIGINT;
 ALTER TABLE portal_admins ADD COLUMN IF NOT EXISTS telegram_expected_username TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_portal_admins_telegram_expected_id ON portal_admins (telegram_expected_id);
+
+-- Serialize duplicate checks and writes for each publication type.
+CREATE TABLE IF NOT EXISTS portal_publication_locks (kind TEXT PRIMARY KEY);
+ALTER TABLE portal_lectures ADD COLUMN IF NOT EXISTS file_sha256 TEXT;

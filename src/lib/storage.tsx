@@ -26,7 +26,9 @@ export function PortalProvider({children}:{children:React.ReactNode}){
     try {
       const stored=localStorage.getItem(STORE_KEY);
       if(stored){const parsed=JSON.parse(stored) as Partial<PortalData>; updateData({...SEED,...parsed,lectures:mergeById(SEED.lectures,parsed.lectures),schedule:(parsed.schedule&&localStorage.getItem(SCHED_HASH_KEY)===hashStr(JSON.stringify(SEED.schedule)))?mergeById(SEED.schedule,parsed.schedule):SEED.schedule,exams:mergeById(SEED.exams,parsed.exams),announcements:mergeById(SEED.announcements,parsed.announcements),assignments:mergeById(SEED.assignments,parsed.assignments),telegram:{...SEED.telegram,...parsed.telegram,sections:{...SEED.telegram.sections,...parsed.telegram?.sections}}});}
-      const sel=localStorage.getItem(SECTION_KEY);
+      const linkedPublication = window.location.pathname === "/announcements" || window.location.pathname.startsWith("/lectures/");
+      const linkSection = linkedPublication ? new URLSearchParams(window.location.search).get("section") : null;
+      const sel = SECTIONS.includes(linkSection as Section) ? linkSection : localStorage.getItem(SECTION_KEY);
       if(SECTIONS.includes(sel as Section))updateSection(sel as Section);
       const pref=localStorage.getItem(THEME_KEY);
       const mq=window.matchMedia("(prefers-color-scheme: dark)");

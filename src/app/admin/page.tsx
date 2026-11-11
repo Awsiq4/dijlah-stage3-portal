@@ -5,6 +5,7 @@ import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogO
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./workspace";
 
+import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string};
@@ -154,6 +155,8 @@ export default function AdminDashboard(){
   };
   const cancelEdit = () => { setEditing(null); setForm({}); };
 
+  const {request, review} = usePublicationRequest();
+
   const submit = async (e: React.FormEvent, type: Exclude<WritableTab, "lectures">) => {
     e.preventDefault();
     setBusy(true); setNotice("");
@@ -167,10 +170,9 @@ export default function AdminDashboard(){
         else if (f.k === "published_at") row[f.k] = v || new Date().toISOString();
         else if (v || !f.select) row[f.k] = v;
       }
-      const res = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) { setNotice(j.error || "فشل الحفظ"); return; }
-      setNotice("تم الحفظ بنجاح");
+      const {response, data: j} = await request(type, row);
+      if (!response.ok) { setNotice(j.error || "فشل الحفظ"); return; }
+      setNotice(j.action === "updated" ? "تم تحديث المنشور الموجود." : "تم الحفظ بنجاح");
       cancelEdit();
       loadTab(tab);
     } catch { setNotice("بيانات غير صالحة — راجع قيم JSON"); }
@@ -193,6 +195,7 @@ export default function AdminDashboard(){
     : TABS;
 
   return <>
+    {review}
     <PageHeading title="لوحة الإدارة" description={`${me.email} · ${me.role}`} action={<button className="action-button secondary" onClick={logout}><LogOut size={16}/> خروج</button>}/>
     {me.role === "super_admin" && <div className="note" style={{marginBottom:16}}>🎫 إدارة طلبات الدعم والردود صارت داخل <strong>👑 لوحة المالك في بوت Telegram</strong> حصراً.</div>}
     <div className="tabs admin-tabs">

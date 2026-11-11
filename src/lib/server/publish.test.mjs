@@ -6,6 +6,9 @@ import {fileURLToPath} from "node:url";
 
 process.env.DATABASE_URL = "postgres://pgmem:5432/test";
 process.env.SESSION_SECRET = "pgmem-test-secret";
+process.env.TELEGRAM_BOT_ENABLED = "true";
+process.env.TELEGRAM_BOT_TOKEN = "test-token";
+process.env.TELEGRAM_BOT_USERNAME = "test_bot";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const {newDb} = await import("pg-mem");
@@ -31,7 +34,8 @@ async function makeDb() {
     "CHECK (role IN ('super_admin','editor','viewer','general_representative','section_representative','teacher'))");
   const rbac = readFileSync(path.join(root, "database/portal-rbac.sql"), "utf8")
     .split(/;\s*(?:\n|$)/).map(st => st.replace(/\s*CHECK \(sections <@[^)]*\)/, "")).filter(st => !st.includes("portal_admins_role_check"));
-  for (const sql of [base, rbac.join(";")]) {
+  const notifications = readFileSync(path.join(root, "database/telegram-notifications.sql"), "utf8");
+  for (const sql of [base, rbac.join(";"), notifications]) {
     for (const stmt of sql.split(/;\s*(?:\n|$)/)) {
       const t = stmt.replace(/--[^\n]*/g, "").trim();
       if (t) await pool.query(t);
@@ -222,4 +226,78 @@ test("manage: lecture meta edit + file replace keep the same id (stable link); o
   const hack = await replaceLectureFileOwn(repB, id, "/evil.pdf", "e.pdf");
   assert.equal(hack.ok, false);
   await pool.end();
+});
+
+test("web and bot use the same PDF fingerprint and keep one item when expanding its audience", async () => {
+  const pool = await makeDb();
+  try {
+    const {withTx} = await import("./db.ts");
+    const {applyContentUpsert} = await import("./publish.ts");
+    await q(`INSERT INTO tg_subscribers (chat_id,section,prefs) VALUES
+      (101,'A','{}'),(102,'B','{}'),(103,'C','{"lectures":false}'),(104,'F','{}')`);
+    const hash = "a".repeat(64);
+    const row = {id: "web-original", subject_id: "nonlinear-optics", number: 1, title: "بصريات", file_url: "/lectures/first.pdf", sections: ["A"], status: "published"};
+    await withTx(tx => applyContentUpsert(tx, repA, "lectures", row, "web", {}, hash));
+    const input = {id: "bot-copy", subjectId: "nonlinear-optics", number: 2, title: "عنوان مختلف", fileUrl: "/lectures/renamed.pdf", sections: ["A"], source: "telegram", fingerprint: hash};
+    const duplicate = await publishLecture(teacher, input);
+    assert.equal(duplicate.issue.kind, "duplicate");
+    assert.equal(duplicate.issue.id, row.id);
+    const otherAudience = {...input, sections: ["A", "B", "C", "F"]};
+    assert.equal((await publishLecture(teacher, otherAudience)).ok, false);
+    const proposal = await publishLecture(repA, otherAudience);
+    assert.equal(proposal.issue.kind, "expand");
+    assert.deepEqual(proposal.issue.addedSections, ["B", "C", "F"]);
+    const applied = await publishLecture(repA, {...otherAudience, options: {expand: row.id}});
+    assert.equal(applied.action, "expanded");
+    assert.equal(applied.id, row.id);
+    const [stored] = await q("SELECT id, title, sections, created_by FROM portal_lectures");
+    assert.deepEqual(asArr(stored.sections), ["A", "B", "C", "F"]);
+    assert.equal(stored.created_by, repA.id);
+    assert.equal(stored.title, row.title);
+    assert.equal((await q("SELECT id FROM portal_lectures")).length, 1);
+    assert.equal((await publishLecture(repA, {...otherAudience, options: {expand: row.id}})).issue.kind, "duplicate");
+    const delivered = await q(`SELECT s.section, count(*)::int AS count FROM tg_deliveries d
+      JOIN tg_subscribers s ON s.id=d.subscriber_id GROUP BY s.section ORDER BY s.section`);
+    assert.deepEqual(delivered, [{section: "A", count: 1}, {section: "B", count: 1}, {section: "F", count: 1}]);
+  } finally {
+    await pool.end();
+  }
+});
+
+test("identical announcements are blocked, and changed announcements require review", async () => {
+  const pool = await makeDb();
+  try {
+    const original = {id: "ann-original", title: "موعد الامتحان", body: "الأحد الساعة التاسعة", scope: "section", section: "A", source: "telegram"};
+    assert.equal((await publishAnnouncement(repA, original)).ok, true);
+    const duplicate = await publishAnnouncement(repA, {...original, id: "ann-copy", body: "الأحد   الساعة التاسعة"});
+    assert.equal(duplicate.issue.kind, "duplicate");
+    const changed = {...original, id: "ann-change", body: "الأحد الساعة العاشرة"};
+    const proposal = await publishAnnouncement(repA, changed);
+    assert.equal(proposal.issue.kind, "similar");
+    assert.equal(proposal.issue.canUpdate, true);
+    const update = await publishAnnouncement(repA, {...changed, options: {replace: original.id}});
+    assert.equal(update.action, "updated");
+    assert.equal(update.id, original.id);
+    assert.equal((await qOne("SELECT body FROM portal_announcements WHERE id=$1", [original.id])).body, changed.body);
+    assert.equal((await publishAnnouncement(repB, {...original, id: "ann-b", section: "B"})).ok, true);
+    assert.equal((await q("SELECT id FROM portal_announcements")).length, 2);
+  } finally {
+    await pool.end();
+  }
+});
+
+test("PDF fingerprint comes from server-read bytes rather than filename", async () => {
+  const {pdfFingerprint} = await import("./publication-dedup.ts");
+  const originalFetch = globalThis.fetch;
+  const origin = "https://test.public.blob.vercel-storage.com/lectures/";
+  try {
+    globalThis.fetch = async url => new Response(url.pathname.endsWith("updated.pdf") ? "%PDF-1.7 updated" : "%PDF-1.7 original");
+    const first = await pdfFingerprint(origin + "first.pdf");
+    assert.match(first, /^[0-9a-f]{64}$/);
+    assert.equal(await pdfFingerprint(origin + "renamed.pdf"), first);
+    assert.notEqual(await pdfFingerprint(origin + "updated.pdf"), first);
+    assert.equal(await pdfFingerprint("https://example.test/file.pdf"), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -3,6 +3,7 @@ import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import React,{useCallback,useEffect,useState} from "react";
 import {BookOpen,ClipboardList,FileQuestion,Megaphone,Paperclip,Plus,Send,Trash2,Users,Link2,Unlink} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
+import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
@@ -11,6 +12,7 @@ const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"
 
 // ---------- role-specific workspace (representatives & teachers) ----------
 export function RoleWorkspace({me}: {me: Me}) {
+  const {request, review} = usePublicationRequest();
   const isRep = me.role === "section_representative" || me.role === "general_representative";
   const [type, setType] = useState<"announcements" | "lectures">("lectures");
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -40,9 +42,9 @@ export function RoleWorkspace({me}: {me: Me}) {
       priority: "normal", published_at: new Date().toISOString(), pinned: "false",
     };
     try {
-      const response = await fetch("/api/admin/content", {method: "POST", headers: WRITE_HEADERS, body: JSON.stringify({type, row})});
-      if (!response.ok) throw Error();
-      setTitle(""); setBody(""); setNotice("تم نشر التبليغ."); load();
+      const {response, data} = await request(type, row);
+      if (!response.ok) { setNotice(data.error || "تعذّر نشر التبليغ."); return; }
+      setTitle(""); setBody(""); setNotice(data.action === "updated" ? "تم تحديث التبليغ." : "تم نشر التبليغ."); load();
     } catch { setNotice("تعذّر نشر التبليغ. حاول مرة ثانية."); }
     finally { setBusy(false); }
   }
@@ -55,6 +57,7 @@ export function RoleWorkspace({me}: {me: Me}) {
   }
 
   return <>
+    {review}
     <PageHeading title={type === "lectures" ? "نشر ملف PDF" : "نشر تبليغ"} description={me.name || me.email}/>
     {isRep && <div className="tabs admin-tabs">
       <button className={type === "lectures" ? "selected" : ""} onClick={() => {setType("lectures"); setRows(null); setNotice("");}}>محاضرة أو ملخص</button>

@@ -1,4 +1,4 @@
-import {q, qOne} from "./db.ts";
+import {q, qOne, defaultQueryer, type Queryer} from "./db.ts";
 import {selectRecipients, eventKey, type TgEvent, type TgSubscriber} from "./targeting.ts";
 import {renderMessage} from "./templates.ts";
 import {sendMessage} from "./telegram.ts";
@@ -13,24 +13,24 @@ export type CreateEventInput = TgEvent & {
   url?: string;
 };
 
-export async function createEvent(input: CreateEventInput): Promise<{created: boolean; eventId?: number; recipients: number}> {
+export async function createEvent(input: CreateEventInput, db: Queryer = defaultQueryer): Promise<{created: boolean; eventId?: number; recipients: number}> {
   const key = eventKey(input.type, input.refId, input.version);
-  const row = await qOne<{id: number}>(
+  const row = await db.qOne<{id: number}>(
     `INSERT INTO tg_events (event_key, type, title, body, url, scope, section, subject_id, priority)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (event_key) DO NOTHING RETURNING id`,
     [key, input.type, input.title, input.body || null, input.url || null, input.scope, input.section ?? null, input.subject_id ?? null, input.priority || "normal"]
   );
   if (!row) return {created: false, recipients: 0};
-  const subs = await q<TgSubscriber>(`SELECT id, chat_id, section, status, prefs FROM tg_subscribers WHERE status='active'`);
+  const subs = await db.q<TgSubscriber>(`SELECT id, chat_id, section, status, prefs FROM tg_subscribers WHERE status='active'`);
   const recipients = selectRecipients(input, subs);
   for (const s of recipients) {
-    await q(
+    await db.q(
       `INSERT INTO tg_deliveries (event_id, subscriber_id) VALUES ($1,$2) ON CONFLICT (event_id, subscriber_id) DO NOTHING`,
       [row.id, s.id]
     );
   }
-  await q(`INSERT INTO tg_audit (action, detail) VALUES ($1,$2)`, ["event.created", {event_key: key, recipients: recipients.length}]);
+  await db.q(`INSERT INTO tg_audit (action, detail) VALUES ($1,$2)`, ["event.created", {event_key: key, recipients: recipients.length}]);
   return {created: true, eventId: row.id, recipients: recipients.length};
 }
 

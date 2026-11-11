@@ -3,7 +3,9 @@ import {requireAdmin} from "@/lib/server/auth";
 import {listContent, deleteContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
 import {withTx} from "@/lib/server/db";
 import {dbConfigured} from "@/lib/server/flags";
-import {canModifyContent, canManageAllContent, canUseTelegramPublishing} from "@/lib/server/rbac";
+import {canModifyContent, canManageAllContent, canUseTelegramPublishing, canWriteContentRecord} from "@/lib/server/rbac";
+import {indexLegacyPdfFiles, pdfFingerprint, lockPublication, PublicationConflict} from "@/lib/server/publication-dedup";
+import {sanitizeRow} from "@/lib/server/content-schema";
 import {applyContentUpsert} from "@/lib/server/publish";
 
 export const dynamic = "force-dynamic";
@@ -36,22 +38,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({error: "row.id required"}, {status: 400});
   }
   try {
-    await withTx(async db => {
+    const lecture = body.type === "lectures" ? sanitizeRow("lectures", body.row) : null;
+    const [hash] = lecture && canWriteContentRecord(admin, "lectures", lecture)
+      ? await Promise.all([pdfFingerprint(String(lecture.file_url || "")), indexLegacyPdfFiles(String(lecture.subject_id || ""))])
+      : [null];
+    const options = Object.fromEntries(["expand", "reviewed", "replace"].flatMap(key => {
+      const value = body.publication?.[key];
+      return typeof value === "string" && value.length <= 128 ? [[key, value]] : [];
+    }));
+    const result = await withTx(async db => {
       if (body.type === "telegram") {
         if (!canManageAllContent(admin.role)) throw new ForbiddenError("forbidden");
         await upsertTelegram(String(body.kind || ""), String(body.key || ""), String(body.url || ""), db);
         await audit(admin.email || `admin#${admin.id}`, "content.upsert.telegram", {key: body.key}, db);
       } else {
         // ownership + source are set server-side from the session identity only
-        await applyContentUpsert(db, admin, body.type, body.row, "web");
+        return applyContentUpsert(db, admin, body.type, body.row, "web", options, hash);
       }
     });
-    return NextResponse.json({ok: true});
+    return NextResponse.json(result || {ok: true});
   } catch (err) {
+    if (err instanceof PublicationConflict) return NextResponse.json({error: err.message, issue: err.issue}, {status: 409});
     const e = err as Error & {status?: number};
     if (err instanceof ForbiddenError || e.status === 403) return NextResponse.json({error: e.message}, {status: 403});
     const msg = e.message || "error";
-    const status = /مطلوب|غير صالح|JSON|قيمة غير مسموحة/.test(msg) ? 400 : 500;
+    const status = /مطلوب|غير صالح|JSON|قيمة غير مسموحة|تعذّر التحقق/.test(msg) ? 400 : 500;
     return NextResponse.json({error: status === 400 ? msg : "Server error"}, {status});
   }
 }
@@ -66,6 +77,7 @@ export async function DELETE(req: NextRequest) {
   if (!type || !TYPES.includes(type) || type === "telegram" || !id) return NextResponse.json({error: "invalid request"}, {status: 400});
   try {
     await withTx(async db => {
+      if (type === "lectures" || type === "announcements") await lockPublication(db, type);
       const table = (SCHEMAS as Record<string, {table: string}>)[type]?.table;
       if (!table) throw new ForbiddenError("forbidden");
       if (!canManageAllContent(admin.role)) {
