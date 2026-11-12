@@ -85,7 +85,7 @@ export async function publishPastQuestion(admin: AdminInfo, input: {
 }): Promise<{ok: true; id: string; inserted: boolean; url: string} | {ok: false; error: string}> {
   if (!isActive(admin) || !canPublishMaterial(admin, input.subjectId, input.sections))
     return {ok: false, error: "لا تملك صلاحية النشر لهذه المادة أو الشعب"};
-  if (!validExamKind(input.examKind) || !input.title.trim() || !/^[-a-zA-Z0-9]{10,100}$/.test(input.fingerprint)
+  if (!validExamKind(input.examKind) || !input.title.trim() || !(/^[a-f0-9]{64}$/.test(input.fingerprint))
       || !input.sections.length || !input.sections.every(s => ALL.includes(s as (typeof ALL)[number]))
       || !/^https:\/\//.test(input.fileUrl) || !safeFileUrl(input.fileUrl))
     return {ok: false, error: "بيانات أسئلة الامتحان غير صالحة"};
@@ -136,6 +136,12 @@ export async function listOwnQuestions(admin: AdminInfo, page = 0) {
      FROM portal_past_questions ${privileged ? "" : "WHERE created_by=$1"} ORDER BY created_at DESC LIMIT 12 OFFSET $${privileged ? 1 : 2}`,
     privileged ? [Math.max(page, 0) * 12] : [admin.id, Math.max(page, 0) * 12]
   );
+}
+
+export async function getOwnPastQuestion(admin: AdminInfo, id: string): Promise<PastQuestion | null> {
+  if (!isActive(admin) || !await questionBankReady()) return null;
+  const row = await qOne<PastQuestion>("SELECT * FROM portal_past_questions WHERE id=$1", [id]);
+  return row && canModifyContent(admin, row) ? row : null;
 }
 
 export async function modifyPastQuestion(admin: AdminInfo, id: string, action: "archive" | "restore" | "delete") {
