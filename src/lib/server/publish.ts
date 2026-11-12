@@ -13,6 +13,7 @@ export type PublishFail = {ok: false; error: string; issue?: PublicationIssue};
 export type PublishResult = PublishOk | PublishFail;
 
 import {validExamSchedule} from "./exam-validation.ts";
+import {canPublishScheduledExam} from "./publisher-audience.ts";
 
 const fail = (error: string): PublishFail => ({ok: false, error});
 
@@ -229,6 +230,9 @@ export async function publishExam(admin: AdminInfo, input: Record<string, unknow
     sections, topics: String(input.topics || "").trim(), notes: String(input.notes || "").trim(),
     status: String(input.status || "provisional"),
   };
+  if (!canPublishScheduledExam(admin, String(draft.type)) ||
+      (!["super_admin","editor"].includes(admin.role) && draft.type !== "كوز يومي"))
+    return fail("مواعيد Midterm وFinal وجداول الجامعة يضيفها المالك فقط؛ بقية الناشرين يضيفون الكوزات");
   const error = validExamSchedule(draft);
   if (error) return fail(error);
   let row: Record<string,unknown>;

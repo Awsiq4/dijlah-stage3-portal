@@ -143,12 +143,12 @@ test("M1: materials audience matrix (section rep: own or ALL only; general rep: 
 test("M2: write gate — reps publish scoped lectures, assignments and exams, not schedule", () => {
   assert.equal(canWriteContentRecord(repA, "lectures", {subject_id: "x", sections: ["A", "B", "C", "F"]}), true);
   assert.equal(canWriteContentRecord(repA, "lectures", {subject_id: "x", sections: ["B"]}), false);
-  assert.equal(canWriteContentRecord(repA, "exams", {subject_id: "x", sections: ["A"]}), true);
+  assert.equal(canWriteContentRecord(repA, "exams", {subject_id: "x", sections: ["A"], type:"كوز يومي"}), true);
   assert.equal(canWriteContentRecord(repA, "assignments", {subject_id: "x", sections: ["A"]}), true);
 });
 
 test("assignment and exam authorization share material audience scope",()=>{
- const a={subject_id:"nonlinear-optics",sections:["A"]};
+ const a={subject_id:"nonlinear-optics",sections:["A"],type:"كوز يومي"};
  assert.equal(canWriteContentRecord(repA,"assignments",a),true);
  assert.equal(canWriteContentRecord(repA,"assignments",{...a,sections:["B"]}),false);
  assert.equal(canWriteContentRecord(repA,"assignments",{...a,sections:["A","B","C","F"]}),true);
@@ -162,4 +162,17 @@ test("assignment and exam authorization share material audience scope",()=>{
  assert.equal(canWriteContentRecord(teacher,"exams",a),true);
  assert.equal(canWriteContentRecord(suspendedRep,"exams",a),false);
  assert.equal(canWriteContentRecord(suspendedRep,"assignments",a),false);
+});
+
+test("Midterm and Final are owner-managed; only quizzes by teachers and representatives",()=>{
+ const x={subject_id:"nonlinear-optics",sections:["A"]};
+ for(const type of ["Midterm","Final","ميدتيرم","فاينل","نصف السنة","امتحان شهري",""]) {
+  assert.equal(canWriteContentRecord(repA,"exams",{...x,type}),false);
+  assert.equal(canWriteContentRecord(teacher,"exams",{...x,type}),false);
+ }
+ assert.equal(canWriteContentRecord(repA,"exams",{...x,type:"كوز يومي"}),true);
+ assert.equal(canWriteContentRecord(teacher,"exams",{...x,type:"كوز يومي"}),true);
+ for(const type of ["Midterm","Final","كوز يومي"]) {
+  assert.equal(canWriteContentRecord(superAdmin,"exams",{...x,type}),true);
+ }
 });

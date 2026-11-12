@@ -7,7 +7,7 @@ import type {PublishingAccount} from "./material-form";
 
 type Row = Record<string,unknown>;
 const ALL=["A","B","C","F"];
-const TYPES=["كوز يومي","Midterm","Final","امتحان شهري","نصف السنة","امتحان شفوي"];
+const TYPES=["كوز يومي","Midterm","Final"];
 const isValidDay=(value:string)=>{
  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
  const [y,m,d]=value.split("-").map(Number),dt=new Date(Date.UTC(y,m-1,d));
@@ -19,11 +19,12 @@ export function ExamForm({account,initial,onSaved}:{
 }) {
  const {request,review}=usePublicationRequest();
  const teacher=account.role==="teacher",rep=account.role==="section_representative";
+ const owner=account.role==="super_admin"||account.role==="editor";
  const [subjects,setSubjects]=useState<{id:string;name:string}[]>([]);
  const [subject,setSubject]=useState(String(initial?.subject_id||(teacher&&account.assigned_subjects?.length===1?account.assigned_subjects[0]:"")));
  const [sections,setSections]=useState<string[]>(Array.isArray(initial?.sections)?initial.sections.map(String):rep&&account.assigned_section?[account.assigned_section]:[...ALL]);
  const [title,setTitle]=useState(String(initial?.title||""));
- const [kind,setKind]=useState(String(initial?.type||"كوز يومي"));
+ const [kind,setKind]=useState(owner?String(initial?.type||"كوز يومي"):"كوز يومي");
  const [date,setDate]=useState(String(initial?.date||""));
  const [time,setTime]=useState(String(initial?.start_time||""));
  const [room,setRoom]=useState(String(initial?.room||""));
@@ -91,8 +92,10 @@ export function ExamForm({account,initial,onSaved}:{
    </select>
   </label>
   <label className="form-field"><span>نوع الامتحان *</span>
-   <input required maxLength={80} list="exam-kind-options" value={kind} onChange={e=>setKind(e.target.value)}/>
-   <datalist id="exam-kind-options">{TYPES.map(t=><option key={t} value={t}/>)}</datalist>
+    <select required value={kind} disabled={!owner} onChange={e=>setKind(e.target.value)}>
+      {TYPES.filter(t=>owner||t==="كوز يومي").map(t=><option key={t} value={t}>{t}</option>)}
+    </select>
+    {!owner&&<small>الميدتيرم والفاينل ضمن جدول الجامعة، ويضيفهما المالك فقط.</small>}
   </label>
   <label className="form-field wide"><span>عنوان الامتحان أو الكوز *</span>
    <input required maxLength={180} value={title} onChange={e=>setTitle(e.target.value)} placeholder="مثال: امتحان يومي في الفصل الثالث"/>

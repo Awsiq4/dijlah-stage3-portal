@@ -233,14 +233,31 @@ export async function POST(req: NextRequest) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
       } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("qmanage:") || data.startsWith("page:my:")) {
         await handleManageCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || data === "adm:new" || data === "pdf:new") {
+      } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || (data === "adm:new" || data === "adm:materials") || data === "pdf:new") {
         await handleNavCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:") || data.startsWith("q:kind:") || data.startsWith("asg:") || data.startsWith("exam:")) {
+      } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:") || data.startsWith("q:kind:") || data.startsWith("asg:") || data.startsWith("exam:") || data.startsWith("quiz:")) {
         await handleAdminCallback(Number(callback.message.chat.id), userId, data, eventIds => {
           after(() => drainQueue(200, eventIds).then(() => undefined));
         });
       } else {
         await handleCallback(Number(callback.message.chat.id), data, callback.from);
+      }
+      // Keep publisher chats visually tidy: once a menu choice opens the next
+      // screen, remove its now-obsolete inline buttons. Do not touch student,
+      // owner, support, or final-publish confirmation buttons (retries stay safe).
+      const publishingNavigation = data === "adm:new" || data === "adm:materials" ||
+        data === "adm:cancel" || data === "adm:quick" || data === "adm:ann" ||
+        data === "adm:lec" || data === "adm:summary" || data === "adm:questions" ||
+        data === "adm:asg" || data === "adm:exam" || data === "adm:results" ||
+        data.startsWith("quiz:") || data.startsWith("asg:") ||
+        data.startsWith("exam:") || data.startsWith("lec:subj:") ||
+        data.startsWith("lec:aud:") || data.startsWith("ann:subj:") ||
+        data.startsWith("q:kind:") || data.startsWith("draft:");
+      if (publishingNavigation && callback.message.message_id) {
+        const chatId = Number(callback.message.chat.id);
+        const messageId = Number(callback.message.message_id);
+        after(() => tgFetch("editMessageReplyMarkup", {chat_id: chatId, message_id: messageId})
+          .then(() => undefined).catch(() => undefined));
       }
     }
     await recordBotActivity(update);

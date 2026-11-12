@@ -3,7 +3,8 @@
 import {randomBytes} from "node:crypto";
 import {q, qOne} from "./db.ts";
 import {sendMessage, tgFetch} from "./telegram.ts";
-import {canPublishMaterial, canUseTelegramPublishing, teacherSections, type AdminInfo} from "./rbac.ts";
+import {canUseTelegramPublishing, type AdminInfo} from "./rbac.ts";
+import {defaultAudience,validAudience} from "./publisher-audience.ts";
 import {publishAssignment} from "./publish.ts";
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {materialMime, validMaterialFile, storageConfigured, MAX_PDF_BYTES, uploadLectureFile} from "./storage.ts";
@@ -40,17 +41,18 @@ async function subjectOptions(chatId: number, admin: AdminInfo) {
 }
 
 async function audienceOptions(chatId: number, admin: AdminInfo, subjectId: string) {
-  const teacherAllowed = teacherSections(admin,subjectId) || [...ALL];
+  const teacherAllowed = [...ALL];
   const choices: {text:string;callback_data:string;sections:string[]}[] = [
     {text:"🌐 جميع الشعب",callback_data:"asg:aud:all",sections:[...ALL]},
     ...ALL.map(section=>({text:"شعبة "+section,callback_data:"asg:aud:sec:"+section,sections:[section]})),
   ];
   const visible = choices.filter(choice=>
-    (admin.role !== "teacher" || choice.sections.every(s=>teacherAllowed.includes(s as never))) &&
-    canPublishMaterial(admin,subjectId,choice.sections)
+    choice.sections.every(s=>teacherAllowed.includes(s as never)) &&
+    validAudience(admin,subjectId,choice.sections)
   );
-  await sendMessage(chatId, "🎯 اختر الشعب المعنية بالتكليف:", {
-    replyMarkup:{inline_keyboard:[...visible.map(x=>[{text:x.text,callback_data:x.callback_data}]),...nav.inline_keyboard]}
+  await sendMessage(chatId, "🎯 اختيار الجمهور — تگدر ترجع للمعاينة:", {
+    replyMarkup:{inline_keyboard:[...visible.map(x=>[{text:x.text,callback_data:x.callback_data}]),
+    [{text:"🔙 المعاينة",callback_data:"asg:preview"}],...nav.inline_keyboard]}
   });
 }
 
@@ -58,15 +60,23 @@ async function prompt(chatId: number, d: Draft, admin: AdminInfo) {
   switch(d.step) {
     case "subject": await subjectOptions(chatId,admin); return;
     case "audience": await audienceOptions(chatId,admin,String(d.subjectId||"")); return;
-    case "title": await sendMessage(chatId,"✍️ اكتب عنوان الواجب أو التكليف:",{replyMarkup:nav}); return;
-    case "instructions": await sendMessage(chatId,"📋 اكتب تعليمات التكليف وما المطلوب من الطالب:",{replyMarkup:nav}); return;
-    case "due": await sendMessage(chatId,"🗓 اكتب آخر موعد للتسليم بتوقيت بغداد بهذا الشكل:\n2026-11-20 18:00",{replyMarkup:nav}); return;
+    case "details": await sendMessage(chatId,"✍️ أرسل نص التكليف برسالة وحدة. أول سطر راح يكون العنوان، وبقية النص تفاصيل الواجب.",{replyMarkup:nav}); return;
+    case "due": await sendMessage(chatId,"📅 آخر موعد للتسليم بتوقيت بغداد برسالة وحدة، مثال: 2026-11-20 18:00",{replyMarkup:nav}); return;
     case "submission": await sendMessage(chatId,"📨 اكتب طريقة التسليم (مثلاً ورقياً بالمحاضرة، أو عبر المنصة). أرسل «تخطي» إذا غير محددة.",{replyMarkup:nav}); return;
     case "attachment": await sendMessage(chatId,"📎 اختيارياً: أرسل ملف PDF/PPTX (حتى 20MB) أو رابط المرفق، أو أرسل «تخطي».",{replyMarkup:nav}); return;
     case "confirm": await showPreview(chatId,d); return;
+    case "more": await showDetailsMenu(chatId); return;
     case "publishing": await sendMessage(chatId,"الطلب قيد النشر؛ لا تعِد الإرسال. راجع قسم الواجبات.",{replyMarkup:nav}); return;
     default: await sendMessage(chatId,"المسودة غير مكتملة. افتح نشر تكليف من جديد.",{replyMarkup:nav});
   }
+}
+
+async function showDetailsMenu(chatId:number) {
+  await sendMessage(chatId,"✏️ هاي التفاصيل اختيارية. اختَر فقط اللي تحتاجه:",{replyMarkup:{inline_keyboard:[
+    [{text:"📄 تعديل النص",callback_data:"asg:edit:details"},{text:"📅 تعديل الموعد",callback_data:"asg:edit:due"}],
+    [{text:"📨 طريقة التسليم",callback_data:"asg:edit:submission"},{text:"📎 مرفق PDF/رابط",callback_data:"asg:edit:attachment"}],
+    [{text:"🔙 المعاينة",callback_data:"asg:preview"}],...nav.inline_keyboard,
+  ]}});
 }
 
 async function showPreview(chatId: number, d: Draft) {
@@ -80,13 +90,11 @@ async function showPreview(chatId: number, d: Draft) {
   const text = "📋 معاينة التكليف قبل النشر\n\n📘 المادة: " + (subject?.name || d.subjectId) +
     "\n🎯 الشعب: " + sections + "\n✍️ العنوان: " + String(d.title||"") +
     "\n📄 التعليمات: " + String(d.instructions||"") + "\n🗓 آخر موعد: " + due +
-    "\n📨 طريقة التسليم: " + (String(d.submission||"") || "غير محددة") +
-    "\n📎 مرفق: " + (d.attachmentUrl ? "نعم" : "لا");
+    (d.submission ? "\n📨 طريقة التسليم: " + String(d.submission) : "") +
+    (d.attachmentUrl ? "\n📎 يوجد مرفق" : "");
   await sendMessage(chatId,text,{replyMarkup:{inline_keyboard:[
     [{text:"✅ نشر التكليف",callback_data:"pub:asg:"+nonce}],
-    [{text:"✏️ تعديل العنوان",callback_data:"asg:edit:title"},{text:"📋 تعديل التعليمات",callback_data:"asg:edit:instructions"}],
-    [{text:"🗓 تعديل الموعد",callback_data:"asg:edit:due"},{text:"🎯 تغيير الشعب",callback_data:"asg:edit:audience"}],
-    [{text:"📨 تعديل التسليم",callback_data:"asg:edit:submission"},{text:"📎 تعديل المرفق",callback_data:"asg:edit:attachment"}],
+    [{text:"🎯 تغيير الشعب",callback_data:"asg:edit:audience"},{text:"✏️ تفاصيل إضافية",callback_data:"asg:more"}],
     ...nav.inline_keyboard,
   ]}});
 }
@@ -123,27 +131,35 @@ export async function handleAssignmentCallback(chatId: number,userId: number,dat
     if (d.step !== "subject") return;
     const subjectId = data.slice("asg:subj:".length);
     const subject = await qOne<{id:string}>("SELECT id FROM portal_subjects WHERE id=$1",[subjectId]);
-    if (!subject || (admin.role==="teacher" && !admin.assigned_subjects?.includes(subjectId))) {
+    const sections=defaultAudience(admin,subjectId);
+    if (!subject || !validAudience(admin,subjectId,sections)) {
       await sendMessage(chatId,"لا تملك صلاحية النشر لهذه المادة."); return;
     }
-    const next = {...d,subjectId,step:"audience"};
+    const next = {...d,subjectId,sections,step:"details"};
     await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);return;
   }
   if (data.startsWith("asg:aud:")) {
     if (d.step !== "audience") return;
     const choice = data.slice("asg:aud:".length);
     const sections = choice==="all" ? [...ALL] : choice.startsWith("sec:") ? [choice.slice(4)] : [];
-    if (!sections.length || !sections.every(s=>ALL.includes(s)) ||
-        !canPublishMaterial(admin,String(d.subjectId||""),sections)) {
+    if (!validAudience(admin,String(d.subjectId||""),sections)) {
       await sendMessage(chatId,"هذا الجمهور غير مسموح لحسابك."); return;
     }
-    const next = {...d,sections,step: d.title ? "confirm" : "title"};
-    await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);return;
+    await showPreview(chatId,{...d,sections});return;
+  }
+  if (data === "asg:more") {
+    if (d.step !== "confirm") return;
+    await setFlowState(chatId,"asg",{...d,step:"more",nonce:undefined});
+    await showDetailsMenu(chatId);return;
+  }
+  if (data === "asg:preview") {
+    if (d.step !== "audience" && d.step !== "more") return;
+    await showPreview(chatId,d);return;
   }
   if (data.startsWith("asg:edit:")) {
-    if (d.step !== "confirm") return;
+    if (d.step !== "confirm" && d.step !== "more") return;
     const step = data.slice("asg:edit:".length);
-    if (!["title","instructions","due","submission","attachment","audience"].includes(step)) return;
+    if (!["details","due","submission","attachment","audience"].includes(step)) return;
     const next = {...d,step,nonce:undefined};
     await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);return;
   }
@@ -158,7 +174,7 @@ export async function handleAssignmentCallback(chatId: number,userId: number,dat
     try {
       const fresh = await getLinkedAdmin(userId);
       const sections = Array.isArray(d.sections) ? d.sections.map(String) : [];
-      if (!fresh || !canPublishMaterial(fresh,String(d.subjectId||""),sections)) {
+      if (!fresh || !validAudience(fresh,String(d.subjectId||""),sections)) {
         await setFlowState(chatId,"",{});await sendMessage(chatId,"⛔ تم تغيير الصلاحيات؛ لم يُنشر التكليف.");return;
       }
       const res = await publishAssignment(fresh,{
@@ -222,26 +238,21 @@ export async function handleAssignmentMessage(chatId:number,userId:number,text:s
     await sendMessage(chatId,"هذه الخطوة تحتاج نصاً. أرسل الملف عندما يطلب البوت المرفق.",{replyMarkup:nav});return;
   }
   if (text.length>3000) {await sendMessage(chatId,"النص طويل جداً؛ الحد 3000 حرف.");return;}
-  if (step==="title") {
-    if (!text.trim()||text.length>180) {await sendMessage(chatId,"عنوان التكليف يجب أن يكون من 1 إلى 180 حرفاً.");return;}
-    const next={...d,title:text.trim(),step:"instructions"};
-    if (d.dueAt) await showPreview(chatId,next); else {await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);}return;
-  }
-  if (step==="instructions") {
-    if (!text.trim()) {await sendMessage(chatId,"اكتب تعليمات التكليف.");return;}
-    const next={...d,instructions:text.trim(),step:"due"};
-    if (d.dueAt) await showPreview(chatId,next); else {await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);}return;
+  if (step==="details") {
+    if (!text.trim()) {await sendMessage(chatId,"اكتب نص التكليف أولاً.");return;}
+    const full=text.trim();
+    const title=full.split(/\n/)[0].replace(/\s+/g," ").slice(0,180);
+    const next={...d,title,instructions:full,step:"due"};
+    if(d.dueAt)await showPreview(chatId,next);
+    else {await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);}
+    return;
   }
   if (step==="due") {
-    const due = dueDateBaghdad(text);
-    if (!due) {await sendMessage(chatId,"⚠️ الموعد غير صالح أو انتهى. اكتب مثلاً 2026-11-20 18:00 (بتوقيت بغداد).");return;}
-    const next={...d,dueAt:due,step:"submission"};
-    if (d.submission !== undefined) await showPreview(chatId,next);
-    else {await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);}return;
+    const due=dueDateBaghdad(text);
+    if(!due){await sendMessage(chatId,"⚠️ الموعد غير صالح. مثال: 2026-11-20 18:00 (بغداد)");return;}
+    await showPreview(chatId,{...d,dueAt:due});return;
   }
   if (step==="submission") {
-    const next={...d,submission:skipped(text)?"":text.trim(),step:"attachment"};
-    if (d.attachmentUrl !== undefined) await showPreview(chatId,next);
-    else {await setFlowState(chatId,"asg",next);await prompt(chatId,next,admin);}return;
+    await showPreview(chatId,{...d,submission:skipped(text)?"":text.trim()});return;
   }
 }

@@ -23,8 +23,8 @@ export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean, tele
   const ownerBtn = telegramUserId && isBotOwner(telegramUserId) ? [[{text: "👑 لوحة المالك", callback_data: "own:home"}]] : [];
   if (admin && canUseTelegramPublishing(admin)) {
     return {inline_keyboard: [
-      [{text: "📢 نشر تبليغ سريع", callback_data: "adm:quick"}],
-      [{text: "✍️ نشر جديد", callback_data: "adm:new"}],
+      [{text: "📢 نشر تبليغ", callback_data: "adm:quick"}],
+      [{text: "➕ إضافة محتوى", callback_data: "adm:new"}],
       [{text: admin.role === "super_admin" ? "🗂 إدارة المحتوى" : "🗂 إدارة منشوراتي", callback_data: "adm:my"}],
       [{text: "👀 تصفح المحتوى (كطالب)", callback_data: "stu:home"}],
       [{text: "👤 حسابي", callback_data: "adm:me"}],
@@ -321,16 +321,20 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
     return;
   }
   if (data === "adm:new") {
-    await sendMessage(chatId, "✍️ نشر جديد — اختر النوع:", {replyMarkup: {inline_keyboard: [
-      [{text: "📢 تبليغ سريع", callback_data: "adm:quick"}],
-      [{text: "📝 تبليغ بعنوان وتفاصيل", callback_data: "adm:ann"}],
-      [{text: "📚 محاضرة / ملزمة (PDF أو PPTX)", callback_data: "adm:lec"}],
-      [{text: "📄 ملخص / ملف مساعد", callback_data: "adm:summary"}],
+    await sendMessage(chatId, "➕ شنو تريد تنشر؟", {replyMarkup: {inline_keyboard: [
+      [{text: "📚 محاضرة أو ملخص", callback_data: "adm:materials"}],
+      [{text: "📋 واجب / تكليف", callback_data: "adm:asg"}],
+      [{text: "📝 كوز يومي", callback_data: "adm:exam"}],
       [{text: "📑 أسئلة امتحانات سابقة", callback_data: "adm:questions"}],
-      [{text: "📊 إعلان صدور نتائج", callback_data: "adm:results"}],
-      [{text: "📋 نشر واجب / تكليف", callback_data: "adm:asg"}],
-      [{text: "📝 نشر موعد امتحان / كوز", callback_data: "adm:exam"}],
-      [{text: "🏠 رجوع", callback_data: "nav:home"}],
+      [{text: "🏠 الرئيسية", callback_data: "nav:home"}],
+    ]}});
+    return;
+  }
+  if (data === "adm:materials") {
+    await sendMessage(chatId,"📚 اختر نوع الملف:",{replyMarkup:{inline_keyboard:[
+      [{text:"📘 محاضرة / ملزمة",callback_data:"adm:lec"}],
+      [{text:"📄 ملخص / ملف مساعد",callback_data:"adm:summary"}],
+      [{text:"🔙 رجوع",callback_data:"adm:new"}],
     ]}});
     return;
   }
