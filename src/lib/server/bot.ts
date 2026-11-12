@@ -12,7 +12,7 @@ import {publishAnnouncement, publishLecture, updateAnnouncementOwn, updateLectur
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {tgFetch} from "./telegram.ts";
 import {uploadLectureFile, validMaterialFile, materialMime, MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
-import {publishPastQuestion, questionBankReady, validExamKind, EXAM_KINDS, questionImageMime, uploadQuestionImage} from "./bot-question-bank.ts";
+import {publishPastQuestion, ensureQuestionBankSchema, validExamKind, EXAM_KINDS, questionImageMime, uploadQuestionImage} from "./bot-question-bank.ts";
 
 
 export type LinkedAdmin = AdminInfo & {link_id: number};
@@ -391,8 +391,8 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
     return;
   }
   if (data === "adm:lec" || data === "adm:summary" || data === "adm:questions") {
-    if (data === "adm:questions" && !await questionBankReady()) {
-      await sendMessage(chatId, "⏳ بنك الأسئلة قيد إعداد قاعدة البيانات. ستتوفر إضافة الأسئلة بعد تفعيلها.", {replyMarkup: adminMenu(admin)});
+    if (data === "adm:questions" && !await ensureQuestionBankSchema()) {
+      await sendMessage(chatId, "⚠️ لم تكتمل تهيئة بنك الأسئلة على الخادم. راجع الإدارة أو أعد المحاولة.", {replyMarkup: adminMenu(admin)});
       return;
     }
     const materialKind = data === "adm:summary" ? "summary" : data === "adm:questions" ? "questions" : "lecture";
