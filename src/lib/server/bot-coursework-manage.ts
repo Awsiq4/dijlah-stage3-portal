@@ -211,7 +211,8 @@ export async function handleCourseworkMessage(chatId:number,userId:number,text:s
   if(!FIELDS[d.kind as CourseworkKind]?.includes(field))return;
   const value=text.trim();
   if(!value){await sendMessage(chatId,"اكتب قيمة غير فارغة، أو اختر إلغاء.");return;}
-  const input=field==="attachment_url"&&["تخطي","بدون","-"].includes(value)?"":value;
+  const clearable:Field[]=["submission","attachment_url","room","topics","notes"];
+  const input=clearable.includes(field)&&["تخطي","تخطى","بدون","-"].includes(value)?"":value;
   const cleaned=cleanValue(d.kind as CourseworkKind,field,input);
   if(cleaned.error){await sendMessage(chatId,"⚠️ "+cleaned.error);return;}
   await presentProposed(chatId,d,cleaned.value);
