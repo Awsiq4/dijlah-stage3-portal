@@ -19,7 +19,7 @@ export function ExamForm({account,initial,onSaved}:{
 }) {
  const {request,review}=usePublicationRequest();
  const teacher=account.role==="teacher",rep=account.role==="section_representative";
- const owner=account.role==="super_admin"||account.role==="editor";
+ const owner=account.role==="super_admin";
  const [subjects,setSubjects]=useState<{id:string;name:string}[]>([]);
  const [subject,setSubject]=useState(String(initial?.subject_id||(teacher&&account.assigned_subjects?.length===1?account.assigned_subjects[0]:"")));
  const [sections,setSections]=useState<string[]>(Array.isArray(initial?.sections)?initial.sections.map(String):rep&&account.assigned_section?[account.assigned_section]:[...ALL]);
