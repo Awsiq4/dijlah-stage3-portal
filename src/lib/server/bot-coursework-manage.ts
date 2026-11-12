@@ -97,7 +97,7 @@ export async function changeCoursework(admin:AdminInfo,kind:CourseworkKind,id:st
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
   const {value,error}=cleanValue(kind,field,raw);
   if(error)return {ok:false,error};
-  return withTx(async tx=>{
+  return withTx<Result>(async tx=>{
     const row=await getCoursework(admin,kind,id,tx);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     if(!same(row[field],expected))return {ok:false,error:"تغيرت بيانات المنشور من حساب آخر. افتح المنشور مجدداً"};
@@ -118,7 +118,7 @@ export async function changeCoursework(admin:AdminInfo,kind:CourseworkKind,id:st
 export async function archiveCoursework(admin:AdminInfo,kind:CourseworkKind,id:string,
  archive:boolean):Promise<Result>{
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
-  return withTx(async tx=>{
+  return withTx<Result>(async tx=>{
     const row=await getCoursework(admin,kind,id,tx);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     if(Boolean(row.archived_at)===archive)return {ok:true,row};
@@ -131,7 +131,7 @@ export async function archiveCoursework(admin:AdminInfo,kind:CourseworkKind,id:s
 }
 export async function deleteCoursework(admin:AdminInfo,kind:CourseworkKind,id:string):Promise<Result>{
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
-  return withTx(async tx=>{
+  return withTx<Result>(async tx=>{
     const row=await getCoursework(admin,kind,id,tx);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     await tx.q(`DELETE FROM ${table(kind)} WHERE id=$1`,[id]);
