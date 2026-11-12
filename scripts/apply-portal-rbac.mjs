@@ -11,7 +11,7 @@ if (!DATABASE_URL) { console.error("ERROR: DATABASE_URL is required (env). Value
 
 const pool = new Pool({connectionString: DATABASE_URL, ssl: {rejectUnauthorized: true}});
 try {
-  const sql = ["portal-rbac.sql", "portal-owner-mfa.sql"]
+  const sql = ["portal-rbac.sql", "portal-owner-mfa.sql", "portal-passkeys.sql"]
     .map(name => readFileSync(path.join(root, "database", name), "utf8")).join("\n");
   for (const stmt of sql.split(/;\s*(?:\n|$)/)) {
     const t = stmt.replace(/--[^\n]*/g, "").trim();
