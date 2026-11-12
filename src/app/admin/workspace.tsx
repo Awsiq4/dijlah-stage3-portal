@@ -120,7 +120,7 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
           </div>
           <div className="panel-body">
             {failed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : rows ?
-              <ContentList key={type} rows={type === "exams" ? rows.filter(row => row.type === "كوز يومي") : rows} subjects={subjects}
+              <ContentList key={type} kind={type} rows={type === "exams" ? rows.filter(row => row.type === "كوز يومي") : rows} subjects={subjects}
                 selected={initial?.id ? String(initial.id) : undefined} onEdit={row => changeSection(type, row)} onRemove={row => {
                   if (row.id === initial?.id) setNotice("أغلق نموذج التعديل قبل حذف هذا المنشور.");
                   else void remove(row);

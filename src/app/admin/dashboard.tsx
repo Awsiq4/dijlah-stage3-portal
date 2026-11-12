@@ -1,7 +1,7 @@
 "use client";
-import React,{useCallback,useEffect,useState} from "react";
+import React,{useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {BellRing,CalendarDays,FileQuestion,LogOut,ShieldCheck,Database,Send,Pencil,Plus,X,GraduationCap,Users,House,Layers,Ellipsis,KeyRound} from "lucide-react";
+import {BellRing,CalendarDays,FileQuestion,LogOut,ShieldCheck,Database,Send,Pencil,Plus,X,GraduationCap,Users,House,Layers,Ellipsis,KeyRound,ChevronLeft} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {RoleWorkspace,UsersTab,TelegramCenterTab,AuditTab} from "./workspace";
 
@@ -12,8 +12,7 @@ import {ExamForm} from "./exam-form";
 import {CONTENT_SECTIONS, AdminNavGroup, ContentList, useAdminRows, type PublicationType} from "./content-navigation";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
-type Recent = {type: PublicationType | "examSchedule"; id: string; title: string};
-type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentPublications?: Recent[]};
+type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]};
 type Row = Record<string, unknown>;
 type WritableTab = "subjects" | PublicationType | "schedule";
 type TabId = WritableTab | "overview" | "content" | "calendar" | "more" | "examSchedule" | "telegram" | "telegramTools" | "account" | "users" | "tgcenter" | "audit" | "services";
@@ -97,7 +96,6 @@ export default function AdminDashboard(){
   const [subjects, setSubjects] = useState<Row[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [publishing, setPublishing] = useState(false);
-  const [pendingEdit, setPendingEdit] = useState<string | null>(null);
   const isOverview = tab === "overview";
   const publication = CONTENT_SECTIONS.find(item => item.id === tab);
   const calendar = CALENDARS.find(item => item.id === tab);
@@ -118,9 +116,9 @@ export default function AdminDashboard(){
   }, [router]);
 
   useEffect(() => {
-    if (!me?.authenticated || !["super_admin", "editor"].includes(me.role || "") || (!isOverview && tab !== "services")) return;
+    if (!me?.authenticated || me.role !== "super_admin" || tab !== "services") return;
     const controller = new AbortController();
-    fetch(isOverview ? "/api/admin/stats?view=recent" : "/api/admin/stats", {cache: "no-store", signal: controller.signal})
+    fetch("/api/admin/stats", {cache: "no-store", signal: controller.signal})
       .then(async response => {
         if (!response.ok) throw new Error("Stats unavailable");
         const data = await response.json();
@@ -128,7 +126,7 @@ export default function AdminDashboard(){
       })
       .catch(() => { if (!controller.signal.aborted) setStatsFailed(true); });
     return () => controller.abort();
-  }, [me, isOverview, tab]);
+  }, [me, tab]);
   useEffect(() => {
     if (!me?.authenticated) return;
     fetch("/api/public/content?type=subjects", {cache: "no-store"})
@@ -143,7 +141,6 @@ export default function AdminDashboard(){
   function navigate(next: TabId) {
     setTab(next);
     setPublishing(false);
-    setPendingEdit(null);
     setNotice("");
     cancelEdit();
   }
@@ -153,22 +150,14 @@ export default function AdminDashboard(){
     setEditing({});
     setForm(next === "announcements" ? {scope: "general", section: "all", priority: "normal", pinned: "false"} : {});
   }
-  const startEdit = useCallback((row: Row) => {
+  function startEdit(row: Row) {
     setEditing(row);
     const f: Record<string, string> = {};
     for (const [k, v] of Object.entries(row)) f[k] = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "");
     setForm(f);
     setNotice("");
-  }, []);
+  }
   const cancelEdit = () => { setEditing(null); setForm({}); };
-
-  useEffect(() => {
-    if (!pendingEdit || rows === null) return;
-    const row = rows.find(item => item.id === pendingEdit);
-    setPendingEdit(null);
-    if (row) startEdit(row);
-    else setNotice("تعذّر فتح المنشور. يمكنك اختياره من القائمة.");
-  }, [pendingEdit, rows, startEdit]);
 
   const {request, review} = usePublicationRequest();
 
@@ -215,10 +204,10 @@ export default function AdminDashboard(){
   const calendars = CALENDARS.filter(item => item.id !== "examSchedule" || owner);
   const settings = SETTINGS.filter(item => !("owner" in item) || owner);
   const settingsSelection = tab === "tgcenter" || tab === "telegram" ? "telegramTools" : tab;
-  const recent = stats?.recentPublications?.filter(item => owner || item.type !== "examSchedule") || [];
   const visibleRows = rows?.filter(row => tab === "exams" ? row.type === "كوز يومي" : tab === "examSchedule" ? row.type !== "كوز يومي" : true);
   const listing = publication || calendar || tab === "subjects";
   const sectionTitle = publication?.label || calendar?.label || setting?.label;
+  const title = sectionTitle || ({overview: "لوحة الإدارة", content: "المحتوى", calendar: "الجداول", more: "الإعدادات", telegram: "روابط القنوات للطلاب", tgcenter: "إدارة البوت"} as Partial<Record<TabId, string>>)[tab] || "لوحة الإدارة";
   function saved() {
     cancelEdit();
     reload();
@@ -235,9 +224,10 @@ export default function AdminDashboard(){
     </nav>
     <div className="admin-workspace-main">
     {review}
-    <PageHeading title="لوحة الإدارة" description={me.name || me.email} action={
-      <button type="button" className="action-button admin-publish" aria-expanded={publishing} onClick={() => setPublishing(value => !value)}><Plus size={18}/> نشر</button>
-    }/>
+    <PageHeading title={title} description={isOverview ? me.name || me.email : undefined} action={!editing && (
+      listing ? <button type="button" className="action-button admin-publish" onClick={() => startAdd()}><Plus size={18}/> {publication ? "إضافة " + publication.addLabel : "إضافة"}</button>
+        : <button type="button" className="action-button admin-publish" aria-expanded={publishing} onClick={() => setPublishing(value => !value)}><Plus size={18}/> نشر جديد</button>
+    )}/>
     {publishing && <section className="panel admin-publish-picker" aria-label="نوع المنشور">
       <div className="panel-heading"><h2>شنو تريد تنشر؟</h2></div>
       <div className="panel-body admin-option-grid">{CONTENT_SECTIONS.map(({id, addLabel, Icon}) =>
@@ -250,21 +240,14 @@ export default function AdminDashboard(){
 
     {notice && <p className="note" role="status">{notice}</p>}
 
-    {isOverview && <section className="panel">
-      <div className="panel-heading"><h2>آخر المنشورات</h2><button type="button" className="action-button secondary" onClick={() => navigate("content")}>كل المحتوى</button></div>
-      <div className="panel-body">
-        {statsFailed ? <Empty title="تعذّر تحميل آخر المنشورات" description="تگدر تفتح قسم المحتوى مباشرة."/> : !stats ? <p className="subtle" role="status">جارٍ تحميل المنشورات…</p> : recent.length ? <div className="stack">
-          {recent.map(item => <div className="list-row admin-content-row" key={item.type + item.id}>
-            <div className="grow"><strong>{item.title}</strong><p className="subtle small">{CONTENT_SECTIONS.find(section => section.id === item.type)?.label || "الميدتيرم والفاينل"}</p></div>
-            <button type="button" className="action-button secondary" onClick={() => {navigate(item.type); setPendingEdit(item.id);}}><Pencil size={15}/> تعديل</button>
-          </div>)}
-        </div> : <Empty title="ماكو منشورات حديثة" description="تگدر تضيف منشور من زر «نشر»."/>}
-      </div>
+    {(isOverview || tab === "content") && <section className="admin-home-content" aria-label="إدارة المحتوى">
+      {isOverview && <h2>إدارة المحتوى</h2>}
+      <div className="admin-home-grid">{CONTENT_SECTIONS.map(({id, label, Icon}) =>
+        <button type="button" key={id} className="admin-home-item" onClick={() => navigate(id)}>
+          <span className="admin-home-icon"><Icon size={21}/></span><strong>{label}</strong><ChevronLeft size={16} className="admin-home-arrow"/>
+        </button>
+      )}</div>
     </section>}
-
-    {tab === "content" && <div className="admin-option-grid">{CONTENT_SECTIONS.map(({id, label, Icon}) =>
-      <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={21}/>{label}</button>
-    )}</div>}
     {tab === "calendar" && <div className="admin-option-grid">{calendars.map(({id, label, Icon}) =>
       <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={21}/>{label}</button>
     )}</div>}
@@ -301,14 +284,10 @@ export default function AdminDashboard(){
     </section>}
 
     {listing && <div className={"admin-content-layout" + (editing ? " admin-is-editing" : "")}>
-      <section className="panel admin-list-pane">
-        <div className="panel-heading">
-          <h2>{sectionTitle}</h2>
-          <button type="button" className="action-button" onClick={() => startAdd()}><Plus size={16}/> إضافة</button>
-        </div>
+      <section className="panel admin-list-pane" aria-label={sectionTitle}>
         <div className="panel-body">
           {rowsFailed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : !visibleRows ? <p className="subtle" role="status">جارٍ التحميل…</p> :
-            <ContentList key={tab} rows={visibleRows} subjects={subjects} selected={editing?.id ? String(editing.id) : undefined}
+            <ContentList key={tab} kind={tab} rows={visibleRows} subjects={subjects} selected={editing?.id ? String(editing.id) : undefined}
               onEdit={startEdit} onRemove={row => {
                 if (row.id === editing?.id) setNotice("أغلق نموذج التعديل قبل حذف هذا المنشور.");
                 else void remove((tab === "examSchedule" ? "exams" : tab) as WritableTab, String(row.id));
