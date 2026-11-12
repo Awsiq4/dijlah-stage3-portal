@@ -1,9 +1,11 @@
 "use client";
 import {adminReturnPath} from "@/lib/safe-url";
-import React,{Suspense,useState} from "react";
+import React,{Suspense,useEffect,useState} from "react";
 import {useRouter,useSearchParams} from "next/navigation";
 import Image from "next/image";
-import {Lock} from "lucide-react";
+import {KeyRound,Lock} from "lucide-react";
+import {browserSupportsWebAuthn,startAuthentication,type PublicKeyCredentialRequestOptionsJSON} from "@simplewebauthn/browser";
+import {passkeyRequest} from "@/lib/passkey-client";
 import {PageHeading} from "@/components/UI";
 
 export default function AdminLogin(){
@@ -28,6 +30,23 @@ function AdminLoginInner(){
   };
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+
+  const [passkeysAvailable,setPasskeysAvailable]=useState(false);
+  useEffect(()=>{setPasskeysAvailable(window.location.origin==="https://dj3.top"&&browserSupportsWebAuthn());},[]);
+
+  async function signInWithPasskey(){
+    setBusy(true);setError("");
+    try{
+      const {options}=await passkeyRequest<{options:PublicKeyCredentialRequestOptionsJSON}>("login-options");
+      const response=await startAuthentication({optionsJSON:options});
+      await passkeyRequest("login",{response});
+      openDashboard();
+    }catch(err){
+      setError(err instanceof Error&&["NotAllowedError","AbortError"].includes(err.name)
+        ? "أُلغي الدخول بالمفتاح أو ما توفر مفتاح على هذا الجهاز."
+        : err instanceof Error ? err.message : "تعذّر تسجيل الدخول بالمفتاح.");
+    }finally{setBusy(false);}
+  }
 
   const submit=async(e:React.FormEvent)=>{
     e.preventDefault();
@@ -62,6 +81,7 @@ function AdminLoginInner(){
         <Image src="/images/department-logo.png" width={986} height={915} alt="" style={{width:56,height:"auto",margin:"0 auto"}}/>
       </div>
       <PageHeading title="تسجيل دخول الإدارة" description="للمالك والتدريسيين والممثلين"/>
+      {passkeysAvailable&&step==="password"&&!recoveryCodes.length&&<button type="button" className="action-button secondary" style={{width:"100%",marginBottom:16}} onClick={signInWithPasskey} disabled={busy}><KeyRound size={16}/> الدخول بمفتاح</button>}
       {recoveryCodes.length>0 ? <>
         <p>احفظ رموز الاسترداد بمكان آمن. كل رمز يُستخدم مرة واحدة وتظهر الرموز هنا مرة واحدة.</p>
         <ul dir="ltr" aria-label="رموز الاسترداد">{recoveryCodes.map(value=><li key={value}><code>{value}</code></li>)}</ul>

@@ -22,6 +22,8 @@
     "verify:schedule:json": "node --experimental-strip-types scripts/verify-schedule-json.mjs"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.1.0",
     "@vercel/blob": "^2.8.2",
     "lucide-react": "^0.468.0",
     "next": "^15.5.0",

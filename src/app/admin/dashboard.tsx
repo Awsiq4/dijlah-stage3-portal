@@ -189,9 +189,11 @@ export default function AdminDashboard(){
 
   if (loading) return <PageHeading title="لوحة الإدارة" description="جارٍ التحقق من الجلسة…"/>;
   if (!me?.authenticated) return <PageHeading title="لوحة الإدارة" description="غير مسجّل الدخول"/>;
+  const passkeyLink = ["super_admin", "teacher", "section_representative", "general_representative"].includes(me.role || "")
+    ? <a className="action-button secondary" href="/admin/passkeys">مفاتيح الدخول</a> : null;
   const canWrite = me.role === "super_admin" || me.role === "editor";
   // Role-specific workspaces: representatives and teachers get a focused UI, not the full admin panel
-  if (!canWrite) return <><RoleWorkspace me={me}/><div style={{marginTop:18}}><AccountPanel/></div></>;
+  if (!canWrite) return <><RoleWorkspace me={me}/><div style={{marginTop:18}}><AccountPanel/><div className="admin-actions">{passkeyLink}</div></div></>;
   const tabs = me.role === "super_admin"
     ? [...TABS, {id: "users" as const, label: "إدارة الحسابات", Icon: Users}, {id: "tgcenter" as const, label: "مركز Telegram", Icon: Send}, {id: "audit" as const, label: "سجل الأحداث", Icon: ShieldCheck}]
     : TABS;
@@ -199,6 +201,7 @@ export default function AdminDashboard(){
   return <>
     {review}
     <PageHeading title="لوحة الإدارة" description={`${me.email} · ${me.role}`} action={<button className="action-button secondary" onClick={logout}><LogOut size={16}/> خروج</button>}/>
+    {passkeyLink && <div className="admin-actions">{passkeyLink}</div>}
     {me.role === "super_admin" && <div className="note" style={{marginBottom:16}}>🎫 إدارة طلبات الدعم والردود صارت داخل <strong>👑 لوحة المالك في بوت Telegram</strong> حصراً.</div>}
     <div className="tabs admin-tabs">
       {tabs.map(t => <button key={t.id} className={tab === t.id ? "selected" : ""} onClick={() => { setTab(t.id); cancelEdit(); }}><t.Icon size={15}/> {t.label}</button>)}
