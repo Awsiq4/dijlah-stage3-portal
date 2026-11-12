@@ -43,6 +43,42 @@ export async function questionBankReady(): Promise<boolean> {
   return Boolean(row?.exists);
 }
 
+// Perform the additive, idempotent migration on the BOT's actual production DB,
+// never on an unrelated Neon connection. Only called for a linked staff publisher.
+// A database advisory lock prevents concurrent serverless instances racing DDL.
+export async function ensureQuestionBankSchema(): Promise<boolean> {
+  if (await questionBankReady()) return true;
+  try {
+    await withTx(async tx => {
+      await tx.q("SELECT pg_advisory_xact_lock(19963120)");
+      await tx.q(`CREATE TABLE IF NOT EXISTS portal_past_questions (
+        id TEXT PRIMARY KEY,
+        subject_id TEXT NOT NULL REFERENCES portal_subjects(id) ON DELETE CASCADE,
+        exam_kind TEXT NOT NULL CHECK (exam_kind IN ('quiz','midterm','final')),
+        title TEXT NOT NULL,
+        academic_year TEXT NOT NULL DEFAULT '',
+        sections JSONB NOT NULL DEFAULT '["A","B","C","F"]'::jsonb
+          CHECK (sections <@ '["A","B","C","F"]'::jsonb),
+        file_url TEXT NOT NULL,
+        file_name TEXT NOT NULL DEFAULT '',
+        file_sha256 TEXT NOT NULL,
+        created_by BIGINT NOT NULL REFERENCES portal_admins(id),
+        source TEXT NOT NULL DEFAULT 'telegram',
+        archived_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`);
+      await tx.q(`CREATE UNIQUE INDEX IF NOT EXISTS portal_past_questions_file_unique
+        ON portal_past_questions(subject_id, exam_kind, file_sha256) WHERE archived_at IS NULL`);
+      await tx.q(`CREATE INDEX IF NOT EXISTS portal_past_questions_subject_kind
+        ON portal_past_questions(subject_id, exam_kind, created_at DESC)`);
+    });
+    return await questionBankReady();
+  } catch (error) {
+    console.error("bot_question_bank_migration_failed", error instanceof Error ? error.message : "unknown");
+    return false;
+  }
+}
+
 export async function publishPastQuestion(admin: AdminInfo, input: {
   id: string; subjectId: string; examKind: ExamKind; title: string;
   academicYear?: string; sections: string[]; fileUrl: string; fileName: string; fingerprint: string;
