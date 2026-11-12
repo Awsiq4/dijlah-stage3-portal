@@ -96,6 +96,11 @@ export function AssignmentForm({account,initial,onSaved}:{
    if(!response.ok) {setNotice(data.error||"تعذر حفظ التكليف.");return;}
    setNotice("✅ تم حفظ التكليف بنجاح.");
    setFile(undefined);cache.current=null;
+   if(!initial) {
+     id.current=""; setTitle("");setInstructions("");setDue("");
+     setSubmission("");setAttachment("");
+     setSections(sectionRep&&account.assigned_section?[account.assigned_section]:[...ALL]);
+   }
    onSaved();
   }catch {setNotice("تعذر رفع المرفق أو حفظ التكليف. راجع اتصالك وحاول مجدداً.");}
   finally{setBusy(false);setUploadProgress(0);}
