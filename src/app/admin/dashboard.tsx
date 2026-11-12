@@ -8,6 +8,7 @@ import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./
 import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 import {AssignmentForm} from "./assignment-form";
+import {ExamForm} from "./exam-form";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string};
 type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentAudit?: {actor: string; action: string; created_at: string}[]};
@@ -239,7 +240,8 @@ export default function AdminDashboard(){
       <div className="panel-body">
         {canWrite && editing !== null && tab === "lectures" && <MaterialForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} rows={rows || []} onSaved={() => loadTab("lectures")}/>}
         {canWrite && editing !== null && tab === "assignments" && <AssignmentForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} onSaved={() => {cancelEdit();loadTab("assignments");}}/>}
-        {canWrite && editing !== null && tab !== "lectures" && tab !== "assignments" && <form className="admin-form" onSubmit={e => submit(e, tab)} style={{marginBottom: 18}}>
+        {canWrite && editing !== null && tab === "exams" && <ExamForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} onSaved={() => {cancelEdit();loadTab("exams");}}/>}
+        {canWrite && editing !== null && tab !== "lectures" && tab !== "assignments" && tab !== "exams" && <form className="admin-form" onSubmit={e => submit(e, tab)} style={{marginBottom: 18}}>
           {FIELDS[tab].filter(f => (f.k !== "id" || tab === "subjects") && (f.k !== "published_at" || !!editing.id)).map(f => (
             <label className={"form-field" + (f.area ? " wide" : "")} key={f.k}><span>{f.label}{f.req ? " *" : ""}</span>
               {f.k === "subject_id" ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
