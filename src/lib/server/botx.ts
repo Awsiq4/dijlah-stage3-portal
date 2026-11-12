@@ -13,7 +13,7 @@ import {
 import type {LinkedAdmin} from "./bot.ts";
 import {isBotOwner} from "./registry.ts";
 import {getLinkedAdmin, hasActiveFlow, adminMenu, resumeDraft, escapeHtml} from "./bot.ts";
-import {EXAM_KINDS, listPastQuestions, listOwnQuestions, modifyPastQuestion, questionBankReady, validExamKind} from "./bot-question-bank.ts";
+import {EXAM_KINDS, listPastQuestions, listOwnQuestions, getOwnPastQuestion, modifyPastQuestion, questionBankReady, validExamKind} from "./bot-question-bank.ts";
 
 const backHome = {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]};
 const PER_PAGE = 5;
@@ -202,8 +202,7 @@ export async function handleManageCallback(chatId: number, userId: number, data:
   }
   if (data.startsWith("it:q:")) {
     const id = data.slice("it:q:".length);
-    const rows = await listOwnQuestions(admin, 0);
-    const item = rows.find(row => row.id === id);
+    const item = await getOwnPastQuestion(admin, id);
     if (!item) { await sendMessage(chatId, "العنصر غير متاح في هذه الصفحة.", {replyMarkup: backHome}); return; }
     await sendMessage(chatId, `📑 ${item.title}\n${EXAM_KINDS[item.exam_kind]} · ${item.subject_id}\n${item.archived_at ? "مؤرشف" : "منشور"}`, {replyMarkup: {inline_keyboard: [
       [{text: "📎 عرض الملف", url: item.file_url}],
