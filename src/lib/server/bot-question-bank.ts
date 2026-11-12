@@ -3,6 +3,8 @@
 import {withTx, q, qOne} from "./db.ts";
 import {canModifyContent, canPublishMaterial, isActive, type AdminInfo} from "./rbac.ts";
 import {safeFileUrl} from "../safe-url.ts";
+import {put} from "@vercel/blob";
+import {MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
 
 const ALL = ["A", "B", "C", "F"] as const;
 export type ExamKind = "quiz" | "midterm" | "final";
@@ -16,6 +18,25 @@ export type PastQuestion = {
   academic_year: string; file_url: string; file_name: string; created_by: number;
   sections: string[]; archived_at?: string | null; created_at: string;
 };
+
+export function questionImageMime(filename: string, bytes: Buffer): string | null {
+  if (/\\.jpe?g$/i.test(filename) && bytes.length >= 3 &&
+      bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (/\\.png$/i.test(filename) && bytes.length >= 8 &&
+      bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return "image/png";
+  return null;
+}
+
+export async function uploadQuestionImage(bytes: Buffer, filename: string) {
+  if (!storageConfigured() || bytes.length === 0 || bytes.length > MAX_PDF_BYTES) throw new Error("التخزين غير متاح أو الملف كبير");
+  const mime = questionImageMime(filename, bytes);
+  if (!mime) throw new Error("صيغة الصورة غير صالحة");
+  const safe = filename.replace(/[^A-Za-z0-9._-]/g, "_").slice(-75);
+  return put("past-questions/" + Date.now() + "-" + safe, bytes, {
+    access: "public", contentType: mime, addRandomSuffix: true,
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+  });
+}
 
 export async function questionBankReady(): Promise<boolean> {
   const row = await qOne<{exists: boolean}>("SELECT to_regclass('public.portal_past_questions') IS NOT NULL AS exists");
