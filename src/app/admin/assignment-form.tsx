@@ -128,20 +128,22 @@ export function AssignmentForm({account,initial,onSaved}:{
        onChange={e=>setSections(prev=>e.target.checked?[...new Set([...prev,s])]:prev.filter(x=>x!==s))}/> {s}</label>)}
     </div>
   </div>
-  <label className="form-field wide"><span>طريقة التسليم (اختياري)</span>
-   <input value={submission} maxLength={500} onChange={e=>setSubmission(e.target.value)} placeholder="مثلاً: ورقي بالمحاضرة"/>
-  </label>
-  <label className="form-field wide"><span>رابط مرفق (اختياري)</span>
-   <input value={attachment} onChange={e=>setAttachment(e.target.value)} placeholder="https://..."/>
-  </label>
-  <label className="form-field wide"><span>أو ارفع ملف PDF/PPTX (اختياري)</span>
-   <input type="file" accept=".pdf,.pptx" onChange={e=>setFile(e.target.files?.[0])}/>
-  </label>
-  {initial&&<label className="form-field"><span>الحالة</span>
-   <select value={status} onChange={e=>setStatus(e.target.value)}>
-    <option value="active">نشط</option><option value="closed">منتهٍ</option><option value="cancelled">ملغى</option>
-   </select>
-  </label>}
+  <details className="form-field wide"><summary>خيارات متقدمة</summary>
+    <label className="form-field wide"><span>طريقة التسليم (اختياري)</span>
+     <input value={submission} maxLength={500} onChange={e=>setSubmission(e.target.value)} placeholder="مثلاً: ورقي بالمحاضرة"/>
+    </label>
+    <label className="form-field wide"><span>رابط مرفق (اختياري)</span>
+     <input value={attachment} onChange={e=>setAttachment(e.target.value)} placeholder="https://..."/>
+    </label>
+    <label className="form-field wide"><span>أو ارفع ملف PDF/PPTX (اختياري)</span>
+     <input type="file" accept=".pdf,.pptx" onChange={e=>setFile(e.target.files?.[0])}/>
+    </label>
+    {initial&&<label className="form-field"><span>الحالة</span>
+     <select value={status} onChange={e=>setStatus(e.target.value)}>
+      <option value="active">نشط</option><option value="closed">منتهٍ</option><option value="cancelled">ملغى</option>
+     </select>
+    </label>}
+  </details>
   <button className="action-button" disabled={busy} style={{gridColumn:"1/-1",justifySelf:"start"}}>
    <Send size={15}/>{busy ? (uploadProgress?"رفع المرفق "+uploadProgress+"%":"جارٍ الحفظ…"):initial?"حفظ التعديلات":"نشر التكليف"}
   </button>
