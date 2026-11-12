@@ -479,13 +479,31 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu(admin)}); return; }
       const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
       const subject = await qOne<{name: string}>(`SELECT name FROM portal_subjects WHERE id=$1`, [String(d.subjectId)]);
-      const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
-      const r = await publishLecture(fresh, {id: typeof d.draftId === "string" ? d.draftId : undefined, subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), fileName: typeof d.fileName === "string" ? d.fileName : undefined, sections, source: "telegram", options, fingerprint: typeof d.fingerprint === "string" ? d.fingerprint : undefined});
+      if (d.materialKind === "questions") {
+        const questionResult = await publishPastQuestion(fresh, {
+          id: String(d.draftId || `questions-tg-${chatId}-${Date.now()}`),
+          subjectId: String(d.subjectId), examKind: d.examKind as "quiz" | "midterm" | "final",
+          title: String(d.title || ""),
+          academicYear: String(d.title || "").match(/20\\d{2}(?:[–\\/-]20\\d{2})?/)?.[0] || "",
+          fileUrl: String(d.fileUrl || ""), fileName: String(d.fileName || ""),
+          fingerprint: String(d.fingerprint || ""), sections,
+        });
+        if (questionResult.ok) await clearState(chatId);
+        else await previewDraft(chatId, "lec", d);
+        await sendMessage(chatId, questionResult.ok
+          ? questionResult.inserted
+            ? `✅ أضيفت أسئلة الامتحان إلى بنك الأسئلة.\n📘 المادة: ${subject?.name || d.subjectId}\n📝 النوع: ${EXAM_KINDS[d.examKind as keyof typeof EXAM_KINDS]}\n🔗 ${questionResult.url}`
+            : "ℹ️ هذه الأسئلة موجودة مسبقاً في بنك الأسئلة؛ لم يُنشر ملف مكرر."
+          : `⛔ تعذر النشر: ${questionResult.error}`, {replyMarkup: adminMenu(admin)});
+        return;
+      }
+      const count = d.materialKind === "summary" ? null : await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
+      const r = await publishLecture(fresh, {id: typeof d.draftId === "string" ? d.draftId : undefined, subjectId: String(d.subjectId), number: d.materialKind === "summary" ? 1 : (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), fileName: typeof d.fileName === "string" ? d.fileName : undefined, sections, source: "telegram", options, fingerprint: typeof d.fingerprint === "string" ? d.fingerprint : undefined, materialKind: d.materialKind === "summary" ? "summary" : "lecture"});
       if (r.ok && r.notificationEvents?.length) onPublished?.(r.notificationEvents);
       if (!r.ok && r.issue) { await showPublicationIssue(chatId, admin, kind, d, r.issue); return; }
       if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
-        ? (r.action ? `✅ ${r.action === "expanded" ? "تم توسيع جمهور الملزمة" : "تم تحديث الملزمة الموجودة"}.\n🔗 ${PORTAL_BASE_URL}${r.url || "/lectures/" + encodeURIComponent(r.id)}` : r.inserted ? `✅ تم نشر المحاضرة\n📘 المادة: <b>${escapeHtml(subject?.name || String(d.subjectId))}</b>\n📄 المحاضرة: <b>${escapeHtml(String(d.title || ""))}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/lectures/${encodeURIComponent(r.id)}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
+        ? (r.action ? `✅ ${r.action === "expanded" ? "تم توسيع جمهور الملزمة" : "تم تحديث الملزمة الموجودة"}.\n🔗 ${PORTAL_BASE_URL}${r.url || "/lectures/" + encodeURIComponent(r.id)}` : r.inserted ? `✅ تم نشر ${d.materialKind === "summary" ? "الملخص في قسم الملخصات" : "المحاضرة"}\n📘 المادة: <b>${escapeHtml(subject?.name || String(d.subjectId))}</b>\n📄 ${d.materialKind === "summary" ? "الملخص" : "المحاضرة"}: <b>${escapeHtml(String(d.title || ""))}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/lectures/${encodeURIComponent(r.id)}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
         : `⛔ تعذر النشر: ${r.error}`, {parseMode: "HTML", replyMarkup: adminMenu(admin)});
       return;
     }
