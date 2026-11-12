@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {randomBytes} from "node:crypto";
 import {BOT_USERNAME,PORTAL_BASE_URL,WEBHOOK_SECRET,telegramServiceEnabled} from "@/lib/server/flags";
 import {setWebhook,tgFetch} from "@/lib/server/telegram";
-import {expectedProductionWebhook,isOfficialProductionWebhook,isKnownProjectPreviewWebhook} from "@/lib/server/telegram-webhook-hosts";
+import {expectedProductionWebhook,decideSupportWebhookAction,isOfficialProductionWebhook} from "@/lib/server/telegram-webhook-hosts";
 import {checkLoginRateLimit} from "@/lib/server/auth";
 import {q} from "@/lib/server/db";
 import {hash} from "@/lib/server/support";
@@ -24,9 +24,10 @@ async function ensureOfficialWebhook():Promise<boolean> {
   if(!info.ok)return false;
   // Both verified production domains point to the same Vercel project.
   // Do not reset a working official webhook simply because dj3.top became canonical.
-  if(isOfficialProductionWebhook(info.result?.url||""))return true;
+  const action=decideSupportWebhookAction(info.result?.url);
+  if(action==="ready")return true;
   // Keep fail-closed behavior for genuinely unknown webhook hosts.
-  if(info.result?.url && !isKnownProjectPreviewWebhook(info.result.url))return false;
+  if(action==="untrusted")return false;
   const changed=await setWebhook(expected,WEBHOOK_SECRET);
   if(!changed.ok)return false;
   const verify=await tgFetch<{url:string}>("getWebhookInfo",{});
