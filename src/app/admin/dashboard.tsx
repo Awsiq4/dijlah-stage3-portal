@@ -1,34 +1,52 @@
 "use client";
 import React,{useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {BellRing,BookOpen,CalendarDays,FileQuestion,ClipboardList,Megaphone,LogOut,ShieldCheck,Database,Send,Pencil,Plus,Trash2,X,GraduationCap,Users} from "lucide-react";
+import {BellRing,CalendarDays,FileQuestion,LogOut,ShieldCheck,Database,Send,Pencil,Plus,X,GraduationCap,Users,House,Layers,Ellipsis,KeyRound} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
-import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./workspace";
+import {RoleWorkspace,UsersTab,TelegramCenterTab,AuditTab} from "./workspace";
 
 import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 import {AssignmentForm} from "./assignment-form";
 import {ExamForm} from "./exam-form";
+import {CONTENT_SECTIONS, ContentList, useAdminRows, type PublicationType} from "./content-navigation";
 
-type Me = PublishingAccount & {authenticated: boolean; email?: string};
-type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentAudit?: {actor: string; action: string; created_at: string}[]};
+type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
+type Recent = {type: PublicationType | "examSchedule"; id: string; title: string};
+type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentPublications?: Recent[]};
 type Row = Record<string, unknown>;
+type WritableTab = "subjects" | PublicationType | "schedule";
+type TabId = WritableTab | "overview" | "content" | "calendar" | "more" | "examSchedule" | "telegram" | "users" | "tgcenter" | "audit" | "services";
+type PrimaryTab = "overview" | "content" | "calendar" | "more";
 
-const TABS = [
-  {id: "overview", label: "نظرة عامة", Icon: ShieldCheck},
-  {id: "subjects", label: "المواد", Icon: GraduationCap},
-  {id: "announcements", label: "التبليغات", Icon: Megaphone},
-  {id: "lectures", label: "المحاضرات", Icon: BookOpen},
-  {id: "exams", label: "الامتحانات", Icon: FileQuestion},
-  {id: "assignments", label: "الواجبات والتكاليف", Icon: ClipboardList},
-  {id: "schedule", label: "الجدول", Icon: CalendarDays},
-  {id: "telegram", label: "تليجرام", Icon: Send},
+const PRIMARY_TABS = [
+  {id: "overview", label: "الرئيسية", Icon: House},
+  {id: "content", label: "المحتوى", Icon: Layers},
+  {id: "calendar", label: "الجداول", Icon: CalendarDays},
+  {id: "more", label: "المزيد", Icon: Ellipsis},
 ] as const;
-type TabId = (typeof TABS)[number]["id"] | "users" | "tgcenter" | "audit";
-type WritableTab = "subjects" | "announcements" | "lectures" | "exams" | "assignments" | "schedule";
+const CALENDARS = [
+  {id: "schedule", label: "الجدول الأسبوعي", Icon: CalendarDays},
+  {id: "examSchedule", label: "الميدتيرم والفاينل", Icon: FileQuestion},
+] as const;
+const SETTINGS = [
+  {id: "subjects", label: "إدارة المواد", Icon: GraduationCap},
+  {id: "users", label: "إدارة الحسابات", Icon: Users, owner: true},
+  {id: "tgcenter", label: "مركز Telegram", Icon: Send, owner: true},
+  {id: "telegram", label: "روابط قنوات Telegram", Icon: BellRing},
+  {id: "audit", label: "سجل الأحداث", Icon: ShieldCheck, owner: true},
+  {id: "services", label: "حالة الخدمات", Icon: Database, owner: true},
+] as const;
+
+function primaryTab(tab: TabId): PrimaryTab {
+  if (tab === "overview") return "overview";
+  if (tab === "content" || CONTENT_SECTIONS.some(item => item.id === tab)) return "content";
+  if (tab === "calendar" || CALENDARS.some(item => item.id === tab)) return "calendar";
+  return "more";
+}
 
 type Field = {k: string; label: string; area?: boolean; select?: string[]; num?: boolean; json?: boolean; req?: boolean};
-const FIELDS: Record<Exclude<WritableTab, "lectures">, Field[]> = {
+const FIELDS: Record<"subjects" | "announcements" | "schedule", Field[]> = {
   subjects: [
     {k: "id", label: "المعرّف (id)", req: true},
     {k: "name", label: "اسم المادة", req: true},
@@ -49,31 +67,6 @@ const FIELDS: Record<Exclude<WritableTab, "lectures">, Field[]> = {
     {k: "published_at", label: "تاريخ النشر"},
     {k: "pinned", label: "مثبّت", select: ["false", "true"]},
   ],
-  exams: [
-    {k: "id", label: "المعرّف (id)", req: true},
-    {k: "subject_id", label: "المادة"},
-    {k: "title", label: "العنوان", req: true},
-    {k: "type", label: "النوع (كوز/نصف سنوي...)"},
-    {k: "date", label: "التاريخ"},
-    {k: "start_time", label: "وقت البدء"},
-    {k: "room", label: "القاعة"},
-    {k: "sections", label: "الشعب", json: true},
-    {k: "topics", label: "المواضيع", area: true},
-    {k: "notes", label: "ملاحظات", area: true},
-    {k: "status", label: "الحالة", select: ["confirmed", "provisional", "cancelled"]},
-  ],
-  assignments: [
-    {k: "id", label: "المعرّف (id)", req: true},
-    {k: "subject_id", label: "المادة"},
-    {k: "title", label: "العنوان", req: true},
-    {k: "instructions", label: "التعليمات", area: true},
-    {k: "assigned_at", label: "تاريخ التكليف"},
-    {k: "due_at", label: "موعد التسليم"},
-    {k: "sections", label: "الشعب", json: true},
-    {k: "submission", label: "طريقة التسليم"},
-    {k: "status", label: "الحالة", select: ["active", "closed", "cancelled"]},
-    {k: "attachment_url", label: "رابط المرفق"},
-  ],
   schedule: [
     {k: "id", label: "المعرّف (id)", req: true},
     {k: "section", label: "الشعبة", select: ["A", "B", "C", "F"], req: true},
@@ -90,15 +83,6 @@ const FIELDS: Record<Exclude<WritableTab, "lectures">, Field[]> = {
   ],
 };
 
-function readSections(value: string | undefined): string[] {
-  try {
-    const parsed: unknown = JSON.parse(value || "[]");
-    return Array.isArray(parsed) ? parsed.filter((section): section is string => typeof section === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"};
 
 export default function AdminDashboard(){
@@ -108,21 +92,19 @@ export default function AdminDashboard(){
   const [tab, setTab] = useState<TabId>("overview");
   const [subjects, setSubjects] = useState<Row[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState<string | null>(null);
+  const isOverview = tab === "overview";
+  const publication = CONTENT_SECTIONS.find(item => item.id === tab);
+  const calendar = CALENDARS.find(item => item.id === tab);
+  const setting = SETTINGS.find(item => item.id === tab);
+  const dataType = tab === "examSchedule" ? "exams" : publication || calendar || tab === "subjects" || tab === "telegram" ? tab : null;
+  const {rows, failed: rowsFailed, reload} = useAdminRows(me?.authenticated && ["super_admin", "editor"].includes(me.role || "") ? dataType : null);
+  const [statsFailed, setStatsFailed] = useState(false);
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-
-  const loadTab = useCallback((t: TabId) => {
-    if (t === "users" || t === "tgcenter" || t === "audit") return;
-    if (t === "overview") {
-      fetch("/api/admin/stats", {cache: "no-store"}).then(r => r.json()).then(setStats).catch(() => setStats({databaseConfigured: false}));
-    } else {
-      setRows(null);
-      fetch(`/api/admin/content?type=${t}`, {cache: "no-store"}).then(r => r.json()).then(j => setRows(j.rows || [])).catch(() => setRows([]));
-    }
-  }, []);
 
   useEffect(() => {
     fetch("/api/admin/me", {cache: "no-store"})
@@ -131,9 +113,20 @@ export default function AdminDashboard(){
       .finally(() => setLoading(false));
   }, [router]);
 
-  useEffect(() => { if (me?.authenticated) loadTab(tab); }, [me, tab, loadTab]);
   useEffect(() => {
-    if (!me?.authenticated || !["super_admin", "editor"].includes(me.role || "")) return;
+    if (!me?.authenticated || !["super_admin", "editor"].includes(me.role || "") || (!isOverview && tab !== "services")) return;
+    const controller = new AbortController();
+    fetch(isOverview ? "/api/admin/stats?view=recent" : "/api/admin/stats", {cache: "no-store", signal: controller.signal})
+      .then(async response => {
+        if (!response.ok) throw new Error("Stats unavailable");
+        const data = await response.json();
+        if (!controller.signal.aborted) { setStats(data); setStatsFailed(false); }
+      })
+      .catch(() => { if (!controller.signal.aborted) setStatsFailed(true); });
+    return () => controller.abort();
+  }, [me, isOverview, tab]);
+  useEffect(() => {
+    if (!me?.authenticated) return;
     fetch("/api/public/content?type=subjects", {cache: "no-store"})
       .then(r => r.json()).then(j => setSubjects(j.content?.subjects || [])).catch(() => {});
   }, [me]);
@@ -143,23 +136,39 @@ export default function AdminDashboard(){
     router.push("/admin/login");
   };
 
-  const startAdd = () => {
+  function navigate(next: TabId) {
+    setTab(next);
+    setPublishing(false);
+    setPendingEdit(null);
+    setNotice("");
+    cancelEdit();
+  }
+
+  function startAdd(next: TabId = tab) {
+    navigate(next);
     setEditing({});
-    setForm(tab === "announcements" ? {scope: "general", section: "all", priority: "normal", pinned: "false"}
-      : tab === "exams" ? {status: "provisional", sections: JSON.stringify(["A", "B", "C", "F"])}
-      : tab === "assignments" ? {status: "active", sections: JSON.stringify(["A", "B", "C", "F"])} : {});
-  };
-  const startEdit = (row: Row) => {
+    setForm(next === "announcements" ? {scope: "general", section: "all", priority: "normal", pinned: "false"} : {});
+  }
+  const startEdit = useCallback((row: Row) => {
     setEditing(row);
     const f: Record<string, string> = {};
     for (const [k, v] of Object.entries(row)) f[k] = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v ?? "");
     setForm(f);
-  };
+    setNotice("");
+  }, []);
   const cancelEdit = () => { setEditing(null); setForm({}); };
+
+  useEffect(() => {
+    if (!pendingEdit || rows === null) return;
+    const row = rows.find(item => item.id === pendingEdit);
+    setPendingEdit(null);
+    if (row) startEdit(row);
+    else setNotice("تعذّر فتح المنشور. يمكنك اختياره من القائمة.");
+  }, [pendingEdit, rows, startEdit]);
 
   const {request, review} = usePublicationRequest();
 
-  const submit = async (e: React.FormEvent, type: Exclude<WritableTab, "lectures">) => {
+  const submit = async (e: React.FormEvent, type: "subjects" | "announcements" | "schedule") => {
     e.preventDefault();
     setBusy(true); setNotice("");
     try {
@@ -176,15 +185,19 @@ export default function AdminDashboard(){
       if (!response.ok) { setNotice(j.error || "فشل الحفظ"); return; }
       setNotice(j.action === "updated" ? "تم تحديث المنشور الموجود." : "تم الحفظ بنجاح");
       cancelEdit();
-      loadTab(tab);
+      reload();
     } catch { setNotice("بيانات غير صالحة — راجع قيم JSON"); }
     finally { setBusy(false); }
   };
 
   const remove = async (type: WritableTab, id: string) => {
     if (!confirm("حذف هذا السجل نهائيًا من قاعدة البيانات؟")) return;
-    const res = await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(id)}`, {method: "DELETE", headers: WRITE_HEADERS});
-    if (res.ok) { setNotice("تم الحذف"); loadTab(tab); } else setNotice("فشل الحذف");
+    try {
+      const res = await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(id)}`, {method: "DELETE", headers: WRITE_HEADERS});
+      if (!res.ok) throw new Error("Delete failed");
+      setNotice("تم الحذف");
+      reload();
+    } catch { setNotice("تعذّر حذف المحتوى."); }
   };
 
   if (loading) return <PageHeading title="لوحة الإدارة" description="جارٍ التحقق من الجلسة…"/>;
@@ -192,91 +205,108 @@ export default function AdminDashboard(){
   const passkeyLink = ["super_admin", "teacher", "section_representative", "general_representative"].includes(me.role || "")
     ? <a className="action-button secondary" href="/admin/passkeys">مفاتيح الدخول</a> : null;
   const canWrite = me.role === "super_admin" || me.role === "editor";
-  // Role-specific workspaces: representatives and teachers get a focused UI, not the full admin panel
-  if (!canWrite) return <><RoleWorkspace me={me}/><div style={{marginTop:18}}><AccountPanel/><div className="admin-actions">{passkeyLink}</div></div></>;
-  const tabs = me.role === "super_admin"
-    ? [...TABS, {id: "users" as const, label: "إدارة الحسابات", Icon: Users}, {id: "tgcenter" as const, label: "مركز Telegram", Icon: Send}, {id: "audit" as const, label: "سجل الأحداث", Icon: ShieldCheck}]
-    : TABS;
+  if (!canWrite) return <RoleWorkspace me={me} subjects={subjects} passkeyLink={passkeyLink} onLogout={logout}/>;
+  const owner = me.role === "super_admin";
+  const group = primaryTab(tab);
+  const recent = stats?.recentPublications?.filter(item => owner || item.type !== "examSchedule") || [];
+  const visibleRows = rows?.filter(row => tab === "exams" ? row.type === "كوز يومي" : tab === "examSchedule" ? row.type !== "كوز يومي" : true);
+  const listing = publication || calendar || tab === "subjects";
+  const sectionTitle = publication?.label || calendar?.label || setting?.label;
+  function saved() {
+    cancelEdit();
+    reload();
+    setNotice("تم الحفظ بنجاح.");
+  }
 
-  return <>
+  return <div className="admin-shell">
     {review}
-    <PageHeading title="لوحة الإدارة" description={`${me.email} · ${me.role}`} action={<button className="action-button secondary" onClick={logout}><LogOut size={16}/> خروج</button>}/>
-    {passkeyLink && <div className="admin-actions">{passkeyLink}</div>}
-    {me.role === "super_admin" && <div className="note" style={{marginBottom:16}}>🎫 إدارة طلبات الدعم والردود صارت داخل <strong>👑 لوحة المالك في بوت Telegram</strong> حصراً.</div>}
-    <div className="tabs admin-tabs">
-      {tabs.map(t => <button key={t.id} className={tab === t.id ? "selected" : ""} onClick={() => { setTab(t.id); cancelEdit(); }}><t.Icon size={15}/> {t.label}</button>)}
-    </div>
+    <PageHeading title="لوحة الإدارة" description={me.name || me.email} action={
+      <button type="button" className="action-button admin-publish" aria-expanded={publishing} onClick={() => setPublishing(value => !value)}><Plus size={18}/> نشر</button>
+    }/>
+    {publishing && <section className="panel admin-publish-picker" aria-label="نوع المنشور">
+      <div className="panel-heading"><h2>شنو تريد تنشر؟</h2></div>
+      <div className="panel-body admin-option-grid">{CONTENT_SECTIONS.map(({id, addLabel, Icon}) =>
+        <button type="button" key={id} className="admin-option" onClick={() => startAdd(id)}><Icon size={18}/>{addLabel}</button>
+      )}</div>
+    </section>}
+    <nav className="admin-primary-nav" aria-label="أقسام الإدارة">
+      {PRIMARY_TABS.map(({id, label, Icon}) => <button type="button" key={id} aria-current={group === id ? "page" : undefined} onClick={() => navigate(id)}><Icon size={19}/>{label}</button>)}
+    </nav>
 
     {notice && <p className="note" role="status">{notice}</p>}
 
-    {tab === "overview" && <>
-      <button className="action-button" onClick={() => {setTab("lectures"); startAdd();}}><Plus size={16}/> نشر محاضرة أو ملخص</button>
-      <div className="stats">
-        <div className="stat"><Database size={21}/><span>قاعدة البيانات</span><strong>{stats?.databaseConfigured ? "متصلة" : "غير مهيأة"}</strong></div>
-        {stats?.counts?.filter(c => c.table.startsWith("portal_")).map(c => (
-          <div className="stat" key={c.table}><ShieldCheck size={21}/><span>{c.table.replace("portal_", "")}</span><strong>{c.count}</strong></div>
-        ))}
+    {isOverview && <section className="panel">
+      <div className="panel-heading"><h2>آخر المنشورات</h2><button type="button" className="action-button secondary" onClick={() => navigate("content")}>كل المحتوى</button></div>
+      <div className="panel-body">
+        {statsFailed ? <Empty title="تعذّر تحميل آخر المنشورات" description="تگدر تفتح قسم المحتوى مباشرة."/> : !stats ? <p className="subtle" role="status">جارٍ تحميل المنشورات…</p> : recent.length ? <div className="stack">
+          {recent.map(item => <div className="list-row admin-content-row" key={item.type + item.id}>
+            <div className="grow"><strong>{item.title}</strong><p className="subtle small">{CONTENT_SECTIONS.find(section => section.id === item.type)?.label || "الميدتيرم والفاينل"}</p></div>
+            <button type="button" className="action-button secondary" onClick={() => {navigate(item.type); setPendingEdit(item.id);}}><Pencil size={15}/> تعديل</button>
+          </div>)}
+        </div> : <Empty title="ماكو منشورات حديثة" description="تگدر تضيف منشور من زر «نشر»."/>}
       </div>
-      <div className="two-col">
-        <div className="panel"><div className="panel-heading"><h2>آخر الإجراءات</h2></div><div className="panel-body">
-          {stats?.recentAudit?.length ? stats.recentAudit.map((a, i) => <div className="kv" key={i}><span>{a.action}</span><strong>{a.actor} · {new Date(a.created_at).toLocaleString("ar-IQ")}</strong></div>) : <Empty description="لا يوجد سجل بعد."/>}
-        </div></div>
-        <div className="panel"><div className="panel-heading"><h2>حالة الخدمات</h2></div><div className="panel-body">
-          <p className="subtle small">إشعارات (tg_*): {stats?.counts?.filter(c => c.table.startsWith("tg_")).map(c => `${c.table.replace("tg_", "")}: ${c.count}`).join(" · ") || "—"}</p>
-          <p className="subtle small">المستخدم الحالي: <Status tone="success">{me.role}</Status></p>
-          <p className="subtle small">الواجهة التجريبية القديمة: <a className="text-link" href="/admin-legacy">/admin-legacy</a> (محمية بنفس الجلسة)</p>
-        </div></div>
+    </section>}
+
+    {tab === "content" && <div className="admin-option-grid">{CONTENT_SECTIONS.map(({id, label, Icon}) =>
+      <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={21}/>{label}</button>
+    )}</div>}
+    {tab === "calendar" && <div className="admin-option-grid">{CALENDARS.filter(item => item.id !== "examSchedule" || owner).map(({id, label, Icon}) =>
+      <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={21}/>{label}</button>
+    )}</div>}
+    {tab === "more" && <div className="admin-option-grid">
+      {SETTINGS.filter(item => !("owner" in item) || owner).map(({id, label, Icon}) =>
+        <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={20}/>{label}</button>
+      )}
+      {owner && <a className="admin-option" href="/admin/passkeys"><KeyRound size={20}/>مفاتيح الدخول</a>}
+      <button type="button" className="admin-option" onClick={logout}><LogOut size={20}/> تسجيل الخروج</button>
+    </div>}
+
+    {tab === "telegram" && (rowsFailed ? <Empty title="تعذّر تحميل القنوات" description="حاول فتح القسم مجدداً."/> : <TelegramPanel onChanged={reload} canWrite={canWrite} rows={rows}/>)}
+    {tab === "users" && owner && <UsersTab/>}
+    {tab === "tgcenter" && owner && <TelegramCenterTab/>}
+    {tab === "audit" && owner && <AuditTab/>}
+    {tab === "services" && owner && <section className="panel">
+      <div className="panel-heading"><h2>حالة الخدمات</h2></div>
+      <div className="panel-body stack">
+        <div className="kv"><span>قاعدة البيانات</span><Status tone={stats?.databaseConfigured ? "success" : "warning"}>{statsFailed ? "تعذّر التحقق" : stats ? (stats.databaseConfigured ? "متصلة" : "غير مهيأة") : "جارٍ التحقق"}</Status></div>
+        {stats?.counts?.filter(item => item.table.startsWith("tg_")).map(item => <div className="kv" key={item.table}><span>{{tg_subscribers: "مشتركو البوت", tg_events: "أحداث الإشعارات", tg_deliveries: "عمليات إرسال الإشعارات"}[item.table]}</span><strong>{item.count}</strong></div>)}
+        <a className="text-link" href="/admin-legacy">لوحة الإدارة القديمة</a>
+        <p className="subtle small">إدارة طلبات الدعم والردود من لوحة المالك في بوت Telegram.</p>
       </div>
-    </>}
+    </section>}
 
-    {tab === "telegram" && <TelegramPanel onChanged={() => loadTab("telegram")} canWrite={canWrite} rows={rows}/>}
-
-    {tab === "users" && me.role === "super_admin" && <UsersTab/>}
-    {tab === "tgcenter" && me.role === "super_admin" && <TelegramCenterTab/>}
-    {tab === "audit" && me.role === "super_admin" && <AuditTab/>}
-
-    {tab !== "overview" && tab !== "telegram" && tab !== "users" && tab !== "tgcenter" && tab !== "audit" && <div className="panel">
-      <div className="panel-heading"><h2>{TABS.find(t => t.id === tab)?.label}</h2>
-        <span className="subtle small">{rows ? `${rows.length} سجل` : "…"}</span>
-        {canWrite && (editing === null ? <button className="action-button" onClick={startAdd}><Plus size={15}/> إضافة جديد</button> : <button className="action-button secondary" onClick={cancelEdit}><X size={15}/> إلغاء</button>)}
+    {listing && <section className="panel">
+      <div className="panel-heading">
+        <h2>{editing ? (editing.id ? "تعديل" : "إضافة") + " · " + sectionTitle : sectionTitle}</h2>
+        {editing ? <button type="button" className="action-button secondary" onClick={cancelEdit} disabled={busy}><X size={16}/> إلغاء</button> : <button type="button" className="action-button" onClick={() => startAdd()}><Plus size={16}/> إضافة</button>}
       </div>
       <div className="panel-body">
-        {canWrite && editing !== null && tab === "lectures" && <MaterialForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} rows={rows || []} onSaved={() => loadTab("lectures")}/>}
-        {canWrite && editing !== null && tab === "assignments" && <AssignmentForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} onSaved={() => {cancelEdit();loadTab("assignments");}}/>}
-        {canWrite && editing !== null && tab === "exams" && <ExamForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} onSaved={() => {cancelEdit();loadTab("exams");}}/>}
-        {canWrite && editing !== null && tab !== "lectures" && tab !== "assignments" && tab !== "exams" && <form className="admin-form" onSubmit={e => submit(e, tab)} style={{marginBottom: 18}}>
+        {editing && tab === "lectures" && <MaterialForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} rows={rows || []} onSaved={reload}/>}
+        {editing && tab === "assignments" && <AssignmentForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} onSaved={saved}/>}
+        {editing && (tab === "exams" || tab === "examSchedule") && <ExamForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} mode={tab === "examSchedule" ? "schedule" : "quiz"} onSaved={saved}/>}
+        {editing && (tab === "subjects" || tab === "announcements" || tab === "schedule") && <form className="admin-form" onSubmit={e => submit(e, tab)} style={{marginBottom: 18}}>
           {FIELDS[tab].filter(f => (f.k !== "id" || tab === "subjects") && (f.k !== "published_at" || !!editing.id)).map(f => (
             <label className={"form-field" + (f.area ? " wide" : "")} key={f.k}><span>{f.label}{f.req ? " *" : ""}</span>
-              {f.k === "subject_id" ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
+              {f.k === "subject_id" ? <select required={f.req} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
                 <option value="">اختر المادة</option>
                 {subjects.map(subject => <option key={String(subject.id)} value={String(subject.id)}>{String(subject.name)}</option>)}
                 {form[f.k] && !subjects.some(subject => subject.id === form[f.k]) && <option value={form[f.k]}>{form[f.k]}</option>}
-              </select> : f.k === "sections" ? <div className="section-pills">
-                {["A", "B", "C", "F"].map(section => <label key={section}>
-                  <input type="checkbox" checked={readSections(form.sections).includes(section)} onChange={e => {
-                    const selected = readSections(form.sections);
-                    const next = e.target.checked ? [...selected, section] : selected.filter(value => value !== section);
-                    setForm(v => ({...v, sections: JSON.stringify(next)}));
-                  }}/> {section}
-                </label>)}
-              </div> : f.select ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
+              </select> : f.select ? <select required={f.req} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>
                 <option value="">—</option>
-                {f.select.map(o => <option key={o} value={o}>{f.k === "material_kind" ? (o === "summary" ? "ملخص" : "محاضرة / ملزمة") : o}</option>)}
+                {f.select.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
-              : f.area ? <textarea rows={3} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>
-              : <input type={f.num ? "number" : "text"} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>}
+              : f.area ? <textarea required={f.req} rows={3} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>
+              : <input required={f.req} type={f.num ? "number" : "text"} value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}/>}
             </label>
           ))}
           <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}} disabled={busy}><ShieldCheck size={15}/> {busy ? "جارٍ الحفظ…" : "حفظ"}</button>
         </form>}
-        {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map((r, i) => <div className="list-row" key={String(r.id || i)}>
-          <div className="grow"><strong>{String(r.title || r.name || r.id)}</strong><p className="subtle small">{String(r.subject_id || r.section || "")}</p></div>
-          {canWrite && <button className="action-button secondary" title="تعديل" onClick={() => startEdit(r)}><Pencil size={14}/></button>}
-          {canWrite && <button className="action-button secondary" title="حذف" onClick={() => remove(tab as WritableTab, String(r.id))}><Trash2 size={14}/></button>}
-        </div>)}</div> : <Empty description="لا توجد بيانات بعد — استخدم «إضافة جديد»."/>}
+        {!editing && (rowsFailed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : !visibleRows ? <p className="subtle" role="status">جارٍ التحميل…</p> :
+          <ContentList key={tab} rows={visibleRows} subjects={subjects} onEdit={startEdit}
+            onRemove={row => void remove((tab === "examSchedule" ? "exams" : tab) as WritableTab, String(row.id))}/>)}
       </div>
-    </div>}
-  </>;
+    </section>}
+  </div>;
 }
 
 function TelegramPanel({onChanged, canWrite, rows}: {onChanged: () => void; canWrite: boolean; rows: Row[] | null}) {

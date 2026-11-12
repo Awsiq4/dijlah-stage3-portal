@@ -14,17 +14,19 @@ const isValidDay=(value:string)=>{
  return dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d;
 };
 
-export function ExamForm({account,initial,onSaved}:{
- account:PublishingAccount;initial?:Row;onSaved:()=>void;
+export function ExamForm({account,initial,mode="quiz",onSaved}:{
+ account:PublishingAccount;initial?:Row;mode?:"quiz"|"schedule";onSaved:()=>void;
 }) {
  const {request,review}=usePublicationRequest();
  const teacher=account.role==="teacher",rep=account.role==="section_representative";
- const owner=account.role==="super_admin";
+ const schedule=mode==="schedule"&&account.role==="super_admin";
+ const types=schedule?TYPES.slice(1):TYPES.slice(0,1);
+ const defaultKind=types[0];
  const [subjects,setSubjects]=useState<{id:string;name:string}[]>([]);
  const [subject,setSubject]=useState(String(initial?.subject_id||(teacher&&account.assigned_subjects?.length===1?account.assigned_subjects[0]:"")));
  const [sections,setSections]=useState<string[]>(Array.isArray(initial?.sections)?initial.sections.map(String):rep&&account.assigned_section?[account.assigned_section]:[...ALL]);
  const [title,setTitle]=useState(String(initial?.title||""));
- const [kind,setKind]=useState(owner?String(initial?.type||"كوز يومي"):"كوز يومي");
+ const [kind,setKind]=useState(String(initial?.type||defaultKind));
  const [date,setDate]=useState(String(initial?.date||""));
  const [time,setTime]=useState(String(initial?.start_time||""));
  const [room,setRoom]=useState(String(initial?.room||""));
@@ -52,7 +54,7 @@ export function ExamForm({account,initial,onSaved}:{
   if(busy)return;
   setNotice("");
   if(!available.some(s=>s.id===subject)||!title.trim()||title.trim().length>180||
-    !kind.trim()||kind.length>80||!sections.length||!sections.every(s=>allowed.includes(s))||
+    (!types.includes(kind)&&!(schedule&&kind===initial?.type))||!sections.length||!sections.every(s=>allowed.includes(s))||
     (rep&&!isAll&&(sections.length!==1||sections[0]!==account.assigned_section))) {
     setNotice("اختَر المادة والشعب والنوع واكتب عنواناً صحيحاً.");return;
   }
@@ -92,10 +94,11 @@ export function ExamForm({account,initial,onSaved}:{
    </select>
   </label>
   <label className="form-field"><span>نوع الامتحان *</span>
-    <select required value={kind} disabled={!owner} onChange={e=>setKind(e.target.value)}>
-      {TYPES.filter(t=>owner||t==="كوز يومي").map(t=><option key={t} value={t}>{t}</option>)}
+    <select required value={kind} disabled={!schedule} onChange={e=>setKind(e.target.value)}>
+      {Boolean(initial?.type) && !types.includes(kind) && <option value={kind}>{kind}</option>}
+      {types.map(t=><option key={t} value={t}>{t === "Midterm" ? "ميدتيرم" : t === "Final" ? "فاينل" : t}</option>)}
     </select>
-    {!owner&&<small>الميدتيرم والفاينل ضمن جدول الجامعة، ويضيفهما المالك فقط.</small>}
+
   </label>
   <label className="form-field wide"><span>عنوان الامتحان أو الكوز *</span>
    <input required maxLength={180} value={title} onChange={e=>setTitle(e.target.value)} placeholder="مثال: امتحان يومي في الفصل الثالث"/>

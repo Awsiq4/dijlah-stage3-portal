@@ -1,36 +1,53 @@
 "use client";
 import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import React,{useCallback,useEffect,useState} from "react";
-import {BookOpen,ClipboardList,FileQuestion,Megaphone,Paperclip,Plus,Send,Trash2,Users,Link2,Unlink} from "lucide-react";
+import {Plus,Send,Users,Link2,Unlink,Layers,Ellipsis,LogOut,X} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 import {AssignmentForm} from "./assignment-form";
 import {ExamForm} from "./exam-form";
+import {CONTENT_SECTIONS, ContentList, useAdminRows, type PublicationType} from "./content-navigation";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
 type Row = Record<string, unknown>;
 const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"};
 
-// ---------- role-specific workspace (representatives & teachers) ----------
-export function RoleWorkspace({me}: {me: Me}) {
+export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
+  me: Me;
+  subjects: Row[];
+  passkeyLink: React.ReactNode;
+  onLogout: () => Promise<void>;
+}) {
   const {request, review} = usePublicationRequest();
   const isRep = me.role === "section_representative" || me.role === "general_representative";
-  const [type, setType] = useState<"announcements" | "lectures" | "assignments" | "exams">("lectures");
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const canPublish = TELEGRAM_STAFF_ROLES.includes(me.role || "");
+  const sections = CONTENT_SECTIONS.filter(item => item.id !== "announcements" || isRep);
+  const [type, setType] = useState<PublicationType>("lectures");
+  const [more, setMore] = useState(!canPublish);
+  const [publishing, setPublishing] = useState(false);
+  const [editing, setEditing] = useState<Row | null>(null);
+  const {rows, failed, reload} = useAdminRows(!more && canPublish ? type : null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = useCallback(() => {
-    let active = true;
-    fetch(`/api/admin/content?type=${type}`, {cache: "no-store"})
-      .then(response => response.json())
-      .then(data => { if (active) setRows(data.rows || []); })
-      .catch(() => { if (active) setRows([]); });
-    return () => { active = false; };
-  }, [type]);
-  useEffect(() => load(), [load]);
+
+  function changeSection(next: PublicationType, draft: Row | null = null) {
+    setType(next);
+    setMore(false);
+    setPublishing(false);
+    setNotice("");
+    setEditing(draft);
+    setTitle(String(draft?.title || ""));
+    setBody(String(draft?.body || ""));
+  }
+
+  function saved() {
+    setEditing(null);
+    setNotice("تم الحفظ بنجاح.");
+    reload();
+  }
 
   async function publishAnnouncement(event: React.FormEvent) {
     event.preventDefault();
@@ -39,53 +56,75 @@ export function RoleWorkspace({me}: {me: Me}) {
     setNotice("");
     const ownSection = me.role === "section_representative";
     const row = {
-      id: `web-${crypto.randomUUID()}`, title: title.trim(), body: body.trim(),
-      scope: ownSection ? "section" : "general", section: ownSection ? me.assigned_section : "all",
-      priority: "normal", published_at: new Date().toISOString(), pinned: "false",
+      id: editing?.id || `web-${crypto.randomUUID()}`, title: title.trim(), body: body.trim(),
+      scope: editing?.scope || (ownSection ? "section" : "general"),
+      section: editing?.section || (ownSection ? me.assigned_section : "all"),
+      subject_id: editing?.subject_id, priority: editing?.priority || "normal",
+      published_at: editing?.published_at || new Date().toISOString(), pinned: editing?.pinned ?? false,
     };
     try {
-      const {response, data} = await request(type, row);
-      if (!response.ok) { setNotice(data.error || "تعذّر نشر التبليغ."); return; }
-      setTitle(""); setBody(""); setNotice(data.action === "updated" ? "تم تحديث التبليغ." : "تم نشر التبليغ."); load();
-    } catch { setNotice("تعذّر نشر التبليغ. حاول مرة ثانية."); }
+      const {response, data} = await request("announcements", row);
+      if (!response.ok) { setNotice(data.error || "تعذّر حفظ التبليغ."); return; }
+      saved();
+    } catch { setNotice("تعذّر حفظ التبليغ. حاول مرة ثانية."); }
     finally { setBusy(false); }
   }
 
-  async function remove(id: string) {
+  async function remove(row: Row) {
     if (!confirm("حذف هذا المحتوى؟")) return;
-    const response = await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(id)}`, {method: "DELETE", headers: WRITE_HEADERS});
-    if (response.ok) load();
-    else setNotice("تعذّر حذف المحتوى.");
+    try {
+      const response = await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(String(row.id))}`, {method: "DELETE", headers: WRITE_HEADERS});
+      if (!response.ok) throw new Error("Delete failed");
+      setNotice("تم الحذف.");
+      reload();
+    } catch { setNotice("تعذّر حذف المحتوى."); }
   }
 
-  return <>
+  const current = sections.find(item => item.id === type);
+  const initial = editing?.id ? editing : undefined;
+  return <div className="admin-shell">
     {review}
-    <PageHeading title={type === "lectures" ? "نشر ملف PDF" : type === "assignments" ? "الواجبات والتكاليف" : type === "exams" ? "الامتحانات والكوزات" : "نشر تبليغ"} description={me.name || me.email}/>
-    <div className="tabs admin-tabs">
-      <button className={type === "lectures" ? "selected" : ""} onClick={() => {setType("lectures"); setRows(null); setNotice("");}}>محاضرة أو ملخص</button>
-      {isRep&&<button className={type === "announcements" ? "selected" : ""} onClick={() => {setType("announcements"); setRows(null); setNotice("");}}>تبليغ</button>}
-      <button className={type === "assignments" ? "selected" : ""} onClick={() => {setType("assignments"); setRows(null); setNotice("");}}>الواجبات والتكاليف</button>
-      <button className={type === "exams" ? "selected" : ""} onClick={() => {setType("exams"); setRows(null); setNotice("");}}>الامتحانات والكوزات</button>
-    </div>
-    <div className="panel"><div className="panel-body">
-      {type === "lectures" ? <MaterialForm account={me} rows={rows || []} onSaved={() => { load(); }}/> :
-       type === "assignments" ? <AssignmentForm account={me} onSaved={()=>load()}/> :
-       type === "exams" ? <ExamForm account={me} onSaved={()=>load()}/> :
-        <form className="admin-form" onSubmit={publishAnnouncement}>
-          <label className="form-field wide"><span>العنوان</span><input required value={title} onChange={e => setTitle(e.target.value)}/></label>
-          <label className="form-field wide"><span>نص التبليغ</span><textarea required rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
-          <button className="action-button" disabled={busy}><Send size={15}/> {busy ? "جارٍ النشر…" : "نشر التبليغ"}</button>
-        </form>}
+    <PageHeading title="لوحة الإدارة" description={me.name || me.email} action={canPublish &&
+      <button type="button" className="action-button admin-publish" aria-expanded={publishing} onClick={() => setPublishing(value => !value)}><Plus size={18}/> نشر</button>}/>
+    {publishing && <section className="panel">
+      <div className="panel-heading"><h2>شنو تريد تنشر؟</h2></div>
+      <div className="panel-body admin-option-grid">{sections.map(({id, addLabel, Icon}) =>
+        <button type="button" key={id} className="admin-option" onClick={() => changeSection(id, {})}><Icon size={18}/>{addLabel}</button>)}</div>
+    </section>}
+    <nav className="admin-primary-nav" aria-label="أقسام الإدارة">
+      {canPublish && <button type="button" aria-current={!more ? "page" : undefined} onClick={() => changeSection(type)}><Layers size={19}/> المحتوى</button>}
+      <button type="button" aria-current={more ? "page" : undefined} onClick={() => {changeSection(type); setMore(true);}}><Ellipsis size={19}/> المزيد</button>
+    </nav>
+    {more ? <>
+      <AccountPanel/>
+      <div className="admin-option-grid">{passkeyLink}<button type="button" className="admin-option" onClick={onLogout}><LogOut size={19}/> تسجيل الخروج</button></div>
+    </> : canPublish && <>
+      <div className="tabs admin-tabs" aria-label="نوع المحتوى">
+        {sections.map(({id, label}) => <button type="button" key={id} aria-pressed={id === type} className={id === type ? "selected" : ""} onClick={() => changeSection(id)}>{label}</button>)}
+      </div>
       {notice && <p className="note" role="status">{notice}</p>}
-    </div></div>
-    <div className="panel"><div className="panel-heading"><h2>{type === "lectures" ? "ملفاتي" : type === "assignments" ? "تكاليفي" : type === "exams" ? "امتحاناتي" : "تبليغاتي"}</h2></div><div className="panel-body">
-      {rows === null ? <Empty description="جارٍ التحميل…"/> : !rows.length ? <Empty description="لا يوجد محتوى منشور بعد."/> : rows.map(row =>
-        <div className="list-row" key={String(row.id)}>
-          <div className="grow"><strong>{String(row.title || row.id)}</strong></div>
-          <button className="action-button secondary" aria-label="حذف" onClick={() => remove(String(row.id))}><Trash2 size={14}/></button>
-        </div>)}
-    </div></div>
-  </>;
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>{editing ? (initial ? "تعديل" : "إضافة") + " · " + current?.label : current?.label}</h2>
+          {editing ? <button type="button" className="action-button secondary" disabled={busy} onClick={() => changeSection(type)}><X size={16}/> إلغاء</button> :
+            <button type="button" className="action-button" onClick={() => changeSection(type, {})}><Plus size={16}/> إضافة</button>}
+        </div>
+        <div className="panel-body">
+          {editing ? type === "lectures" ? <MaterialForm key={String(initial?.id || "new")} account={me} initial={initial} rows={rows || []} onSaved={reload}/> :
+            type === "assignments" ? <AssignmentForm key={String(initial?.id || "new")} account={me} initial={initial} onSaved={saved}/> :
+            type === "exams" ? <ExamForm key={String(initial?.id || "new")} account={me} initial={initial} onSaved={saved}/> :
+            <form className="admin-form" onSubmit={publishAnnouncement}>
+              <label className="form-field wide"><span>العنوان</span><input required value={title} onChange={e => setTitle(e.target.value)}/></label>
+              <label className="form-field wide"><span>نص التبليغ</span><textarea required rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
+              <button className="action-button" disabled={busy}><Send size={15}/> {busy ? "جارٍ الحفظ…" : initial ? "حفظ التعديلات" : "نشر التبليغ"}</button>
+            </form>
+          : failed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : rows ?
+            <ContentList key={type} rows={type === "exams" ? rows.filter(row => row.type === "كوز يومي") : rows} subjects={subjects} onEdit={row => changeSection(type, row)} onRemove={row => void remove(row)}/> :
+            <p className="subtle" role="status">جارٍ تحميل المحتوى…</p>}
+        </div>
+      </section>
+    </>}
+  </div>;
 }
 
 // ---------- super admin: إدارة الحسابات والصلاحيات ----------
