@@ -64,9 +64,9 @@ export async function listCoursework(admin:AdminInfo,kind:CourseworkKind,page=0)
   return {rows:rows.filter(row=>permitted(admin,kind,row)),total};
 }
 export async function getCoursework(admin:AdminInfo,kind:CourseworkKind,id:string,
-    db:Queryer={q,qOne}):Promise<CourseworkRow|null>{
+    db:Queryer={q,qOne}, lock=false):Promise<CourseworkRow|null>{
   if(!isActive(admin)||!id||id.length>160)return null;
-  const row=await db.qOne<CourseworkRow>(`SELECT * FROM ${table(kind)} WHERE id=$1`,[id]);
+  const row=await db.qOne<CourseworkRow>(`SELECT * FROM ${table(kind)} WHERE id=$1${lock?" FOR UPDATE":""}`,[id]);
   return row&&permitted(admin,kind,row)?row:null;
 }
 function cleanValue(kind:CourseworkKind,field:Field,input:unknown):{value:unknown;error?:string}{
@@ -94,13 +94,14 @@ function cleanValue(kind:CourseworkKind,field:Field,input:unknown):{value:unknow
   return {value:s};
 }
 export async function changeCoursework(admin:AdminInfo,kind:CourseworkKind,id:string,
- field:Field,raw:unknown,expected:unknown):Promise<Result> {
+ field:Field,raw:unknown,expected:unknown,source:"web"|"telegram"="telegram"):Promise<Result> {
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
   const {value,error}=cleanValue(kind,field,raw);
   if(error)return {ok:false,error};
   return withTx<Result>(async tx=>{
-    const row=await getCoursework(admin,kind,id,tx);
+    const row=await getCoursework(admin,kind,id,tx,true);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
+    if(same(row[field],value))return {ok:true,row};
     if(!same(row[field],expected))return {ok:false,error:"تغيرت بيانات المنشور من حساب آخر. افتح المنشور مجدداً"};
     const proposed={...row,[field]:value} as CourseworkRow;
     if(!permitted(admin,kind,proposed))return {ok:false,error:"التعديل خارج صلاحية حسابك"};
@@ -111,29 +112,29 @@ export async function changeCoursework(admin:AdminInfo,kind:CourseworkKind,id:st
       if(scheduleError)return {ok:false,error:scheduleError};
     }
     await tx.q(`UPDATE ${table(kind)} SET ${field}=$2 WHERE id=$1`,[id,field==="sections"?JSON.stringify(value):value]);
-    await audit(admin.email||`admin#${admin.id}`,"content.edit.telegram.coursework",
+    await audit(admin.email||`admin#${admin.id}`,`content.edit.${source}.coursework`,
       {kind,id,field},tx);
     return {ok:true,row:proposed};
   }).catch(()=>({ok:false,error:"تعذّر حفظ التعديل، حاول مرة ثانية"}));
 }
 export async function archiveCoursework(admin:AdminInfo,kind:CourseworkKind,id:string,
- archive:boolean):Promise<Result>{
+ archive:boolean,source:"web"|"telegram"="telegram"):Promise<Result>{
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
   return withTx<Result>(async tx=>{
-    const row=await getCoursework(admin,kind,id,tx);
+    const row=await getCoursework(admin,kind,id,tx,true);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     if(Boolean(row.archived_at)===archive)return {ok:true,row};
     await tx.q(`UPDATE ${table(kind)} SET archived_at=$2 WHERE id=$1`,
       [id,archive?new Date().toISOString():null]);
     await audit(admin.email||`admin#${admin.id}`,
-      archive?"content.archive.telegram.coursework":"content.restore.telegram.coursework",{kind,id},tx);
+      `content.${archive?"archive":"restore"}.${source}.coursework`,{kind,id},tx);
     return {ok:true,row:{...row,archived_at:archive?new Date().toISOString():null}};
   }).catch(()=>({ok:false,error:"تعذّرت العملية"}));
 }
 export async function deleteCoursework(admin:AdminInfo,kind:CourseworkKind,id:string):Promise<Result>{
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
   return withTx<Result>(async tx=>{
-    const row=await getCoursework(admin,kind,id,tx);
+    const row=await getCoursework(admin,kind,id,tx,true);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     await tx.q(`DELETE FROM ${table(kind)} WHERE id=$1`,[id]);
     await audit(admin.email||`admin#${admin.id}`,

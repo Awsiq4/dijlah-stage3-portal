@@ -785,3 +785,20 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
   .admin-home-icon svg{width:17px;height:17px}
   .admin-home-arrow{display:none}
 }
+
+.admin-preview-card{margin:12px 0}
+.admin-preview-card h3{margin:0;font-size:1rem}
+.admin-preview-text{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.admin-archive-toggle{margin-bottom:10px}
+.admin-quick-form{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.admin-quick-form .form-field{flex:1;min-width:140px}
+@media (max-width:1049px){
+  .admin-content-table .admin-quick-control{display:none}
+}
+@media (max-width:420px){
+  .admin-table-actions .action-button{min-width:40px}
+}
+
+.student-week-link{color:var(--text);text-decoration:none}
+.student-week-link svg{flex:none;color:var(--primary)}
+:is([id^="assignment-"],[id^="exam-"],[id^="slot-"]){scroll-margin-top:100px}

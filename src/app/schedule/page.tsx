@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import {CalendarDays} from "lucide-react";
+import {useDetailAnchor} from "@/lib/use-detail-anchor";
 import {usePortal} from "@/lib/storage";
 import {DAYS,getSubject} from "@/lib/seed";
 import {Empty,PageHeading,Status} from "@/components/UI";
@@ -16,9 +17,12 @@ export default function Schedule(){
  const [view,setView]=useState<"day"|"week">("day");
  useEffect(()=>{
   try{
+   const requested = new URLSearchParams(window.location.search).get("day");
+   if(requested !== null && /^[0-6]$/.test(requested)){setDay(Number(requested));return;}
    if(window.matchMedia("(min-width:1081px)").matches)setView("week");
   }catch(e){}
  },[]);
+ useDetailAnchor(data.schedule, day, view);
  const slots=data.schedule.filter(s=>s.section===section&&s.day===day).sort((a,b)=>a.start.localeCompare(b.start));
  const displayName=(s:{subjectId:string;kind:string;note:string})=>{
   const base=getSubject(data,s.subjectId)?.name||"مادة غير معرّفة";
@@ -33,7 +37,7 @@ export default function Schedule(){
   <div className="day-picker">{DAY_ORDER.map(n=><button key={n} onClick={()=>{setDay(n);setView("day");}} className={`${day===n&&view==="day"?"active":""} day-${n}`}>{DAYS[n]}{n===1&&<small className="rest-tag">استراحة</small>}</button>)}</div>
   {view==="day"&&<div className="panel"><div className="panel-heading"><h2><CalendarDays size={20}/> {DAYS[day]}</h2><span className="subtle">{day===1?"استراحة الطلبة":`${slots.length} محاضرة · ${slots.reduce((a,s)=>a+(s.periods?.length||1),0)} حصة`}</span></div>
    <div className="panel-body">
-    {day===1?<Empty title="استراحة الطلبة" description="يوم الاثنين يوم استراحة — لا توجد محاضرات في جدول 2026-2027."/>:slots.length?slots.map(slot=><div className={`schedule-row day-accent-${day}`} key={slot.id}>
+    {day===1&&!slots.some(slot=>slot.status!=="normal")?<Empty title="استراحة الطلبة" description="يوم الاثنين يوم استراحة — لا توجد محاضرات في جدول 2026-2027."/>:slots.length?slots.map(slot=><div className={`schedule-row day-accent-${day}`} key={slot.id} id={"slot-"+slot.id}>
      <div className="schedule-time"><strong>{slot.start}</strong><small>{slot.end}</small></div>
      <div className="grow">
       <strong>{displayName(slot)}</strong>

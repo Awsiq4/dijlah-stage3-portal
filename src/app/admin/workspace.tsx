@@ -1,6 +1,6 @@
 "use client";
 import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
-import React,{useCallback,useEffect,useState} from "react";
+import React,{useCallback,useEffect,useRef,useState} from "react";
 import {Plus,Send,Users,Link2,Unlink,Layers,Ellipsis,LogOut,X,KeyRound} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {usePublicationRequest} from "./publication-review";
@@ -20,18 +20,23 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
   onLogout: () => Promise<void>;
 }) {
   const {request, review} = usePublicationRequest();
-  const isRep = me.role === "section_representative" || me.role === "general_representative";
+  const teacher = me.role === "teacher";
   const canPublish = TELEGRAM_STAFF_ROLES.includes(me.role || "");
-  const sections = CONTENT_SECTIONS.filter(item => item.id !== "announcements" || isRep);
+  const sections = CONTENT_SECTIONS;
   const [type, setType] = useState<PublicationType>("lectures");
   const [more, setMore] = useState(!canPublish);
   const [publishing, setPublishing] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
   const {rows, failed, reload} = useAdminRows(!more && canPublish ? type : null);
   const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState("");
+  const [audience, setAudience] = useState("");
+  const teachingSubjects = subjects.filter(item => me.assigned_subjects?.includes(String(item.id)));
+  const allowedSections = me.perms?.teacher_sections?.[subject] ?? ["A", "B", "C", "F"];
   const [body, setBody] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const draftId = useRef("");
 
   function changeSection(next: PublicationType, draft: Row | null = null) {
     setType(next);
@@ -39,7 +44,10 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
     setPublishing(false);
     setNotice("");
     setEditing(draft);
+    draftId.current = "";
     setTitle(String(draft?.title || ""));
+    setSubject(String(draft?.subject_id || (teachingSubjects.length === 1 ? teachingSubjects[0].id : "")));
+    setAudience(String(draft?.section || ""));
     setBody(String(draft?.body || ""));
   }
 
@@ -52,18 +60,25 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
   async function publishAnnouncement(event: React.FormEvent) {
     event.preventDefault();
     if (!title.trim() || !body.trim() || busy) return;
+    if (teacher && (!teachingSubjects.some(item => item.id === subject) || !audience ||
+        (audience === "all" ? allowedSections.length !== 4 : !allowedSections.includes(audience)))) {
+      setNotice("اختر المادة والشعبة المتاحة للنشر.");
+      return;
+    }
     setBusy(true);
     setNotice("");
     const ownSection = me.role === "section_representative";
+    if (!draftId.current) draftId.current = `web-${crypto.randomUUID()}`;
     const row = {
-      id: editing?.id || `web-${crypto.randomUUID()}`, title: title.trim(), body: body.trim(),
-      scope: editing?.scope || (ownSection ? "section" : "general"),
-      section: editing?.section || (ownSection ? me.assigned_section : "all"),
-      subject_id: editing?.subject_id, priority: editing?.priority || "normal",
+      id: editing?.id || draftId.current, title: title.trim(), body: body.trim(),
+      scope: teacher ? "teacher" : editing?.scope || (ownSection ? "section" : "general"),
+      section: teacher ? audience : editing?.section || (ownSection ? me.assigned_section : "all"),
+      subject_id: teacher ? subject : editing?.subject_id, priority: editing?.priority || "normal",
       published_at: editing?.published_at || new Date().toISOString(), pinned: editing?.pinned ?? false,
     };
     try {
-      const {response, data} = await request("announcements", row);
+      const {response, data} = await request("announcements", row, {editing: Boolean(editing?.id), subject: String(teachingSubjects.find(item => item.id === subject)?.name || "")});
+      if (data.cancelled) return;
       if (!response.ok) { setNotice(data.error || "تعذّر حفظ التبليغ."); return; }
       saved();
     } catch { setNotice("تعذّر حفظ التبليغ. حاول مرة ثانية."); }
@@ -71,7 +86,7 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
   }
 
   async function remove(row: Row) {
-    if (!confirm("حذف هذا المحتوى؟")) return;
+    if (!confirm("حذف هذا المحتوى نهائيًا؟")) return;
     try {
       const response = await fetch(`/api/admin/content?type=${type}&id=${encodeURIComponent(String(row.id))}`, {method: "DELETE", headers: WRITE_HEADERS});
       if (!response.ok) throw new Error("Delete failed");
@@ -120,7 +135,7 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
           </div>
           <div className="panel-body">
             {failed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : rows ?
-              <ContentList key={type} kind={type} rows={type === "exams" ? rows.filter(row => row.type === "كوز يومي") : rows} subjects={subjects}
+              <ContentList key={type} onChanged={reload} kind={type} rows={type === "exams" ? rows.filter(row => row.type === "كوز يومي") : rows} subjects={subjects}
                 selected={initial?.id ? String(initial.id) : undefined} onEdit={row => changeSection(type, row)} onRemove={row => {
                   if (row.id === initial?.id) setNotice("أغلق نموذج التعديل قبل حذف هذا المنشور.");
                   else void remove(row);
@@ -138,6 +153,17 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
             type === "assignments" ? <AssignmentForm key={String(initial?.id || "new")} account={me} initial={initial} onSaved={saved}/> :
             type === "exams" ? <ExamForm key={String(initial?.id || "new")} account={me} initial={initial} onSaved={saved}/> :
             <form className="admin-form" onSubmit={publishAnnouncement}>
+              {teacher && <>
+                <label className="form-field"><span>المادة</span><select required value={subject} onChange={event => {setSubject(event.target.value); setAudience("");}}>
+                  <option value="">اختر المادة</option>
+                  {teachingSubjects.map(item => <option key={String(item.id)} value={String(item.id)}>{String(item.name)}</option>)}
+                </select></label>
+                <label className="form-field"><span>الشعبة</span><select required value={audience} disabled={!subject} onChange={event => setAudience(event.target.value)}>
+                  <option value="">اختر الشعبة</option>
+                  {allowedSections.length === 4 && <option value="all">كل الشعب</option>}
+                  {allowedSections.map(section => <option key={section} value={section}>{section}</option>)}
+                </select></label>
+              </>}
               <label className="form-field wide"><span>العنوان</span><input required value={title} onChange={e => setTitle(e.target.value)}/></label>
               <label className="form-field wide"><span>نص التبليغ</span><textarea required rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
               <button className="action-button" disabled={busy}><Send size={15}/> {busy ? "جارٍ الحفظ…" : initial ? "حفظ التعديلات" : "نشر التبليغ"}</button>

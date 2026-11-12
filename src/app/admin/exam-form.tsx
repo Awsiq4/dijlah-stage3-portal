@@ -72,7 +72,8 @@ export function ExamForm({account,initial,mode="quiz",onSaved}:{
    if(!id.current)id.current="web-"+crypto.randomUUID();
    const row={id:id.current,subject_id:subject,title:title.trim(),type:kind.trim(),date,
      start_time:time,room:room.trim(),topics:topics.trim(),notes:notes.trim(),sections,status};
-   const {response,data}=await request("exams",row);
+   const {response,data}=await request("exams",row,{editing:Boolean(initial),subject:available.find(item=>item.id===subject)?.name});
+   if(data.cancelled)return;
    if(!response.ok){setNotice(data.error||"تعذّر نشر الامتحان.");return;}
    setNotice(initial?"✅ تم حفظ تعديلات الامتحان.":"✅ تم نشر موعد الامتحان.");
    if(!initial){

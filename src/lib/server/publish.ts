@@ -102,6 +102,13 @@ function handlePublicationConflict(error: unknown): PublishFail {
   throw error;
 }
 
+export function publicationQueuesTelegram(type: WritableContentType, row: Record<string, unknown>) {
+  if (!telegramServiceEnabled()) return false;
+  if (type === "lectures") return row.status === "published";
+  if (type === "exams") return row.status !== "cancelled" && Array.isArray(row.sections) && row.sections.length > 0;
+  return type === "announcements" || (type === "assignments" && Array.isArray(row.sections) && row.sections.length > 0);
+}
+
 async function enqueueNewPublication(db: Queryer, type: WritableContentType, row: Record<string, unknown>) {
   const {createEvent} = await import("./notify.ts");
   const eventIds: number[] = [];
@@ -287,7 +294,10 @@ export async function applyContentUpsert(
   if (type === "assignments" && !validAssignmentDay(String(clean.due_at || ""))) {
     throw Object.assign(new Error("يجب تحديد يوم التسليم بالتاريخ فقط دون ساعة"), {status: 400});
   }
-  if (type === "announcements" && (!clean.scope || clean.scope === "general")) clean.section = "all";
+  if (type === "announcements") {
+    if (!clean.scope || clean.scope === "general") clean.section = "all";
+    if (!canManageAllContent(admin.role)) clean.author = admin.name || "";
+  }
   const scoped = !canManageAllContent(admin.role);
   const owner = scoped ? {id: admin.id, source} : undefined;
   if (!canWriteContentRecord(admin, type, clean)) {
@@ -304,6 +314,7 @@ export async function applyContentUpsert(
   }
   let newPublication = false;
   if (type === "assignments" || type === "exams") {
+    await lockPublication(tx, type);
     const existing = await tx.qOne<{id: string}>(`SELECT id FROM ${SCHEMAS[type].table} WHERE id=$1`, [id]);
     newPublication = !existing;
   }
@@ -333,7 +344,7 @@ export async function applyContentUpsert(
   }
   if (type === "lectures") await tx.q("UPDATE portal_lectures SET file_sha256=$2 WHERE id=$1", [id, hash]);
   await audit(admin.email || `admin#${admin.id}`, `content.upsert.${type}`, {id, source}, tx);
-  if (newPublication && (type !== "exams" || clean.status !== "cancelled") && telegramServiceEnabled()) {
+  if (newPublication && publicationQueuesTelegram(type, clean)) {
     return {ok: true, id, inserted: true, notificationEvents: await enqueueNewPublication(tx, type, clean)};
   }
 }
@@ -420,7 +431,8 @@ export async function archiveContent(admin: AdminInfo, type: "announcements" | "
   return withTx(async tx => {
     await lockPublication(tx, type);
     const row = await loadOwnedRow(tx, admin, type, id);
-    if (!row) return fail("forbidden: not found or not yours");
+    if (!row || !canWriteContentRecord(admin, type, row)) return fail("forbidden: not found or outside your scope");
+    if (Boolean(row.archived_at) === archive) return {ok: true, id, inserted: false} as PublishOk;
     if (!archive && (type === "announcements" || row.status === "published")) {
       await checkPublication(tx, admin, type, row, typeof row.file_sha256 === "string" ? row.file_sha256 : null, {}, false);
     }

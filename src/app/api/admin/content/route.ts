@@ -1,13 +1,15 @@
 import {after, NextRequest, NextResponse} from "next/server";
 import {requireAdmin} from "@/lib/server/auth";
 import {listContent, deleteContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
-import {withTx} from "@/lib/server/db";
+import {qOne, withTx} from "@/lib/server/db";
 import {dbConfigured} from "@/lib/server/flags";
 import {canModifyContent, canManageAllContent, canUseTelegramPublishing, canWriteContentRecord} from "@/lib/server/rbac";
 import {indexLegacyPdfFiles, pdfFingerprint, lockPublication, PublicationConflict} from "@/lib/server/publication-dedup";
 import {sanitizeRow} from "@/lib/server/content-schema";
 import {drainQueue} from "@/lib/server/notify";
-import {applyContentUpsert} from "@/lib/server/publish";
+import {applyContentUpsert, archiveContent, publicationQueuesTelegram} from "@/lib/server/publish";
+
+import {archiveCoursework, changeCoursework} from "@/lib/server/bot-coursework-manage";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({error: "row.id required"}, {status: 400});
   }
   try {
+    if (body.preview === true) {
+      const type: unknown = body.type;
+      if (type !== "lectures" && type !== "announcements" && type !== "assignments" && type !== "exams") {
+        return NextResponse.json({error: "المعاينة غير متاحة لهذا القسم."}, {status: 400});
+      }
+      const clean = sanitizeRow(type, body.row);
+      if (type === "announcements" && (!clean.scope || clean.scope === "general")) clean.section = "all";
+      if (!canWriteContentRecord(admin, type, clean)) throw new ForbiddenError("المحتوى خارج صلاحيات حسابك.");
+      const existing = await qOne<{created_by: number | null}>(`SELECT created_by FROM ${SCHEMAS[type].table} WHERE id=$1`, [clean.id]);
+      if (existing && !canModifyContent(admin, existing)) throw new ForbiddenError("المحتوى خارج صلاحيات حسابك.");
+      if (!canManageAllContent(admin.role) && type !== "announcements" && (!Array.isArray(clean.sections) || !clean.sections.length)) {
+        clean.sections = ["A", "B", "C", "F"];
+      }
+      const queuesTelegram = !existing && publicationQueuesTelegram(type, clean);
+      return NextResponse.json({
+        queuesTelegram,
+        pendingDeduplication: queuesTelegram && (type === "lectures" || type === "announcements"),
+      });
+    }
     const lecture = body.type === "lectures" ? sanitizeRow("lectures", body.row) : null;
     const [hash] = lecture && canWriteContentRecord(admin, "lectures", lecture)
       ? await Promise.all([pdfFingerprint(String(lecture.file_url || "")), indexLegacyPdfFiles(String(lecture.subject_id || ""))])
@@ -68,6 +89,38 @@ export async function POST(req: NextRequest) {
     const msg = e.message || "error";
     const status = /مطلوب|غير صالح|JSON|قيمة غير مسموحة|تعذّر التحقق/.test(msg) ? 400 : 500;
     return NextResponse.json({error: status === 400 ? msg : "Server error"}, {status});
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const admin = await requireAdmin(req, {write: true});
+  if (!admin) return NextResponse.json({error: "جلسة الدخول غير متاحة."}, {status: 401});
+  if (!dbConfigured()) return NextResponse.json({error: "تعذّر الاتصال بقاعدة البيانات."}, {status: 503});
+  const body = await req.json().catch(() => null);
+  const {type, id, action} = body || {};
+  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(id) ||
+      !["assignments", "exams", "lectures", "announcements"].includes(type) ||
+      !["archive", "restore", "quick-edit"].includes(action)) {
+    return NextResponse.json({error: "الطلب غير صالح."}, {status: 400});
+  }
+  try {
+    if (action === "quick-edit") {
+      if ((type !== "assignments" && type !== "exams") || typeof body.value !== "string" || typeof body.expected !== "string") {
+        return NextResponse.json({error: "التعديل السريع غير متاح لهذا الحقل."}, {status: 400});
+      }
+      const result = await changeCoursework(admin, type === "assignments" ? "a" : "q", id,
+        type === "assignments" ? "due_at" : "status", body.value, body.expected, "web");
+      return NextResponse.json(result, {status: result.ok ? 200 : 409});
+    }
+    const archive = action === "archive";
+    const result = type === "lectures" || type === "announcements"
+      ? await archiveContent(admin, type, id, archive)
+      : await archiveCoursework(admin, type === "assignments" ? "a" : "q", id, archive, "web");
+    if (result.ok) return NextResponse.json({ok: true});
+    const error = result.error.startsWith("forbidden") ? "المنشور غير موجود أو خارج صلاحيات حسابك." : result.error;
+    return NextResponse.json({error}, {status: 409});
+  } catch {
+    return NextResponse.json({error: "تعذّر إكمال العملية."}, {status: 500});
   }
 }
 

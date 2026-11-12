@@ -1,5 +1,5 @@
 "use client";
-import React,{useEffect,useState} from "react";
+import React,{useEffect,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
 import {BellRing,CalendarDays,FileQuestion,LogOut,ShieldCheck,Database,Send,Pencil,Plus,X,GraduationCap,Users,House,Layers,Ellipsis,KeyRound,ChevronLeft} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
@@ -107,6 +107,7 @@ export default function AdminDashboard(){
   const [editing, setEditing] = useState<Row | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const draftId = useRef("");
 
   useEffect(() => {
     fetch("/api/admin/me", {cache: "no-store"})
@@ -157,7 +158,7 @@ export default function AdminDashboard(){
     setForm(f);
     setNotice("");
   }
-  const cancelEdit = () => { setEditing(null); setForm({}); };
+  const cancelEdit = () => { setEditing(null); setForm({}); draftId.current = ""; };
 
   const {request, review} = usePublicationRequest();
 
@@ -165,7 +166,8 @@ export default function AdminDashboard(){
     e.preventDefault();
     setBusy(true); setNotice("");
     try {
-      const row: Row = {id: editing?.id || form.id || `web-${crypto.randomUUID()}`};
+      if (!draftId.current) draftId.current = `web-${crypto.randomUUID()}`;
+      const row: Row = {id: editing?.id || form.id || draftId.current};
       for (const f of FIELDS[type]) {
         if (f.k === "id" && type !== "subjects") continue;
         const v = (form[f.k] ?? "").trim();
@@ -174,7 +176,8 @@ export default function AdminDashboard(){
         else if (f.k === "published_at") row[f.k] = v || new Date().toISOString();
         else if (v || !f.select) row[f.k] = v;
       }
-      const {response, data: j} = await request(type, row);
+      const {response, data: j} = await request(type, row, {editing: Boolean(editing?.id), subject: String(subjects.find(subject => subject.id === row.subject_id)?.name || "")});
+      if (j.cancelled) return;
       if (!response.ok) { setNotice(j.error || "فشل الحفظ"); return; }
       setNotice(j.action === "updated" ? "تم تحديث المنشور الموجود." : "تم الحفظ بنجاح");
       cancelEdit();
@@ -287,7 +290,7 @@ export default function AdminDashboard(){
       <section className="panel admin-list-pane" aria-label={sectionTitle}>
         <div className="panel-body">
           {rowsFailed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : !visibleRows ? <p className="subtle" role="status">جارٍ التحميل…</p> :
-            <ContentList key={tab} kind={tab} rows={visibleRows} subjects={subjects} selected={editing?.id ? String(editing.id) : undefined}
+            <ContentList key={tab} onChanged={reload} kind={tab} rows={visibleRows} subjects={subjects} selected={editing?.id ? String(editing.id) : undefined}
               onEdit={startEdit} onRemove={row => {
                 if (row.id === editing?.id) setNotice("أغلق نموذج التعديل قبل حذف هذا المنشور.");
                 else void remove((tab === "examSchedule" ? "exams" : tab) as WritableTab, String(row.id));
