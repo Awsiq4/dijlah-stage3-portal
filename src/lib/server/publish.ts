@@ -14,6 +14,7 @@ export type PublishResult = PublishOk | PublishFail;
 
 import {validExamSchedule} from "./exam-validation.ts";
 import {canPublishScheduledExam} from "./publisher-audience.ts";
+import {assignmentDayAllowed,assignmentDisplayDay,validAssignmentDay} from "../assignment-date.ts";
 
 const fail = (error: string): PublishFail => ({ok: false, error});
 
@@ -136,7 +137,7 @@ async function enqueueNewPublication(db: Queryer, type: WritableContentType, row
   } else if (type === "assignments") {
     const sections = Array.isArray(row.sections) ? [...new Set(row.sections.map(String))] : [];
     const info = {type: "assignment" as const, refId, title,
-      body: String(row.instructions || "") + "\nآخر موعد للتسليم: " + String(row.due_at || "غير محدد"),
+      body: String(row.instructions || "") + "\nآخر يوم للتسليم: " + assignmentDisplayDay(row.due_at),
       url: "/assignments", subject_id};
     if (sections.length === 4 && ["A","B","C","F"].every(s => sections.includes(s)))
       await enqueue({...info, version: 1, scope: "general"});
@@ -250,9 +251,8 @@ export async function publishAssignment(admin: AdminInfo, input: Record<string, 
     return fail("forbidden: subject or sections not authorized");
   const title = String(input.title || "").trim();
   const dueAt = String(input.due_at || "");
-  if (!title || title.length > 180 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:\d{2}|Z)?$/.test(dueAt)
-    || Number.isNaN(Date.parse(dueAt)) || Date.parse(dueAt) <= Date.now() - 60_000)
-    return fail("عنوان التكليف أو موعد التسليم غير صالح");
+  if (!title || title.length > 180 || !assignmentDayAllowed(dueAt))
+    return fail("عنوان التكليف أو تاريخ التسليم غير صالح؛ اكتب اليوم فقط بدون ساعة");
   const id = String(input.id || `asg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   let row: Record<string, unknown>;
   try {
@@ -283,6 +283,9 @@ export async function applyContentUpsert(
   if (type === "exams") {
     const validationError = validExamSchedule(clean, false);
     if (validationError) throw Object.assign(new Error(validationError), {status: 400});
+  }
+  if (type === "assignments" && !validAssignmentDay(String(clean.due_at || ""))) {
+    throw Object.assign(new Error("يجب تحديد يوم التسليم بالتاريخ فقط دون ساعة"), {status: 400});
   }
   if (type === "announcements" && (!clean.scope || clean.scope === "general")) clean.section = "all";
   const scoped = !canManageAllContent(admin.role);
