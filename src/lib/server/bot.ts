@@ -387,7 +387,7 @@ async function showPublicationIssue(
 export async function handleAdminCallback(chatId: number, userId: number, data: string, onPublished?: (eventIds: number[]) => void): Promise<void> {
   const admin = await getLinkedAdmin(userId);
   if (!admin) { await sendMessage(chatId, "⚠️ حساب Telegram غير مربوط. استخدم «ربط حساب Telegram» من إعدادات الحساب في الموقع."); return; }
-  if (data === "adm:exam" || data.startsWith("exam:") || data.startsWith("pub:exam:")) {
+  if (data === "adm:exam" || data.startsWith("quiz:") || data.startsWith("exam:") || data.startsWith("pub:exam:")) {
     const {handleExamCallback} = await import("./bot-exam-flow.ts");
     await handleExamCallback(chatId,userId,data,onPublished);return;
   }
