@@ -13,6 +13,7 @@ import {
 import type {LinkedAdmin} from "./bot.ts";
 import {isBotOwner} from "./registry.ts";
 import {getLinkedAdmin, hasActiveFlow, adminMenu, resumeDraft, escapeHtml} from "./bot.ts";
+import {EXAM_KINDS, listPastQuestions, listOwnQuestions, modifyPastQuestion, questionBankReady, validExamKind} from "./bot-question-bank.ts";
 
 const backHome = {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]};
 const PER_PAGE = 5;
@@ -22,6 +23,7 @@ export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean, tele
   const ownerBtn = telegramUserId && isBotOwner(telegramUserId) ? [[{text: "👑 لوحة المالك", callback_data: "own:home"}]] : [];
   if (admin && canUseTelegramPublishing(admin)) {
     return {inline_keyboard: [
+      [{text: "📢 نشر تبليغ سريع", callback_data: "adm:quick"}],
       [{text: "✍️ نشر جديد", callback_data: "adm:new"}],
       [{text: admin.role === "super_admin" ? "🗂 إدارة المحتوى" : "🗂 إدارة منشوراتي", callback_data: "adm:my"}],
       [{text: "👀 تصفح المحتوى (كطالب)", callback_data: "stu:home"}],
@@ -33,6 +35,7 @@ export function homeMenuFor(admin: AdminInfo | null, isSubscriber: boolean, tele
   return {inline_keyboard: [
     [{text: "📢 التبليغات", callback_data: "stu:ann"}],
     [{text: "📚 المحاضرات والملازم", callback_data: "stu:lec"}],
+    [{text: "📂 الملخصات وبنك الأسئلة", callback_data: "stu:resources"}],
     [{text: "🗓 جدول شعبتي", callback_data: "stu:sched"}],
     [{text: "📝 الامتحانات والواجبات", callback_data: "stu:exams"}],
     [{text: "⚙️ إعدادات الإشعارات", callback_data: "stu:prefs"}],
@@ -79,6 +82,54 @@ export async function handleStudentCallback(chatId: number, userId: number, data
     await sendMessage(chatId, `📚 محاضرات وملازم المادة:\n\n${text}`.slice(0, 3500), {replyMarkup: {inline_keyboard: [...vis.slice(0, 20).map(r => [{text: "📎 " + String(r.title).slice(0, 40), url: new URL(String(r.file_url), PORTAL_BASE_URL).toString()}]), ...backHome.inline_keyboard]}});
     return;
   }
+  if (data === "stu:resources") {
+    await sendMessage(chatId, "📂 المصادر الدراسية — اختر القسم:", {replyMarkup: {inline_keyboard: [
+      [{text: "📝 الملخصات والملفات المساعدة", callback_data: "stu:summaries"}],
+      [{text: "📑 بنك أسئلة الامتحانات السابقة", callback_data: "stu:bank"}],
+      ...backHome.inline_keyboard,
+    ]}});
+    return;
+  }
+  if (data === "stu:summaries" || data === "stu:bank") {
+    const subs = await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
+    await sendMessage(chatId, data === "stu:bank" ? "📑 اختر المادة لعرض الأسئلة السابقة:" : "📝 اختر المادة لعرض الملخصات:", {replyMarkup: {inline_keyboard: [
+      ...subs.map(s => [{text: s.name, callback_data: (data === "stu:bank" ? "stu:bank:" : "stu:summaries:") + s.id}]), ...backHome.inline_keyboard,
+    ]}});
+    return;
+  }
+  if (data.startsWith("stu:summaries:")) {
+    const subjectId = data.slice("stu:summaries:".length);
+    const rows = await q<{id:string;title:string;file_url:string;sections:string[]}>(`SELECT id,title,file_url,sections FROM portal_lectures
+      WHERE subject_id=$1 AND material_kind='summary' AND status='published' AND archived_at IS NULL ORDER BY created_at DESC LIMIT 50`, [subjectId]);
+    const visible = rows.filter(row => Array.isArray(row.sections) && row.sections.includes(sec)).slice(0, 20);
+    await sendMessage(chatId, visible.length ? "📝 ملخصات المادة — اختر الملف:" : "لا توجد ملخصات منشورة لشعبتك حالياً.", {replyMarkup: {inline_keyboard: [
+      ...visible.map(row => [{text: "📎 " + row.title.slice(0, 38), url: row.file_url}]), ...backHome.inline_keyboard,
+    ]}});
+    return;
+  }
+  if (data.startsWith("stu:bank:")) {
+    const rest = data.slice("stu:bank:".length);
+    const [subjectId, kind] = rest.split(":");
+    const exists = await qOne<{id:string}>(`SELECT id FROM portal_subjects WHERE id=$1`, [subjectId]);
+    if (!exists) { await sendMessage(chatId, "المادة غير موجودة.", {replyMarkup: backHome}); return; }
+    if (!kind) {
+      await sendMessage(chatId, "📑 بنك الأسئلة — حدد نوع الامتحان:", {replyMarkup: {inline_keyboard: [
+        ...Object.entries(EXAM_KINDS).map(([k,label])=>[{text: label, callback_data: "stu:bank:" + subjectId + ":" + k}]),
+        ...backHome.inline_keyboard,
+      ]}});
+      return;
+    }
+    if (!validExamKind(kind)) return;
+    const rows = await listPastQuestions(subjectId, sec, kind);
+    await sendMessage(chatId, rows.length ? `📑 أسئلة ${EXAM_KINDS[kind]} السابقة — اختر الملف:` : await questionBankReady()
+      ? "لا توجد أسئلة منشورة من هذا النوع لشعبتك حالياً."
+      : "⏳ بنك الأسئلة قيد الإعداد.", {replyMarkup: {inline_keyboard: [
+      ...rows.map(item=>[{text: "📎 " + item.title.slice(0, 40), url: item.file_url}]),
+      [{text: "🔙 أنواع الامتحانات", callback_data: "stu:bank:" + subjectId}],
+      ...backHome.inline_keyboard,
+    ]}});
+    return;
+  }
   if (data === "stu:sched") {
     await sendMessage(chatId, "أي جدول تريد؟", {replyMarkup: {inline_keyboard: [[{text: "اليوم", callback_data: "stu:sched:today"}, {text: "غدًا", callback_data: "stu:sched:tomorrow"}], [{text: "الأسبوع كاملًا", callback_data: "stu:sched:week"}], ...backHome.inline_keyboard]}}); return;
   }
@@ -119,8 +170,20 @@ export async function handleManageCallback(chatId: number, userId: number, data:
   if (data === "adm:my") {
     await sendMessage(chatId, "🗂 إدارة منشوراتي — اختر النوع:", {replyMarkup: {inline_keyboard: [
       [{text: "📢 تبليغاتي", callback_data: "page:my:announcements:0"}],
-      [{text: "📚 موادي/ملازمي", callback_data: "page:my:lectures:0"}],
+      [{text: "📚 محاضراتي وملخصاتي", callback_data: "page:my:lectures:0"}],
+      [{text: "📑 أسئلة الامتحانات السابقة", callback_data: "page:my:questions:0"}],
       [{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}],
+    ]}});
+    return;
+  }
+  if (data.startsWith("page:my:questions:")) {
+    const page = Math.max(0, Number(data.split(":")[3]) || 0);
+    const rows = await listOwnQuestions(admin, page);
+    await sendMessage(chatId, rows.length ? `📑 بنك الأسئلة — صفحة ${page + 1}:` : "لا توجد أسئلة سابقة أضفتها.", {replyMarkup: {inline_keyboard: [
+      ...rows.map(item => [{text: EXAM_KINDS[item.exam_kind] + " · " + item.title.slice(0, 28), callback_data: "it:q:" + item.id}]),
+      ...(rows.length === 12 ? [[{text:"➡️ التالي",callback_data:"page:my:questions:"+(page+1)}]] : []),
+      ...(page ? [[{text:"⬅️ السابق",callback_data:"page:my:questions:"+(page-1)}]] : []),
+      ...backHome.inline_keyboard,
     ]}});
     return;
   }
@@ -135,6 +198,33 @@ export async function handleManageCallback(chatId: number, userId: number, data:
     nav.push({text: "🏠 القائمة الرئيسية", callback_data: "nav:home"});
     kb.push(nav);
     await sendMessage(chatId, rows.length ? `صفحة ${page + 1} — الإجمالي ${total}. اختر عنصرًا:` : "لا توجد منشورات بعد.", {replyMarkup: {inline_keyboard: kb}});
+    return;
+  }
+  if (data.startsWith("it:q:")) {
+    const id = data.slice("it:q:".length);
+    const rows = await listOwnQuestions(admin, 0);
+    const item = rows.find(row => row.id === id);
+    if (!item) { await sendMessage(chatId, "العنصر غير متاح في هذه الصفحة.", {replyMarkup: backHome}); return; }
+    await sendMessage(chatId, `📑 ${item.title}\n${EXAM_KINDS[item.exam_kind]} · ${item.subject_id}\n${item.archived_at ? "مؤرشف" : "منشور"}`, {replyMarkup: {inline_keyboard: [
+      [{text: "📎 عرض الملف", url: item.file_url}],
+      [{text: item.archived_at ? "♻️ استعادة" : "🗄 أرشفة", callback_data: "qmanage:" + (item.archived_at ? "restore" : "archive") + ":" + id}],
+      [{text: "🗑 حذف نهائي", callback_data: "qmanage:confirm:" + id}],
+      ...backHome.inline_keyboard,
+    ]}});
+    return;
+  }
+  if (data.startsWith("qmanage:")) {
+    const [, action, id] = data.split(":");
+    if (action === "confirm") {
+      await sendMessage(chatId, "⚠️ الحذف نهائي ولا يمكن التراجع عنه. هل أنت متأكد؟", {replyMarkup: {inline_keyboard: [
+        [{text: "🗑 نعم، حذف نهائي", callback_data: "qmanage:delete:" + id}],
+        [{text: "❌ إلغاء", callback_data: "it:q:" + id}],
+      ]}});
+      return;
+    }
+    if (action !== "archive" && action !== "restore" && action !== "delete") return;
+    const result = await modifyPastQuestion(admin, id, action);
+    await sendMessage(chatId, result ? "✅ تم تحديث أسئلة الامتحان." : "⛔ تعذّر التنفيذ أو لا تملك الصلاحية.", {replyMarkup: backHome});
     return;
   }
   if (data.startsWith("it:arch:")) {
@@ -233,8 +323,12 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
   }
   if (data === "adm:new") {
     await sendMessage(chatId, "✍️ نشر جديد — اختر النوع:", {replyMarkup: {inline_keyboard: [
-      [{text: "📢 تبليغ", callback_data: "adm:ann"}],
+      [{text: "📢 تبليغ سريع", callback_data: "adm:quick"}],
+      [{text: "📝 تبليغ بعنوان وتفاصيل", callback_data: "adm:ann"}],
       [{text: "📚 محاضرة / ملزمة (PDF أو PPTX)", callback_data: "adm:lec"}],
+      [{text: "📄 ملخص / ملف مساعد", callback_data: "adm:summary"}],
+      [{text: "📑 أسئلة امتحانات سابقة", callback_data: "adm:questions"}],
+      [{text: "📊 إعلان صدور نتائج", callback_data: "adm:results"}],
       [{text: "🏠 رجوع", callback_data: "nav:home"}],
     ]}});
     return;
