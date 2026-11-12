@@ -155,7 +155,9 @@ export async function publishAnnouncement(
   try {
     row = sanitizeRow("announcements", {
       id, title: input.title, body: input.body || "", scope, section,
-      subject_id: input.subjectId || "", author: admin.name || admin.email,
+      subject_id: input.subjectId || "",
+      // Public name for the portal owner; login email stays private.
+      author: admin.role === "super_admin" ? "Aws Faris" : admin.name || admin.email,
       priority: input.priority || "normal", published_at: new Date().toISOString(), pinned: input.pinned ? "true" : "false",
     });
   } catch (e) { return fail(e instanceof Error ? e.message : "invalid input"); }
