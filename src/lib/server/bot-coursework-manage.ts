@@ -35,7 +35,8 @@ const PAGE_SIZE=6;
 const nav={inline_keyboard:[[{text:"🏠 الرئيسية",callback_data:"nav:home"}]]};
 const table=(kind:CourseworkKind)=>kind==="a"?"portal_assignments":"portal_exams";
 const label=(kind:CourseworkKind)=>kind==="a"?"📋 الواجبات والتكاليف":"📝 الكوزات اليومية";
-const ownerName=(row:CourseworkRow)=>row.archived_at?"مؤرشف":row.status==="cancelled"?"ملغى":row.status==="closed"?"منتهٍ":"منشور";
+const ownerName=(row:CourseworkRow)=>row.archived_at?"مؤرشف":
+  ({active:"نشط",closed:"منتهٍ",cancelled:"ملغى",confirmed:"مؤكد",provisional:"مبدئي"} as Record<string,string>)[String(row.status)]||"منشور";
 const formatValue=(field:Field,value:unknown):string=>field==="sections"?
   (Array.isArray(value)?value.join("، "):"") : field==="due_at"?
   assignmentDisplayDay(value) : String(value??"");
@@ -234,7 +235,10 @@ export async function handleCourseworkCallback(chatId:number,userId:number,data:
   if(!admin||!isActive(admin)) {await sendMessage(chatId,"⛔ حسابك غير مخوّل.",{replyMarkup:nav});return;}
   if(data.startsWith("cw:p:")){
     const [, ,kind,page]=data.split(":");
-    if(validManageKind(kind))await showList(chatId,admin,kind,Number(page)||0);
+    if(validManageKind(kind)) {
+      await setFlowState(chatId,"",{});
+      await showList(chatId,admin,kind,Number(page)||0);
+    }
     return;
   }
   if(data.startsWith("cw:i:")){
@@ -248,6 +252,7 @@ export async function handleCourseworkCallback(chatId:number,userId:number,data:
     if(!validManageKind(kind))return;
     const id=ids.join(":");
     if(!await getCoursework(admin,kind,id)){await sendMessage(chatId,"هذا المنشور مو ضمن صلاحياتك.");return;}
+    await setFlowState(chatId,"",{});
     await sendMessage(chatId,"اختَر الحقل اللي تريد تعدّله:",{replyMarkup:fieldButtons(kind,id)});return;
   }
   if(data.startsWith("cw:f:")){
