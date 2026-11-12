@@ -166,6 +166,10 @@ export async function resumeDraft(chatId: number, userId: number): Promise<void>
   const state = await getState(chatId);
   if (!admin || !state?.flow) { await sendMessage(chatId, "انتهت صلاحية المسودة. ابدأ نشرًا جديدًا.", {replyMarkup: adminMenu(admin || undefined)}); return; }
   const d = state.data;
+  if (state.flow === "asg") {
+    const {resumeAssignmentDraft} = await import("./bot-assignment-flow.ts");
+    await resumeAssignmentDraft(chatId,userId);return;
+  }
   if (d.step === "publishing") { await sendMessage(chatId, "طلب النشر قيد المعالجة. لا تعِد النشر؛ تحقق من إدارة منشوراتي.", {replyMarkup: adminMenu(admin)}); return; }
   if (d.step === "confirm") { await previewDraft(chatId, state.flow, d); return; }
   if (d.step === "subject") { await askSubjects(chatId, admin, state.flow === "ann" ? "ann:subj:" : "lec:subj:"); return; }
@@ -216,6 +220,11 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
   const admin = await getLinkedAdmin(userId);
   if (!admin) return;
   const state = await getState(chatId);
+  if (state?.flow === "asg") {
+    const {handleAssignmentMessage} = await import("./bot-assignment-flow.ts");
+    await handleAssignmentMessage(chatId,userId,text,document);
+    return;
+  }
   if (state?.data.step !== "file" && state?.flow !== "repfile" && document) { await sendMessage(chatId, "الخطوة الحالية تحتاج اختيارًا أو نصًا. أكملها أولًا، أو ألغِ المسودة.", {replyMarkup: navigation}); return; }
   if (!state?.flow) { await sendMessage(chatId, "مرحباً بك في بوابة المرحلة الثالثة 🌟", {replyMarkup: adminMenu(admin)}); return; }
 
@@ -368,6 +377,10 @@ async function showPublicationIssue(
 export async function handleAdminCallback(chatId: number, userId: number, data: string, onPublished?: (eventIds: number[]) => void): Promise<void> {
   const admin = await getLinkedAdmin(userId);
   if (!admin) { await sendMessage(chatId, "⚠️ حساب Telegram غير مربوط. استخدم «ربط حساب Telegram» من إعدادات الحساب في الموقع."); return; }
+  if (data === "adm:asg" || data.startsWith("asg:") || data.startsWith("pub:asg:")) {
+    const {handleAssignmentCallback} = await import("./bot-assignment-flow.ts");
+    await handleAssignmentCallback(chatId,userId,data,onPublished);return;
+  }
 
   if (data === "adm:quick") {
     if (!canUseTelegramPublishing(admin)) return;

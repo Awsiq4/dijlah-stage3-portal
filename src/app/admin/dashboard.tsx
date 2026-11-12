@@ -7,6 +7,7 @@ import {RoleWorkspace,UsersTab,TelegramCenterTab,AccountPanel,AuditTab} from "./
 
 import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
+import {AssignmentForm} from "./assignment-form";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string};
 type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentAudit?: {actor: string; action: string; created_at: string}[]};
@@ -18,7 +19,7 @@ const TABS = [
   {id: "announcements", label: "التبليغات", Icon: Megaphone},
   {id: "lectures", label: "المحاضرات", Icon: BookOpen},
   {id: "exams", label: "الامتحانات", Icon: FileQuestion},
-  {id: "assignments", label: "الواجبات", Icon: ClipboardList},
+  {id: "assignments", label: "الواجبات والتكاليف", Icon: ClipboardList},
   {id: "schedule", label: "الجدول", Icon: CalendarDays},
   {id: "telegram", label: "تليجرام", Icon: Send},
 ] as const;
@@ -237,7 +238,8 @@ export default function AdminDashboard(){
       </div>
       <div className="panel-body">
         {canWrite && editing !== null && tab === "lectures" && <MaterialForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} rows={rows || []} onSaved={() => loadTab("lectures")}/>}
-        {canWrite && editing !== null && tab !== "lectures" && <form className="admin-form" onSubmit={e => submit(e, tab)} style={{marginBottom: 18}}>
+        {canWrite && editing !== null && tab === "assignments" && <AssignmentForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} onSaved={() => {cancelEdit();loadTab("assignments");}}/>}
+        {canWrite && editing !== null && tab !== "lectures" && tab !== "assignments" && <form className="admin-form" onSubmit={e => submit(e, tab)} style={{marginBottom: 18}}>
           {FIELDS[tab].filter(f => (f.k !== "id" || tab === "subjects") && (f.k !== "published_at" || !!editing.id)).map(f => (
             <label className={"form-field" + (f.area ? " wide" : "")} key={f.k}><span>{f.label}{f.req ? " *" : ""}</span>
               {f.k === "subject_id" ? <select value={form[f.k] ?? ""} onChange={e => setForm(v => ({...v, [f.k]: e.target.value}))}>

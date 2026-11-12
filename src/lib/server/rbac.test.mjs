@@ -140,9 +140,22 @@ test("M1: materials audience matrix (section rep: own or ALL only; general rep: 
   assert.equal(canPublishMaterial(repGen, "x", ["Z"]), false);
 });
 
-test("M2: write gate — rep can publish lectures (materials) but not exams/assignments/schedule", () => {
+test("M2: write gate — reps publish scoped lectures and assignments, not exams/schedule", () => {
   assert.equal(canWriteContentRecord(repA, "lectures", {subject_id: "x", sections: ["A", "B", "C", "F"]}), true);
   assert.equal(canWriteContentRecord(repA, "lectures", {subject_id: "x", sections: ["B"]}), false);
   assert.equal(canWriteContentRecord(repA, "exams", {subject_id: "x", sections: ["A"]}), false);
-  assert.equal(canWriteContentRecord(repA, "assignments", {subject_id: "x", sections: ["A"]}), false);
+  assert.equal(canWriteContentRecord(repA, "assignments", {subject_id: "x", sections: ["A"]}), true);
+});
+
+test("assignment authorization follows material audience scope, exams remain teacher-only",()=>{
+ const a={subject_id:"nonlinear-optics",sections:["A"]};
+ assert.equal(canWriteContentRecord(repA,"assignments",a),true);
+ assert.equal(canWriteContentRecord(repA,"assignments",{...a,sections:["B"]}),false);
+ assert.equal(canWriteContentRecord(repA,"assignments",{...a,sections:["A","B","C","F"]}),true);
+ assert.equal(canWriteContentRecord(repGen,"assignments",{...a,sections:["B"]}),true);
+ assert.equal(canWriteContentRecord(teacher,"assignments",{...a,sections:["A","B"]}),true);
+ assert.equal(canWriteContentRecord(teacher,"assignments",{...a,sections:["C"]}),false);
+ assert.equal(canWriteContentRecord(teacher,"assignments",{subject_id:"quantum-mechanics",sections:["A"]}),false);
+ assert.equal(canWriteContentRecord(repA,"exams",a),false);
+ assert.equal(canWriteContentRecord(suspendedRep,"assignments",a),false);
 });
