@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {signSubscribeToken, verifySubscribeToken} from "./tokens.ts";
 import {selectRecipients, eventKey} from "./targeting.ts";
 import {renderMessage} from "./templates.ts";
+import {styleForTelegramButton, styleTelegramReplyMarkup} from "./telegram-button-style.ts";
 import {materialMime, PDF_MIME, PPTX_MIME, isPptx, isPdf, validMaterialFile} from "./storage.ts";
 import {nextDelayMs, shouldRetry, isBlockedError, MAX_ATTEMPTS} from "./backoff.ts";
 
@@ -104,4 +105,74 @@ test("backoff: exponential with cap, respects retry_after, caps attempts", () =>
   assert.equal(shouldRetry(1, {code: 429}), true);
   assert.equal(shouldRetry(1, {code: 403}), false);
   assert.equal(isBlockedError({code: 403, description: "bot was blocked by the user"}), true);
+});
+
+
+test("Telegram Calm Academic: student and publisher menus use restrained primary accents", () => {
+  const input = {inline_keyboard: [
+    [{text: "📢 التبليغات", callback_data: "stu:ann"}],
+    [{text: "📚 المحاضرات", callback_data: "stu:lec"}],
+    [{text: "🗓 الجدول", callback_data: "stu:sched"}],
+    [{text: "📝 الامتحانات", callback_data: "stu:exams"}],
+    [{text: "✍️ نشر جديد", callback_data: "adm:new"}],
+    [{text: "📢 تبليغ", callback_data: "adm:ann"}],
+    [{text: "📚 محاضرة", callback_data: "adm:lec"}],
+    [{text: "🏠 الرئيسية", callback_data: "nav:home"}],
+  ]};
+  const output = styleTelegramReplyMarkup(input);
+  assert.deepEqual(output.inline_keyboard.flat().map(b => b.style || null),
+    ["primary", "primary", null, null, "primary", "primary", null, null]);
+  assert.deepEqual(input.inline_keyboard.flat().map(b => b.style || null), Array(8).fill(null));
+  assert.deepEqual(styleTelegramReplyMarkup(output), output);
+});
+
+test("Telegram Calm Academic: publish, deletion, support and owner use semantic colors", () => {
+  const examples = [
+    ["pub:ann:nonce", "✅ نشر الآن", "success"],
+    ["pub:lec:nonce:expand", "نشر للشعب الإضافية", "success"],
+    ["it:del:lectures:123", "🗑 حذف نهائي", "danger"],
+    ["it:delok:lectures:123", "✅ نعم احذف نهائيًا", "danger"],
+    ["flow:discard", "🗑 تجاهل المسودة", "danger"],
+    ["adm:cancel", "❌ إلغاء", null],
+    ["sup:o:reply:11", "💬 الرد على الطالب", "primary"],
+    ["sup:s:reply:11", "↩️ الرد على الإدارة", "primary"],
+    ["sup:o:status:11:resolved", "✅ تم الحل", "success"],
+    ["sup:o:status:11:progress", "⏳ قيد المعالجة", null],
+    ["sup:o:home", "🎫 إدارة الدعم", "primary"],
+    ["sup:o:home", "🎫 إدارة الطلبات", null],
+    ["sup:o:list:pending:0", "📥 بانتظار ردي", "primary"],
+    ["own:stats", "📊 إحصائيات البوت", null],
+    ["own:notif:toggle", "✅ تفعيل", "success"],
+    ["own:notif:toggle", "⛔ تعطيل", "danger"],
+    ["stu:stop", "🚫 إلغاء الاشتراك", "danger"],
+    ["sec:B", "🔔 إعادة تفعيل الإشعارات", "success"],
+    ["sec:A", "شعبة A", null],
+    ["pref:announcements", "✅ التبليغات", null],
+    ["flow:resume", "▶️ استئناف المسودة", "primary"],
+    ["it:arch:lectures:123", "♻️ استعادة", "success"],
+    ["it:arch:lectures:123", "🗄 أرشفة", null],
+  ];
+  for (const [callback_data, text, expected] of examples) {
+    assert.equal(styleForTelegramButton({callback_data, text}), expected, callback_data + " / " + text);
+  }
+});
+
+test("Telegram Calm Academic: styles never change callbacks, URLs or subscription preferences", () => {
+  const input = {inline_keyboard: [
+    [{text: "✅ نشر الآن", callback_data: "pub:ann:test", style: "danger"}],
+    [{text: "فتح الملف", url: "https://dj3.top/lectures/test"}],
+    [{text: "✅ المحاضرات", callback_data: "pref:lectures"}],
+    [{text: "🔴 إلغاء", callback_data: "adm:cancel"}],
+  ], one_time_keyboard: true};
+  const result = styleTelegramReplyMarkup(input);
+  assert.deepEqual(result.inline_keyboard.flat().map(b => b.style || null),
+    ["danger", null, null, null]);
+  assert.deepEqual(
+    result.inline_keyboard.flat().map(b => [b.callback_data, b.url]),
+    input.inline_keyboard.flat().map(b => [b.callback_data, b.url])
+  );
+  assert.equal(result.one_time_keyboard, true);
+  const reply = {keyboard: [[{text: "🗓 الجدول"}]], resize_keyboard: true};
+  assert.equal(styleTelegramReplyMarkup(reply), reply);
+  assert.equal(styleTelegramReplyMarkup(undefined), undefined);
 });
