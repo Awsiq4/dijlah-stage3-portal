@@ -141,7 +141,7 @@ test("Telegram Calm Academic: publish, deletion, support and owner use semantic 
     ["sup:o:home", "🎫 إدارة الدعم", "primary"],
     ["sup:o:home", "🎫 إدارة الطلبات", null],
     ["sup:o:list:pending:0", "📥 بانتظار ردي", "primary"],
-    ["own:stats", "📊 إحصائيات البوت", null],
+    ["own:stats", "📊 إحصائيات البوت", "primary"],
     ["own:notif:toggle", "✅ تفعيل", "success"],
     ["own:notif:toggle", "⛔ تعطيل", "danger"],
     ["stu:stop", "🚫 إلغاء الاشتراك", "danger"],
