@@ -176,6 +176,10 @@ export async function resumeDraft(chatId: number, userId: number): Promise<void>
     const {resumeExamDraft} = await import("./bot-exam-flow.ts");
     await resumeExamDraft(chatId,userId);return;
   }
+  if (state.flow === "manage-coursework") {
+    const {resumeCourseworkEdit} = await import("./bot-coursework-manage.ts");
+    await resumeCourseworkEdit(chatId,userId);return;
+  }
   if (d.step === "publishing") { await sendMessage(chatId, "طلب النشر قيد المعالجة. لا تعِد النشر؛ تحقق من إدارة منشوراتي.", {replyMarkup: adminMenu(admin)}); return; }
   if (d.step === "confirm") { await previewDraft(chatId, state.flow, d); return; }
   if (d.step === "subject") { await askSubjects(chatId, admin, state.flow === "ann" ? "ann:subj:" : "lec:subj:"); return; }
@@ -235,6 +239,11 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
     if (document) {await sendMessage(chatId,"هذا الحقل يحتاج نصاً، مو ملفاً.");return;}
     const {handleExamMessage} = await import("./bot-exam-flow.ts");
     await handleExamMessage(chatId,userId,text);return;
+  }
+  if (state?.flow === "manage-coursework") {
+    if (document) {await sendMessage(chatId,"✏️ أرسل نصاً أو استخدم زر إلغاء للرجوع للمنشور.");return;}
+    const {handleCourseworkMessage} = await import("./bot-coursework-manage.ts");
+    await handleCourseworkMessage(chatId,userId,text);return;
   }
   if (state?.data.step !== "file" && state?.flow !== "repfile" && document) { await sendMessage(chatId, "الخطوة الحالية تحتاج اختيارًا أو نصًا. أكملها أولًا، أو ألغِ المسودة.", {replyMarkup: navigation}); return; }
   if (!state?.flow) { await sendMessage(chatId, "مرحباً بك في بوابة المرحلة الثالثة 🌟", {replyMarkup: adminMenu(admin)}); return; }
