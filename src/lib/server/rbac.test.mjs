@@ -146,3 +146,16 @@ test("M2: write gate — rep can publish lectures (materials) but not exams/assi
   assert.equal(canWriteContentRecord(repA, "exams", {subject_id: "x", sections: ["A"]}), false);
   assert.equal(canWriteContentRecord(repA, "assignments", {subject_id: "x", sections: ["A"]}), false);
 });
+
+test("assignment authorization follows material audience scope, exams remain teacher-only",()=>{
+ const a={subject_id:"nonlinear-optics",sections:["A"]};
+ assert.equal(canWriteContentRecord(repA,"assignments",a),true);
+ assert.equal(canWriteContentRecord(repA,"assignments",{...a,sections:["B"]}),false);
+ assert.equal(canWriteContentRecord(repA,"assignments",{...a,sections:["A","B","C","F"]}),true);
+ assert.equal(canWriteContentRecord(repGen,"assignments",{...a,sections:["B"]}),true);
+ assert.equal(canWriteContentRecord(teacher,"assignments",{...a,sections:["A","B"]}),true);
+ assert.equal(canWriteContentRecord(teacher,"assignments",{...a,sections:["C"]}),false);
+ assert.equal(canWriteContentRecord(teacher,"assignments",{subject_id:"quantum-mechanics",sections:["A"]}),false);
+ assert.equal(canWriteContentRecord(repA,"exams",a),false);
+ assert.equal(canWriteContentRecord(suspendedRep,"assignments",a),false);
+});
