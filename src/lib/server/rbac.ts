@@ -97,7 +97,13 @@ export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<s
     const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
     return canPublishMaterial(a, String(row.subject_id || ""), sections);
   }
-  if (type === "exams" || type === "assignments") {
+  if (type === "assignments") {
+    const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
+    // Assignments may be shared by representatives under the same audience
+    // rules already used for lectures and materials.
+    return canPublishMaterial(a, String(row.subject_id || ""), sections);
+  }
+  if (type === "exams") {
     const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
     return canPublishSubjectContent(a, String(row.subject_id || ""), sections);
   }
