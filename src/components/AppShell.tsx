@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import {usePathname} from "next/navigation";
-import {BookOpen,CalendarDays,House,Menu,MessageSquareText,Moon,Sun,Shield} from "lucide-react";
+import {BookOpen,CalendarDays,House,Menu,MessageSquareText,Moon,Sun,Shield,ArrowUpLeft} from "lucide-react";
 import {SECTIONS} from "@/lib/seed";
 import {usePortal} from "@/lib/storage";
 import SectionOnboarding from "@/components/SectionOnboarding";
@@ -35,5 +35,22 @@ export default function AppShell({children}:{children:React.ReactNode}){
      .catch(() => { if (!controller.signal.aborted) setAuthorizedPath(null); });
    return () => controller.abort();
  }, [path, adminWorkspace]);
- return <AdminNavigationContext.Provider value={showAdmin}><div className={adminWorkspace ? "app app-admin-workspace" : "app"}><header className="header"><div className="header-inner"><Link href="/" className="brand"><Image className="brand-uni" src="/images/university-mark.png" width={1024} height={1024} alt="شعار جامعة دجلة" priority/><span><strong>بوابة طلبة المرحلة الثالثة</strong><small>هندسة الليزر والإلكترونيات البصرية · 2026–2027</small></span><Image className="brand-dept" src="/images/department-logo.png" width={986} height={915} alt="شعار قسم هندسة الليزر والإلكترونيات البصرية" priority/></Link><div className="header-actions">{!adminWorkspace && <label className="section-control"><span>الشعبة</span><select aria-label="اختر الشعبة" value={section} onChange={e=>setSection(e.target.value as Section)}>{SECTIONS.map(s=><option key={s} value={s}>{s}</option>)}</select></label>}<button type="button" className="icon-button" onClick={toggleDark} aria-pressed={dark} aria-label={dark?"تفعيل الوضع الفاتح":"تفعيل الوضع المظلم"} title="تبديل الوضع">{dark?<Sun size={19}/>:<Moon size={19}/>}</button></div></div></header><div className="page-shell">{!adminWorkspace && <aside className="sidebar"><div className="nav-caption">القائمة الرئيسية</div>{nav.map(({href,label,Icon})=><Link key={href} href={href} className={`side-link ${path===href?"active":""}`}><Icon size={19}/><span>{label}</span></Link>)}{showAdmin && <><hr/><a className="side-link" href="/admin"><Shield size={19}/>لوحة الإدارة</a></>}</aside>}<main className="content">{children}<footer className="footer"><span className="footer-brand"><Image className="uni-logo" src="/images/university-lockup.png" width={1180} height={163} alt="جامعة دجلة — Dijlah University"/><span className="subtle">بوابة طلابية مستقلة — ليست الموقع الرسمي للجامعة</span></span><strong>برمجة وتطوير: Aws Faris</strong></footer></main></div>{!adminWorkspace && <><nav className="bottom-nav" aria-label="القائمة الرئيسية">{nav.map(({href,label,Icon})=><Link key={href} className={`bottom-link ${path===href?"active":""}`} href={href}><Icon size={21}/><span>{label}</span></Link>)}</nav><SectionOnboarding/></>}</div></AdminNavigationContext.Provider>
+ if (adminWorkspace) return <div className="app app-admin-workspace">
+   <header className="header admin-site-header">
+     <div className="header-inner">
+       <Link href="/admin" className="brand">
+         <Image className="brand-uni" src="/images/university-mark.png" width={1024} height={1024} alt=""/>
+         <span><strong>إدارة بوابة دجلة</strong></span>
+       </Link>
+       <div className="header-actions">
+         <Link href="/" className="action-button secondary admin-view-site"><ArrowUpLeft size={16}/> عرض الموقع</Link>
+         <button type="button" className="icon-button" onClick={toggleDark} aria-pressed={dark} aria-label={dark ? "تفعيل الوضع الفاتح" : "تفعيل الوضع المظلم"}>
+           {dark ? <Sun size={19}/> : <Moon size={19}/>}
+         </button>
+       </div>
+     </div>
+   </header>
+   <div className="page-shell"><main className="content">{children}</main></div>
+ </div>;
+ return <AdminNavigationContext.Provider value={showAdmin}><div className="app"><header className="header"><div className="header-inner"><Link href="/" className="brand"><Image className="brand-uni" src="/images/university-mark.png" width={1024} height={1024} alt="شعار جامعة دجلة" priority/><span><strong>بوابة طلبة المرحلة الثالثة</strong><small>هندسة الليزر والإلكترونيات البصرية · 2026–2027</small></span><Image className="brand-dept" src="/images/department-logo.png" width={986} height={915} alt="شعار قسم هندسة الليزر والإلكترونيات البصرية" priority/></Link><div className="header-actions"><label className="section-control"><span>الشعبة</span><select aria-label="اختر الشعبة" value={section} onChange={e=>setSection(e.target.value as Section)}>{SECTIONS.map(s=><option key={s} value={s}>{s}</option>)}</select></label><button type="button" className="icon-button" onClick={toggleDark} aria-pressed={dark} aria-label={dark?"تفعيل الوضع الفاتح":"تفعيل الوضع المظلم"} title="تبديل الوضع">{dark?<Sun size={19}/>:<Moon size={19}/>}</button></div></div></header><div className="page-shell"><aside className="sidebar"><div className="nav-caption">القائمة الرئيسية</div>{nav.map(({href,label,Icon})=><Link key={href} href={href} className={`side-link ${path===href?"active":""}`}><Icon size={19}/><span>{label}</span></Link>)}{showAdmin && <><hr/><a className="side-link" href="/admin"><Shield size={19}/>لوحة الإدارة</a></>}</aside><main className="content">{children}<footer className="footer"><span className="footer-brand"><Image className="uni-logo" src="/images/university-lockup.png" width={1180} height={163} alt="جامعة دجلة — Dijlah University"/><span className="subtle">بوابة طلابية مستقلة — ليست الموقع الرسمي للجامعة</span></span><strong>برمجة وتطوير: Aws Faris</strong></footer></main></div><nav className="bottom-nav" aria-label="القائمة الرئيسية">{nav.map(({href,label,Icon})=><Link key={href} className={`bottom-link ${path===href?"active":""}`} href={href}><Icon size={21}/><span>{label}</span></Link>)}</nav><SectionOnboarding/></div></AdminNavigationContext.Provider>
 }
