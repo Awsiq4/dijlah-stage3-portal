@@ -54,7 +54,8 @@ async function makeDb() {
 const sent = [];
 globalThis.fetch = async (_url, opts) => { sent.push(JSON.parse(opts.body)); return {ok:true,json:async()=>({ok:true,result:{message_id:1}})}; };
 const {handleAdminCallback, handleAdminMessage, getFlowState, setFlowState, resumeDraft} = await import("./bot.ts");
-const {handleNavCallback, handleStudentCallback, homeMenuFor} = await import("./botx.ts");
+const {handleNavCallback, handleStudentCallback, homeMenuFor, handleManageCallback} = await import("./botx.ts");
+const {getCoursework,listCoursework,changeCoursework,archiveCoursework,deleteCoursework}=await import("./bot-coursework-manage.ts");
 async function linked(pool, id) { await pool.query(`INSERT INTO portal_telegram_links(admin_id,telegram_user_id) VALUES ($1,$2)`, [id,id]); }
 
 test("new student must choose a section; stopped student gets resume action", async()=>{
@@ -266,5 +267,105 @@ test("teacher quiz audience defaults to permitted sections and rejects forged ed
  await handleAdminCallback(4,4,"quiz:aud:B");
  assert.deepEqual((await getFlowState(4)).data.sections,["B"]);
  assert.equal((await q("SELECT * FROM portal_exams")).length,0);
+ await pool.end();
+});
+
+
+test("management menu lists assignments and quizzes alongside old content types",async()=>{
+ const pool=await makeDb();await linked(pool,2);sent.length=0;
+ await handleManageCallback(2,2,"adm:my");
+ const keys=sent.at(-1).reply_markup.inline_keyboard.flat().map(x=>x.callback_data);
+ for(const key of ["page:my:announcements:0","page:my:lectures:0","page:my:questions:0","cw:p:a:0","cw:p:q:0"])
+   assert.ok(keys.includes(key),key);
+ await pool.end();
+});
+
+test("publisher manages their own assignment: edit due day, archive, restore, delete confirmation",async()=>{
+ const pool=await makeDb();await linked(pool,2);await linked(pool,3);sent.length=0;
+ await pool.query(`INSERT INTO portal_assignments
+   (id,subject_id,title,instructions,due_at,sections,status,created_by)
+   VALUES ('asg-managed','nonlinear-optics','واجب الفصل الأول','حل الصفحة 5','2099-11-20','["A"]','active',2),
+          ('asg-other','nonlinear-optics','واجب ممثل B','حل الصفحة 6','2099-11-22','["B"]','active',3)`);
+ await handleManageCallback(2,2,"cw:p:a:0");
+ let buttons=sent.at(-1).reply_markup.inline_keyboard.flat().map(x=>x.callback_data);
+ assert.ok(buttons.includes("cw:i:a:asg-managed"));
+ assert.ok(!buttons.includes("cw:i:a:asg-other"));
+ await handleManageCallback(2,2,"cw:i:a:asg-managed");
+ assert.match(sent.at(-1).text,/2099-11-20/);
+ await handleManageCallback(2,2,"cw:ed:a:asg-managed");
+ await handleManageCallback(2,2,"cw:f:a:2:asg-managed");
+ await handleAdminMessage(2,2,"2099-11-25");
+ const st=await getFlowState(2);
+ assert.equal(st.flow,"manage-coursework");
+ assert.equal(st.data.step,"confirm");
+ assert.equal((await qOne("SELECT due_at FROM portal_assignments WHERE id='asg-managed'")).due_at,"2099-11-20");
+ await handleManageCallback(2,2,"cw:ok:"+st.data.nonce);
+ assert.equal((await qOne("SELECT due_at FROM portal_assignments WHERE id='asg-managed'")).due_at,"2099-11-25");
+ await handleManageCallback(2,2,"cw:ok:"+st.data.nonce);
+ assert.match(sent.at(-1).text,/قديم/);
+ await handleManageCallback(2,2,"cw:ac:a:asg-managed");
+ assert.ok((await qOne("SELECT archived_at FROM portal_assignments WHERE id='asg-managed'")).archived_at);
+ await handleManageCallback(2,2,"cw:rs:a:asg-managed");
+ assert.equal((await qOne("SELECT archived_at FROM portal_assignments WHERE id='asg-managed'")).archived_at,null);
+ await handleManageCallback(2,2,"cw:dl:a:asg-managed");
+ let pending=await getFlowState(2);
+ assert.equal(pending.data.step,"delete");
+ assert.ok(await qOne("SELECT id FROM portal_assignments WHERE id='asg-managed'"));
+ await handleManageCallback(2,2,"cw:yes:"+pending.data.nonce);
+ assert.equal(await qOne("SELECT id FROM portal_assignments WHERE id='asg-managed'"),null);
+ assert.ok(await qOne("SELECT id FROM portal_assignments WHERE id='asg-other'"));
+ await pool.end();
+});
+
+test("quiz management allows editing previous quiz fields but hides timetable exams",async()=>{
+ const pool=await makeDb();await linked(pool,2);sent.length=0;
+ await pool.query(`INSERT INTO portal_exams
+ (id,subject_id,title,type,date,start_time,sections,status,created_by)
+ VALUES
+ ('quiz-managed','nonlinear-optics','كوز المحاضرة الأولى','كوز يومي','2099-11-20','09:30','["A"]','confirmed',2),
+ ('final-legacy','nonlinear-optics','جدول فاينل','Final','2099-11-24','09:30','["A"]','confirmed',2)`);
+ await handleManageCallback(2,2,"cw:p:q:0");
+ let buttons=sent.at(-1).reply_markup.inline_keyboard.flat().map(x=>x.callback_data);
+ assert.ok(buttons.includes("cw:i:q:quiz-managed"));
+ assert.ok(!buttons.includes("cw:i:q:final-legacy"));
+ await handleManageCallback(2,2,"cw:ed:q:quiz-managed");
+ await handleManageCallback(2,2,"cw:f:q:2:quiz-managed");
+ await handleAdminMessage(2,2,"10:45");
+ const st=await getFlowState(2);
+ assert.equal(st.data.step,"confirm");
+ await handleManageCallback(2,2,"cw:ok:"+st.data.nonce);
+ assert.equal((await qOne("SELECT start_time FROM portal_exams WHERE id='quiz-managed'")).start_time,"10:45");
+ await handleManageCallback(2,2,"cw:ac:q:quiz-managed");
+ assert.ok((await qOne("SELECT archived_at FROM portal_exams WHERE id='quiz-managed'")).archived_at);
+ await handleManageCallback(2,2,"cw:rs:q:quiz-managed");
+ assert.equal((await qOne("SELECT archived_at FROM portal_exams WHERE id='quiz-managed'")).archived_at,null);
+ await handleManageCallback(2,2,"cw:dl:q:quiz-managed");
+ const pending=await getFlowState(2);
+ await handleManageCallback(2,2,"cw:yes:"+pending.data.nonce);
+ assert.equal(await qOne("SELECT id FROM portal_exams WHERE id='quiz-managed'"),null);
+ assert.ok(await qOne("SELECT id FROM portal_exams WHERE id='final-legacy'"));
+ await pool.end();
+});
+
+test("ownership and authorized sections are enforced server-side for edits and deletion",async()=>{
+ const pool=await makeDb();await linked(pool,2);await linked(pool,3);await linked(pool,4);sent.length=0;
+ await pool.query(`INSERT INTO portal_assignments
+  (id,subject_id,title,instructions,due_at,sections,status,created_by)
+  VALUES ('owned-b','nonlinear-optics','واجب B','نص','2099-11-20','["B"]','active',3)`);
+ await pool.query(`INSERT INTO portal_exams
+  (id,subject_id,title,type,date,start_time,sections,status,created_by)
+  VALUES ('quiz-a','nonlinear-optics','كوز A','كوز يومي','2099-11-20','09:30','["A"]','confirmed',2)`);
+ const denied=await changeCoursework(repA,"a","owned-b","title","غير مشروع","واجب B");
+ assert.equal(denied.ok,false);
+ assert.equal((await archiveCoursework(repA,"a","owned-b",true)).ok,false);
+ assert.equal((await deleteCoursework(repA,"a","owned-b")).ok,false);
+ assert.equal((await changeCoursework(repA,"q","quiz-a","sections",["B"],["A"])).ok,false);
+ assert.equal((await changeCoursework(repA,"q","quiz-a","date","2020-01-01","2099-11-20")).ok,false);
+ assert.equal((await changeCoursework(repA,"q","quiz-a","start_time","25:00","09:30")).ok,false);
+ assert.equal((await changeCoursework(repA,"q","quiz-a","title","كوز جديد","اسم قديم")).ok,false);
+ assert.equal((await changeCoursework(teacher,"q","quiz-a","title","من تدريسي","كوز A")).ok,false);
+ await handleManageCallback(2,2,"cw:ac:a:owned-b");
+ assert.ok(await qOne("SELECT id FROM portal_assignments WHERE id='owned-b' AND archived_at IS NULL"));
+ assert.equal((await qOne("SELECT title FROM portal_exams WHERE id='quiz-a'")).title,"كوز A");
  await pool.end();
 });
