@@ -4,6 +4,7 @@
 import {q, qOne} from "./db.ts";
 import {sendMessage} from "./telegram.ts";
 import {PORTAL_BASE_URL} from "./flags.ts";
+import {assignmentDisplayDay,baghdadToday} from "../assignment-date.ts";
 import type {AdminInfo} from "./rbac.ts";
 import {isActive, canUseTelegramPublishing, SECTIONS} from "./rbac.ts";
 import {
@@ -145,10 +146,10 @@ export async function handleStudentCallback(chatId: number, userId: number, data
   }
   if (data === "stu:exams") {
     const exams = await q<Record<string, unknown>>(`SELECT title, date, type, room FROM portal_exams WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') AND date >= CURRENT_DATE ORDER BY date LIMIT 8`, [sec]);
-    const asg = await q<Record<string, unknown>>(`SELECT title, due_at FROM portal_assignments WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') AND due_at >= now() ORDER BY due_at LIMIT 8`, [sec]);
+    const asg = await q<Record<string, unknown>>(`SELECT title, due_at FROM portal_assignments WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') AND LEFT(due_at,10) >= $2 ORDER BY due_at LIMIT 8`, [sec,baghdadToday()]);
     const text = [
       exams.length ? "📝 الامتحانات:\n" + exams.map(e => `• ${e.title} — ${e.date} ${e.room ? "· " + e.room : ""}`).join("\n") : "",
-      asg.length ? "📄 الواجبات:\n" + asg.map(a => `• ${a.title} — حتى ${a.due_at}`).join("\n") : "",
+      asg.length ? "📄 الواجبات:\n" + asg.map(a => `• ${a.title} — حتى ${assignmentDisplayDay(a.due_at)}`).join("\n") : "",
     ].filter(Boolean).join("\n\n") || "لا توجد امتحانات أو واجبات معلنة لشعبتك حاليًا.";
     await sendMessage(chatId, text + `\n\n🔗 ${PORTAL_BASE_URL}/exams`, {replyMarkup: backHome});
     return;

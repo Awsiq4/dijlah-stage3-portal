@@ -179,10 +179,11 @@ test("assignment is three-step: subject, one-message description, deadline, then
  assert.deepEqual(st.data.sections,["A"]);
  await handleAdminMessage(2,2,"حل مسائل الفصل الأول\nحل التمارين 1 إلى 5 بالدفتر");
  assert.equal((await getFlowState(2)).data.step,"due");
- await handleAdminMessage(2,2,"2099-11-20 18:00");
+ await handleAdminMessage(2,2,"2099-11-20");
  st=await getFlowState(2);
  assert.equal(st.data.step,"confirm");
- assert.equal(st.data.dueAt,"2099-11-20T18:00:00+03:00");
+ assert.equal(st.data.dueAt,"2099-11-20");
+ assert.doesNotMatch(sent.at(-1).text,/18:00|23:59/);
  assert.equal(st.data.title,"حل مسائل الفصل الأول");
  await handleAdminCallback(2,2,"pub:asg:"+st.data.nonce);
  const rows=await q("SELECT * FROM portal_assignments");
@@ -190,6 +191,7 @@ test("assignment is three-step: subject, one-message description, deadline, then
  assert.equal(rows[0].title,"حل مسائل الفصل الأول");
  assert.match(rows[0].instructions,/التمارين 1/);
  assert.deepEqual(asArr(rows[0].sections),["A"]);
+ assert.equal(rows[0].due_at,"2099-11-20");
  assert.ok(!(await getFlowState(2)).flow);
  await handleAdminCallback(2,2,"pub:asg:"+st.data.nonce);
  assert.equal((await q("SELECT id FROM portal_assignments")).length,1);
@@ -207,7 +209,7 @@ test("teacher assignment defaults to allowed audience, rejects forged section on
  assert.deepEqual(current.data.sections,["A","B"]);
  assert.equal(current.data.step,"details");
  await handleAdminMessage(4,4,"واجب الفصل الأول");
- await handleAdminMessage(4,4,"2099-11-20 18:00");
+ await handleAdminMessage(4,4,"2099-11-20");
  await handleAdminCallback(4,4,"asg:edit:audience");
  await handleAdminCallback(4,4,"asg:aud:sec:C");
  assert.equal((await getFlowState(4)).data.step,"audience");
