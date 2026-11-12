@@ -110,3 +110,60 @@ test("resume restores current prompt and common menus remain role-aware", async(
  }
  await pool.end();
 });
+
+
+test("fast announcement: representative sends text once and bot creates preview title", async () => {
+ const pool = await makeDb(); await linked(pool, 2); sent.length = 0;
+ await handleAdminCallback(2,2,"adm:quick");
+ assert.equal((await getFlowState(2)).data.step,"body");
+ await handleAdminMessage(2,2,"غداً تلغى محاضرة ميكانيك الكم.");
+ const pending = await getFlowState(2);
+ assert.equal(pending.flow,"ann");
+ assert.equal(pending.data.step,"confirm");
+ assert.equal(pending.data.title,"غداً تلغى محاضرة ميكانيك الكم.");
+ await handleAdminCallback(2,2,"pub:ann:"+pending.data.nonce);
+ const ann = (await q("SELECT title,body,scope,section FROM portal_announcements"))[0];
+ assert.equal(ann.title,"غداً تلغى محاضرة ميكانيك الكم.");
+ assert.equal(ann.body,"غداً تلغى محاضرة ميكانيك الكم.");
+ assert.equal(ann.scope,"section");
+ assert.equal(ann.section,"A");
+ await pool.end();
+});
+
+test("summary publishing saves material_kind summary without showing as lecture", async () => {
+ const pool = await makeDb(); await linked(pool,2); sent.length = 0;
+ await setFlowState(2,"lec",{
+   step:"confirm", nonce:"summary-check", draftId:"sum-test-1", materialKind:"summary",
+   subjectId:"nonlinear-optics", sections:["A"], title:"ملخص الفصل الأول",
+   fileUrl:"/lectures/sample-summary.pdf",fileName:"sample-summary.pdf",fingerprint:"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+ });
+ await handleAdminCallback(2,2,"pub:lec:summary-check");
+ const row = await qOne("SELECT material_kind,subject_id,title FROM portal_lectures WHERE id='sum-test-1'");
+ assert.equal(row.material_kind,"summary");
+ assert.equal(row.subject_id,"nonlinear-optics");
+ assert.equal(row.title,"ملخص الفصل الأول");
+ const studentSection="A";
+ const lectures=(await q("SELECT * FROM portal_lectures")).filter(x=>x.material_kind!=="summary");
+ assert.equal(lectures.length,0);
+ assert.equal(studentSection,"A");
+ await pool.end();
+});
+
+test("results announcements do not ask for individual grade-sheet uploads", async () => {
+ const pool = await makeDb(); await linked(pool,4); sent.length=0;
+ await handleAdminCallback(4,4,"adm:results");
+ assert.equal((await getFlowState(4)).data.step,"subject");
+ await handleAdminCallback(4,4,"ann:subj:nonlinear-optics");
+ await handleAdminCallback(4,4,"lec:aud:sec:A");
+ assert.equal((await getFlowState(4)).data.step,"body");
+ await handleAdminMessage(4,4,"تم إعلان نتائج امتحان الميد من قبل التدريسي.");
+ const draft=await getFlowState(4);
+ assert.equal(draft.data.step,"confirm");
+ assert.match(String(draft.data.title),/^صدور نتائج:/);
+ await handleAdminCallback(4,4,"pub:ann:"+draft.data.nonce);
+ const row=(await q("SELECT * FROM portal_announcements"))[0];
+ assert.equal(row.subject_id,"nonlinear-optics");
+ assert.equal(row.section,"A");
+ assert.match(row.title,/نتائج/);
+ await pool.end();
+});
