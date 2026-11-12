@@ -12,7 +12,7 @@ import {publishAnnouncement, publishLecture, updateAnnouncementOwn, updateLectur
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {tgFetch} from "./telegram.ts";
 import {uploadLectureFile, validMaterialFile, materialMime, MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
-import {publishPastQuestion, questionBankReady, validExamKind, EXAM_KINDS} from "./bot-question-bank.ts";
+import {publishPastQuestion, questionBankReady, validExamKind, EXAM_KINDS, questionImageMime, uploadQuestionImage} from "./bot-question-bank.ts";
 
 
 export type LinkedAdmin = AdminInfo & {link_id: number};
@@ -289,11 +289,14 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
       if (d.fileUrl) { await previewDraft(chatId, "lec", next); return; }
       await setState(chatId, "lec", next);
       if (d.pendingDoc) { await handleAdminMessage(chatId, userId, "", d.pendingDoc as TgDocument); return; }
-      await sendMessage(chatId, "أرسل ملف PDF أو PPTX هنا (حتى 20MB).", {replyMarkup: navigation}); return;
+      await sendMessage(chatId, d.materialKind === "questions"
+        ? "📑 أرسل أسئلة الامتحان كصورة JPG/PNG أو ملف PDF/PPTX (حتى 20MB)."
+        : "أرسل ملف PDF أو PPTX هنا (حتى 20MB).", {replyMarkup: navigation}); return;
     }
     if (d.step === "file") {
       if (document) {
-        if (!materialMime(document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير مدعوم. أرسل PDF أو PPTX أو رابط ملف محفوظ."); return; }
+        const image = d.materialKind === "questions" && /\\.(?:jpe?g|png)$/i.test(document.file_name || "");
+        if (!materialMime(document.file_name || "") && !image) { await sendMessage(chatId, "⚠️ الملف غير مدعوم. أرسل PDF أو PPTX، وللأسئلة السابقة يمكن إرسال صورة JPG/PNG."); return; }
         if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
         if (!storageConfigured()) { await sendMessage(chatId, "⚠️ تخزين الملفات غير مهيأ على الخادم. استخدم لوحة الويب لرفع الملف."); return; }
         let stage: PdfUploadStage = "telegram-getFile";
@@ -306,9 +309,13 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
           const buf = Buffer.from(await dl.arrayBuffer());
           stage = "file-validation";
           if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
-          if (!validMaterialFile(buf, document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير صالح. أرسل PDF أو PPTX سليمًا."); return; }
+          if (!validMaterialFile(buf, document.file_name || "") && !(image && questionImageMime(document.file_name || "", buf))) {
+            await sendMessage(chatId, "⚠️ الملف غير صالح أو لا يطابق صيغته. أرسل PDF أو PPTX أو صورة سليمة."); return;
+          }
           stage = "blob-upload";
-          const {url} = await uploadLectureFile(buf, document.file_name || "lecture.pdf");
+          const {url} = image
+            ? await uploadQuestionImage(buf, document.file_name || "question.jpg")
+            : await uploadLectureFile(buf, document.file_name || "lecture.pdf");
           const draft = {...d, fileUrl: url, fileName: (document.file_name || "lecture.pdf").slice(0, 120), fingerprint: createHash("sha256").update(buf).digest("hex"), pendingDoc: undefined, step: "confirm"};
           // Persist the uploaded URL before sending the confirmation message.
           // If Telegram fails after storage succeeds, /start can resume this draft without re-uploading.
