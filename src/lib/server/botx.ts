@@ -172,6 +172,8 @@ export async function handleManageCallback(chatId: number, userId: number, data:
     await sendMessage(chatId, "🗂 إدارة منشوراتي — اختر النوع:", {replyMarkup: {inline_keyboard: [
       [{text: "📢 تبليغاتي", callback_data: "page:my:announcements:0"}],
       [{text: "📚 محاضراتي وملخصاتي", callback_data: "page:my:lectures:0"}],
+      [{text: "📋 الواجبات والتكاليف", callback_data: "cw:p:a:0"}],
+      [{text: "📝 الكوزات اليومية", callback_data: "cw:p:q:0"}],
       [{text: "📑 أسئلة الامتحانات السابقة", callback_data: "page:my:questions:0"}],
       [{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}],
     ]}});
