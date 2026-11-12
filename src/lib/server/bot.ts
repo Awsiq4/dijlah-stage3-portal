@@ -295,7 +295,7 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
     }
     if (d.step === "file") {
       if (document) {
-        const image = d.materialKind === "questions" && /\\.(?:jpe?g|png)$/i.test(document.file_name || "");
+        const image = d.materialKind === "questions" && /\.(?:jpe?g|png)$/i.test(document.file_name || "");
         if (!materialMime(document.file_name || "") && !image) { await sendMessage(chatId, "⚠️ الملف غير مدعوم. أرسل PDF أو PPTX، وللأسئلة السابقة يمكن إرسال صورة JPG/PNG."); return; }
         if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
         if (!storageConfigured()) { await sendMessage(chatId, "⚠️ تخزين الملفات غير مهيأ على الخادم. استخدم لوحة الويب لرفع الملف."); return; }
