@@ -167,3 +167,45 @@ test("results announcements do not ask for individual grade-sheet uploads", asyn
  assert.match(row.title,/نتائج/);
  await pool.end();
 });
+
+test("assignment publishing from Telegram: rep can post to own section, correct deadline and no duplicates", async()=>{
+ const pool=await makeDb();await linked(pool,2);sent.length=0;
+ await handleAdminCallback(2,2,"adm:asg");
+ assert.equal((await getFlowState(2)).data.step,"subject");
+ await handleAdminCallback(2,2,"asg:subj:nonlinear-optics");
+ assert.equal((await getFlowState(2)).data.step,"audience");
+ await handleAdminCallback(2,2,"asg:aud:sec:A");
+ await handleAdminMessage(2,2,"حل مسائل الفصل الأول");
+ await handleAdminMessage(2,2,"حل التمارين 1 إلى 5 بالدفتر");
+ await handleAdminMessage(2,2,"2099-11-20 18:00");
+ await handleAdminMessage(2,2,"التسليم ورقياً في المحاضرة");
+ await handleAdminMessage(2,2,"تخطي");
+ const state=await getFlowState(2);
+ assert.equal(state.flow,"asg");assert.equal(state.data.step,"confirm");
+ assert.equal(state.data.dueAt,"2099-11-20T18:00:00+03:00");
+ await handleAdminCallback(2,2,"pub:asg:"+state.data.nonce);
+ const rows=await q("SELECT * FROM portal_assignments");
+ assert.equal(rows.length,1);
+ assert.equal(rows[0].title,"حل مسائل الفصل الأول");
+ assert.equal(rows[0].subject_id,"nonlinear-optics");
+ assert.deepEqual(asArr(rows[0].sections),["A"]);
+ assert.equal(rows[0].due_at,"2099-11-20T18:00:00+03:00");
+ assert.equal((await getFlowState(2)).flow,null);
+ await handleAdminCallback(2,2,"pub:asg:"+state.data.nonce);
+ assert.equal((await q("SELECT id FROM portal_assignments")).length,1);
+ await pool.end();
+});
+
+test("teacher cannot assign to an unapproved section via forged callback", async()=>{
+ const pool=await makeDb();await linked(pool,4);sent.length=0;
+ await handleAdminCallback(4,4,"adm:asg");
+ await handleAdminCallback(4,4,"asg:subj:quantum-mechanics");
+ assert.equal((await getFlowState(4)).data.step,"subject");
+ await handleAdminCallback(4,4,"asg:subj:nonlinear-optics");
+ await handleAdminCallback(4,4,"asg:aud:sec:C");
+ assert.equal((await getFlowState(4)).data.step,"audience");
+ assert.equal((await q("SELECT id FROM portal_assignments")).length,0);
+ await handleAdminCallback(4,4,"asg:aud:sec:B");
+ assert.equal((await getFlowState(4)).data.step,"title");
+ await pool.end();
+});
