@@ -155,10 +155,11 @@ function shortAnnouncementTitle(body: string, prefix = "") {
   const first = body.trim().split(/\n/)[0].replace(/\s+/g, " ").slice(0, 90);
   return (prefix + first).slice(0, 180);
 }
-const confirmKeyboard = (kind: string, nonce: string) => ({inline_keyboard: [
+const confirmKeyboard = (kind: string, nonce: string, showTeacherAudience = false) => ({inline_keyboard: [
   [{text: "✅ نشر الآن", callback_data: `pub:${kind}:${nonce}`}],
   [{text: "✏️ تعديل العنوان", callback_data: `draft:title:${nonce}`}, {text: kind === "ann" ? "✏️ تعديل النص" : "📎 تغيير الملف", callback_data: `draft:${kind === "ann" ? "body" : "file"}:${nonce}`}],
-  ...(kind === "lec" ? [[{text:"تغيير المادة",callback_data:`draft:subject:${nonce}`},{text:"تغيير الجمهور",callback_data:`draft:audience:${nonce}`}]] : [[{text:"🎯 تغيير الشعبة",callback_data:`draft:audience:${nonce}`}]]),
+  ...(kind === "lec" ? [[{text:"تغيير المادة",callback_data:`draft:subject:${nonce}`},{text:"تغيير الجمهور",callback_data:`draft:audience:${nonce}`}]] :
+      showTeacherAudience ? [[{text:"🎯 تغيير الشعبة",callback_data:`draft:audience:${nonce}`}]] : []),
   [{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}, {text: "❌ إلغاء", callback_data: "adm:cancel"}],
 ]});
 export function escapeHtml(value: unknown): string { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
@@ -197,7 +198,7 @@ async function previewDraft(chatId: number, flow: string, d: Record<string, unkn
   const details = flow === "ann"
     ? `${d.body || ""}\nالجمهور: ${scope}`
     : `${d.materialKind === "questions" ? "بنك الأسئلة · " + (EXAM_KINDS[String(d.examKind) as keyof typeof EXAM_KINDS] || "") + "\n" : d.materialKind === "summary" ? "الملخصات\n" : ""}الجمهور: ${audienceLabel((d.sections as string[]) || [])}\nالملف محفوظ وجاهز للنشر.`;
-  await sendMessage(chatId, `معاينة قبل النشر\n${subject?.name || ""}\n${d.title || ""}\n\n${details}`, {replyMarkup: confirmKeyboard(flow, nonce)});
+  await sendMessage(chatId, `معاينة قبل النشر\n${subject?.name || ""}\n${d.title || ""}\n\n${details}`, {replyMarkup: confirmKeyboard(flow, nonce, d.scope === "teacher")});
 }
 
 // ---- message handling (steps of the flows) ----
