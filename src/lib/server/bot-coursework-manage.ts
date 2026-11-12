@@ -205,6 +205,9 @@ export async function handleCourseworkMessage(chatId:number,userId:number,text:s
   const admin=await getLinkedAdmin(userId),state=await getFlowState(chatId);
   if(!admin||state?.flow!=="manage-coursework"||state.data.step!=="input")return;
   const d=state.data,field=String(d.field) as Field;
+  if(String(d.actor)!==String(admin.id)) {
+    await sendMessage(chatId,"⛔ هاي المسودة تخص ناشراً آخر.");return;
+  }
   if(!FIELDS[d.kind as CourseworkKind]?.includes(field))return;
   const value=text.trim();
   if(!value){await sendMessage(chatId,"اكتب قيمة غير فارغة، أو اختر إلغاء.");return;}
@@ -218,6 +221,7 @@ export async function resumeCourseworkEdit(chatId:number,userId:number){
   const admin=await getLinkedAdmin(userId),state=await getFlowState(chatId);
   if(!admin||state?.flow!=="manage-coursework")return;
   const d=state.data,field=String(d.field) as Field;
+  if(String(d.actor)!==String(admin.id))return;
   if(d.step==="input"){
     await sendMessage(chatId,`✏️ أرسل ${NAMES[field]} الجديد. ${field==="due_at"?"مثال: 2026-11-20 (بدون ساعة)":field==="date"?"مثال: 2026-11-20":field==="start_time"?"مثال: 09:30":""}`);
   } else if(d.step==="confirm")await presentProposed(chatId,d,d.nextValue);
