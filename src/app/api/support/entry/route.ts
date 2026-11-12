@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {randomBytes} from "node:crypto";
 import {BOT_USERNAME,PORTAL_BASE_URL,WEBHOOK_SECRET,telegramServiceEnabled} from "@/lib/server/flags";
 import {setWebhook,tgFetch} from "@/lib/server/telegram";
+import {expectedProductionWebhook,decideSupportWebhookAction,isOfficialProductionWebhook} from "@/lib/server/telegram-webhook-hosts";
 import {checkLoginRateLimit} from "@/lib/server/auth";
 import {q} from "@/lib/server/db";
 import {hash} from "@/lib/server/support";
@@ -17,25 +18,21 @@ const respond=(body:unknown,status=200)=>
 async function ensureOfficialWebhook():Promise<boolean> {
   if(process.env.VERCEL_ENV==="preview") return false;
   if(!WEBHOOK_SECRET) return false;
-  const expected=new URL("/api/telegram/webhook",PORTAL_BASE_URL);
-  if(expected.origin!=="https://dijlah-stage3-portal.vercel.app")return false;
+  const expected=expectedProductionWebhook(PORTAL_BASE_URL);
+  if(!expected)return false;
   const info=await tgFetch<{url:string}>("getWebhookInfo",{});
   if(!info.ok)return false;
-  if(info.result?.url===expected.toString())return true;
-  if(info.result?.url){
-    let previous:URL;
-    try{previous=new URL(info.result.url);}catch{return false;}
-    const knownPreview=previous.protocol==="https:"
-      &&previous.pathname==="/api/telegram/webhook"
-      &&(previous.hostname==="dijlah-stage3-portal-awsiq4.vercel.app"
-        || /^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\.vercel\.app$/i.test(previous.hostname));
-    // Never override an unknown external webhook without owner approval.
-    if(!knownPreview)return false;
-  }
-  const changed=await setWebhook(expected.toString(),WEBHOOK_SECRET);
+  // Both verified production domains point to the same Vercel project.
+  // Do not reset a working official webhook simply because dj3.top became canonical.
+  const action=decideSupportWebhookAction(info.result?.url);
+  if(action==="ready")return true;
+  // Keep fail-closed behavior for genuinely unknown webhook hosts.
+  if(action==="untrusted")return false;
+  const changed=await setWebhook(expected,WEBHOOK_SECRET);
   if(!changed.ok)return false;
   const verify=await tgFetch<{url:string}>("getWebhookInfo",{});
-  return verify.ok&&verify.result?.url===expected.toString();
+  return verify.ok&&isOfficialProductionWebhook(verify.result?.url||"")
+    &&verify.result?.url===expected;
 }
 
 export async function POST(req:NextRequest) {

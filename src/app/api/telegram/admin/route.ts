@@ -2,6 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import {telegramServiceEnabled, botConfigured, dbConfigured, PORTAL_BASE_URL, WEBHOOK_SECRET} from "@/lib/server/flags";
 import {q} from "@/lib/server/db";
 import {getMe, setWebhook, tgFetch} from "@/lib/server/telegram";
+import {expectedProductionWebhook,isOfficialProductionWebhook,isKnownProjectPreviewWebhook} from "@/lib/server/telegram-webhook-hosts";
 import {requireAdmin} from "@/lib/server/auth";
 import {publishAndDeliver} from "@/lib/server/notify";
 
@@ -41,29 +42,26 @@ export async function POST(req: NextRequest) {
     if (!telegramServiceEnabled() || !WEBHOOK_SECRET) {
       return NextResponse.json({error: "bot configuration incomplete"}, {status: 503});
     }
-    const url = new URL("/api/telegram/webhook", PORTAL_BASE_URL);
-    if (url.protocol !== "https:" || url.username || url.password) {
-      return NextResponse.json({error: "invalid portal base URL"}, {status: 503});
+    const target = expectedProductionWebhook(PORTAL_BASE_URL);
+    if (!target) {
+      return NextResponse.json({error: "Production webhook host is not a verified project alias"}, {status: 503});
     }
     const bot = await getMe();
     if (!bot.ok) return NextResponse.json({error: "Telegram bot authentication failed"}, {status: 502});
     const before = await tgFetch<{url: string}>("getWebhookInfo", {});
     if (!before.ok) return NextResponse.json({error: "Unable to inspect Telegram webhook"}, {status: 502});
-    if (before.result?.url) {
-      const previous = new URL(before.result.url);
-      const sameOrigin = previous.origin === url.origin;
-      const knownPreview = previous.protocol === "https:"
-        && previous.pathname === "/api/telegram/webhook"
-        && /^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\.vercel\.app$/i.test(previous.hostname);
-      if (!sameOrigin && !knownPreview) return NextResponse.json({error: "Bot is connected to an unknown deployment; manual verification required"}, {status: 409});
-    }
-    const configured = await setWebhook(url.toString(), WEBHOOK_SECRET);
+    // The custom domain and the existing production .vercel.app alias are
+    // both verified to serve this same Vercel project.
+    if (before.result?.url && !isOfficialProductionWebhook(before.result.url)
+      && !isKnownProjectPreviewWebhook(before.result.url))
+      return NextResponse.json({error: "Bot is connected to an unknown deployment; manual verification required"}, {status: 409});
+    const configured = await setWebhook(target, WEBHOOK_SECRET);
     if (!configured.ok) return NextResponse.json({error: "Telegram webhook registration failed"}, {status: 502});
     const info = await tgFetch<{url: string; pending_update_count: number; last_error_date?: number}>("getWebhookInfo", {});
     return NextResponse.json({
-      ok: info.ok && info.result?.url === url.toString(),
+      ok: info.ok && info.result?.url === target,
       bot: bot.result?.username,
-      webhookHost: url.host,
+      webhookHost: new URL(target).host,
       pendingUpdates: info.result?.pending_update_count,
       lastErrorAt: info.result?.last_error_date || null,
     });
