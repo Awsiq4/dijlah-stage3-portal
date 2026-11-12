@@ -9,14 +9,14 @@ import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 import {AssignmentForm} from "./assignment-form";
 import {ExamForm} from "./exam-form";
-import {CONTENT_SECTIONS, ContentList, useAdminRows, type PublicationType} from "./content-navigation";
+import {CONTENT_SECTIONS, AdminNavGroup, ContentList, useAdminRows, type PublicationType} from "./content-navigation";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
 type Recent = {type: PublicationType | "examSchedule"; id: string; title: string};
 type Stats = {databaseConfigured: boolean; counts?: {table: string; count: number}[]; recentPublications?: Recent[]};
 type Row = Record<string, unknown>;
 type WritableTab = "subjects" | PublicationType | "schedule";
-type TabId = WritableTab | "overview" | "content" | "calendar" | "more" | "examSchedule" | "telegram" | "users" | "tgcenter" | "audit" | "services";
+type TabId = WritableTab | "overview" | "content" | "calendar" | "more" | "examSchedule" | "telegram" | "telegramTools" | "account" | "users" | "tgcenter" | "audit" | "services";
 type PrimaryTab = "overview" | "content" | "calendar" | "more";
 
 const PRIMARY_TABS = [
@@ -31,11 +31,15 @@ const CALENDARS = [
 ] as const;
 const SETTINGS = [
   {id: "subjects", label: "إدارة المواد", Icon: GraduationCap},
-  {id: "users", label: "إدارة الحسابات", Icon: Users, owner: true},
-  {id: "tgcenter", label: "مركز Telegram", Icon: Send, owner: true},
-  {id: "telegram", label: "روابط قنوات Telegram", Icon: BellRing},
+  {id: "users", label: "حسابات التدريسيين والممثلين", Icon: Users, owner: true},
+  {id: "telegramTools", label: "تيليجرام", Icon: Send},
+  {id: "account", label: "حسابي وأمان الدخول", Icon: KeyRound},
   {id: "audit", label: "سجل الأحداث", Icon: ShieldCheck, owner: true},
-  {id: "services", label: "حالة الخدمات", Icon: Database, owner: true},
+  {id: "services", label: "التشخيص الفني", Icon: Database, owner: true},
+] as const;
+const TELEGRAM_TOOLS = [
+  {id: "tgcenter", label: "إدارة البوت", Icon: Send, owner: true},
+  {id: "telegram", label: "روابط القنوات للطلاب", Icon: BellRing},
 ] as const;
 
 function primaryTab(tab: TabId): PrimaryTab {
@@ -203,11 +207,14 @@ export default function AdminDashboard(){
   if (loading) return <PageHeading title="لوحة الإدارة" description="جارٍ التحقق من الجلسة…"/>;
   if (!me?.authenticated) return <PageHeading title="لوحة الإدارة" description="غير مسجّل الدخول"/>;
   const passkeyLink = ["super_admin", "teacher", "section_representative", "general_representative"].includes(me.role || "")
-    ? <a className="action-button secondary" href="/admin/passkeys">مفاتيح الدخول</a> : null;
+    ? <a className="action-button secondary" href="/admin/passkeys"><KeyRound size={17}/> مفاتيح الدخول</a> : null;
   const canWrite = me.role === "super_admin" || me.role === "editor";
   if (!canWrite) return <RoleWorkspace me={me} subjects={subjects} passkeyLink={passkeyLink} onLogout={logout}/>;
   const owner = me.role === "super_admin";
   const group = primaryTab(tab);
+  const calendars = CALENDARS.filter(item => item.id !== "examSchedule" || owner);
+  const settings = SETTINGS.filter(item => !("owner" in item) || owner);
+  const settingsSelection = tab === "tgcenter" || tab === "telegram" ? "telegramTools" : tab;
   const recent = stats?.recentPublications?.filter(item => owner || item.type !== "examSchedule") || [];
   const visibleRows = rows?.filter(row => tab === "exams" ? row.type === "كوز يومي" : tab === "examSchedule" ? row.type !== "كوز يومي" : true);
   const listing = publication || calendar || tab === "subjects";
@@ -218,7 +225,15 @@ export default function AdminDashboard(){
     setNotice("تم الحفظ بنجاح.");
   }
 
-  return <div className="admin-shell">
+  return <div className="admin-shell admin-workspace-layout">
+    <nav className="admin-desktop-nav" aria-label="أقسام الإدارة">
+      <AdminNavGroup items={PRIMARY_TABS.slice(0, 1)} active={tab} onSelect={navigate}/>
+      <AdminNavGroup label="المحتوى" items={CONTENT_SECTIONS} active={tab} onSelect={navigate}/>
+      <AdminNavGroup label="الجداول" items={calendars} active={tab} onSelect={navigate}/>
+      <AdminNavGroup label="الإعدادات" items={settings} active={settingsSelection} onSelect={navigate}/>
+      <button type="button" className="admin-side-logout" onClick={logout}><LogOut size={17}/> تسجيل الخروج</button>
+    </nav>
+    <div className="admin-workspace-main">
     {review}
     <PageHeading title="لوحة الإدارة" description={me.name || me.email} action={
       <button type="button" className="action-button admin-publish" aria-expanded={publishing} onClick={() => setPublishing(value => !value)}><Plus size={18}/> نشر</button>
@@ -250,23 +265,33 @@ export default function AdminDashboard(){
     {tab === "content" && <div className="admin-option-grid">{CONTENT_SECTIONS.map(({id, label, Icon}) =>
       <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={21}/>{label}</button>
     )}</div>}
-    {tab === "calendar" && <div className="admin-option-grid">{CALENDARS.filter(item => item.id !== "examSchedule" || owner).map(({id, label, Icon}) =>
+    {tab === "calendar" && <div className="admin-option-grid">{calendars.map(({id, label, Icon}) =>
       <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={21}/>{label}</button>
     )}</div>}
     {tab === "more" && <div className="admin-option-grid">
-      {SETTINGS.filter(item => !("owner" in item) || owner).map(({id, label, Icon}) =>
+      {settings.map(({id, label, Icon}) =>
         <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={20}/>{label}</button>
       )}
-      {owner && <a className="admin-option" href="/admin/passkeys"><KeyRound size={20}/>مفاتيح الدخول</a>}
       <button type="button" className="admin-option" onClick={logout}><LogOut size={20}/> تسجيل الخروج</button>
     </div>}
 
-    {tab === "telegram" && (rowsFailed ? <Empty title="تعذّر تحميل القنوات" description="حاول فتح القسم مجدداً."/> : <TelegramPanel onChanged={reload} canWrite={canWrite} rows={rows}/>)}
+    {tab === "telegramTools" && <section className="panel">
+      <div className="panel-heading"><h2>تيليجرام</h2></div>
+      <div className="panel-body admin-option-grid">{TELEGRAM_TOOLS.filter(item => !("owner" in item) || owner).map(({id, label, Icon}) =>
+        <button type="button" key={id} className="admin-option" onClick={() => navigate(id)}><Icon size={20}/>{label}</button>
+      )}</div>
+    </section>}
+    {(tab === "telegram" || tab === "tgcenter") && <button type="button" className="action-button secondary admin-back-link" onClick={() => navigate("telegramTools")}>رجوع إلى تيليجرام</button>}
+    {tab === "account" && <section className="panel">
+      <div className="panel-heading"><h2>حسابي وأمان الدخول</h2></div>
+      <div className="panel-body stack"><p>{me.email}</p>{passkeyLink}<button type="button" className="action-button secondary" onClick={logout}><LogOut size={16}/> تسجيل الخروج</button></div>
+    </section>}
+    {tab === "telegram" && (rowsFailed ? <Empty title="تعذّر تحميل القنوات" description="حاول فتح القسم مجدداً."/> : <TelegramPanel onChanged={reload} canWrite={canWrite} rows={rows} subjects={subjects}/>)}
     {tab === "users" && owner && <UsersTab/>}
     {tab === "tgcenter" && owner && <TelegramCenterTab/>}
     {tab === "audit" && owner && <AuditTab/>}
     {tab === "services" && owner && <section className="panel">
-      <div className="panel-heading"><h2>حالة الخدمات</h2></div>
+      <div className="panel-heading"><h2>التشخيص الفني</h2></div>
       <div className="panel-body stack">
         <div className="kv"><span>قاعدة البيانات</span><Status tone={stats?.databaseConfigured ? "success" : "warning"}>{statsFailed ? "تعذّر التحقق" : stats ? (stats.databaseConfigured ? "متصلة" : "غير مهيأة") : "جارٍ التحقق"}</Status></div>
         {stats?.counts?.filter(item => item.table.startsWith("tg_")).map(item => <div className="kv" key={item.table}><span>{{tg_subscribers: "مشتركو البوت", tg_events: "أحداث الإشعارات", tg_deliveries: "عمليات إرسال الإشعارات"}[item.table]}</span><strong>{item.count}</strong></div>)}
@@ -275,12 +300,27 @@ export default function AdminDashboard(){
       </div>
     </section>}
 
-    {listing && <section className="panel">
-      <div className="panel-heading">
-        <h2>{editing ? (editing.id ? "تعديل" : "إضافة") + " · " + sectionTitle : sectionTitle}</h2>
-        {editing ? <button type="button" className="action-button secondary" onClick={cancelEdit} disabled={busy}><X size={16}/> إلغاء</button> : <button type="button" className="action-button" onClick={() => startAdd()}><Plus size={16}/> إضافة</button>}
-      </div>
-      <div className="panel-body">
+    {listing && <div className={"admin-content-layout" + (editing ? " admin-is-editing" : "")}>
+      <section className="panel admin-list-pane">
+        <div className="panel-heading">
+          <h2>{sectionTitle}</h2>
+          <button type="button" className="action-button" onClick={() => startAdd()}><Plus size={16}/> إضافة</button>
+        </div>
+        <div className="panel-body">
+          {rowsFailed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : !visibleRows ? <p className="subtle" role="status">جارٍ التحميل…</p> :
+            <ContentList key={tab} rows={visibleRows} subjects={subjects} selected={editing?.id ? String(editing.id) : undefined}
+              onEdit={startEdit} onRemove={row => {
+                if (row.id === editing?.id) setNotice("أغلق نموذج التعديل قبل حذف هذا المنشور.");
+                else void remove((tab === "examSchedule" ? "exams" : tab) as WritableTab, String(row.id));
+              }}/>}
+        </div>
+      </section>
+      {editing && <section className="panel admin-editor-pane" aria-label={editing.id ? "تعديل المنشور" : "إضافة منشور"}>
+        <div className="panel-heading">
+          <h2>{editing.id ? "تعديل" : "إضافة"} · {sectionTitle}</h2>
+          <button type="button" className="action-button secondary" onClick={cancelEdit} disabled={busy}><X size={16}/> إغلاق</button>
+        </div>
+        <div className="panel-body">
         {editing && tab === "lectures" && <MaterialForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} rows={rows || []} onSaved={reload}/>}
         {editing && tab === "assignments" && <AssignmentForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} onSaved={saved}/>}
         {editing && (tab === "exams" || tab === "examSchedule") && <ExamForm key={String(editing.id || "new")} account={me} initial={editing.id ? editing : undefined} mode={tab === "examSchedule" ? "schedule" : "quiz"} onSaved={saved}/>}
@@ -301,15 +341,14 @@ export default function AdminDashboard(){
           ))}
           <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}} disabled={busy}><ShieldCheck size={15}/> {busy ? "جارٍ الحفظ…" : "حفظ"}</button>
         </form>}
-        {!editing && (rowsFailed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : !visibleRows ? <p className="subtle" role="status">جارٍ التحميل…</p> :
-          <ContentList key={tab} rows={visibleRows} subjects={subjects} onEdit={startEdit}
-            onRemove={row => void remove((tab === "examSchedule" ? "exams" : tab) as WritableTab, String(row.id))}/>)}
-      </div>
-    </section>}
+        </div>
+      </section>}
+    </div>}
+    </div>
   </div>;
 }
 
-function TelegramPanel({onChanged, canWrite, rows}: {onChanged: () => void; canWrite: boolean; rows: Row[] | null}) {
+function TelegramPanel({onChanged, canWrite, rows, subjects}: {onChanged: () => void; canWrite: boolean; rows: Row[] | null; subjects: Row[]}) {
   const [kind, setKind] = useState("general");
   const [key, setKey] = useState("general");
   const [url, setUrl] = useState("");
@@ -322,7 +361,7 @@ function TelegramPanel({onChanged, canWrite, rows}: {onChanged: () => void; canW
     if (res.ok) onChanged();
   };
   return <div className="panel">
-    <div className="panel-heading"><h2><BellRing size={19}/> قنوات تليجرام</h2></div>
+    <div className="panel-heading"><h2><BellRing size={19}/> روابط القنوات للطلاب</h2></div>
     <div className="panel-body">
       {notice && <p className="note" role="status">{notice}</p>}
       {canWrite && <form className="admin-form" onSubmit={save} style={{marginBottom: 16}}>
@@ -330,15 +369,21 @@ function TelegramPanel({onChanged, canWrite, rows}: {onChanged: () => void; canW
           <select value={kind} onChange={e => { setKind(e.target.value); setKey(e.target.value === "general" ? "general" : ""); }}>
             <option value="general">قناة عامة</option><option value="section">قناة شعبة</option><option value="subject">قناة مادة</option>
           </select></label>
-        <label className="form-field"><span>المفتاح (مثل A أو nonlinear-optics)</span><input value={key} onChange={e => setKey(e.target.value)} required/></label>
+        {kind !== "general" && <label className="form-field"><span>{kind === "section" ? "الشعبة" : "المادة"}</span>
+          <select required value={key} onChange={e => setKey(e.target.value)}>
+            <option value="">اختر {kind === "section" ? "الشعبة" : "المادة"}</option>
+            {kind === "section" ? ["A", "B", "C", "F"].map(section => <option key={section}>{section}</option>)
+              : subjects.map(subject => <option key={String(subject.id)} value={String(subject.id)}>{String(subject.name)}</option>)}
+            {key && !(kind === "section" ? ["A", "B", "C", "F"].includes(key) : subjects.some(subject => subject.id === key)) && <option value={key}>{key}</option>}
+          </select>
+        </label>}
         <label className="form-field wide"><span>الرابط (https://t.me/…)</span><input dir="ltr" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://t.me/…"/></label>
         <button className="action-button" style={{gridColumn: "1/-1", justifySelf: "start"}}>حفظ القناة</button>
       </form>}
       {rows === null ? <Empty description="جارٍ التحميل…"/> : rows.length ? <div className="stack">{rows.map((r, i) => <div className="list-row" key={i}>
-        <div className="grow"><strong>{String(r.kind)} · {String(r.key)}</strong><p className="subtle small" dir="ltr">{String(r.url)}</p></div>
+        <div className="grow"><strong>{r.kind === "general" ? "القناة العامة" : r.kind === "section" ? "شعبة " + r.key : subjects.find(subject => subject.id === r.key)?.name as string || String(r.key)}</strong><p className="subtle small" dir="ltr">{String(r.url)}</p></div>
         {canWrite && <button className="action-button secondary" title="تعديل" onClick={() => { setKind(String(r.kind)); setKey(String(r.key)); setUrl(String(r.url)); }}><Pencil size={14}/></button>}
       </div>)}</div> : <Empty description="لا توجد قنوات بعد."/>}
-      <p className="subtle small" style={{marginTop: 12}}>مركز إشعارات البوت: <code>/api/telegram/admin</code> — الحالة: <code>/api/telegram/health</code>. البوت معطّل افتراضيًا.</p>
     </div>
   </div>;
 }

@@ -128,7 +128,7 @@ export function AssignmentForm({account,initial,onSaved}:{
        onChange={e=>setSections(prev=>e.target.checked?[...new Set([...prev,s])]:prev.filter(x=>x!==s))}/> {s}</label>)}
     </div>
   </div>
-  <details className="form-field wide"><summary>خيارات متقدمة</summary>
+  <details className="form-field wide"><summary>المرفقات وطريقة التسليم{initial ? " والحالة" : ""}</summary>
     <label className="form-field wide"><span>طريقة التسليم (اختياري)</span>
      <input value={submission} maxLength={500} onChange={e=>setSubmission(e.target.value)} placeholder="مثلاً: ورقي بالمحاضرة"/>
     </label>
