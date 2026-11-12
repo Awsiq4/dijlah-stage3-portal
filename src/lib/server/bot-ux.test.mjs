@@ -209,3 +209,52 @@ test("teacher cannot assign to an unapproved section via forged callback", async
  assert.equal((await getFlowState(4)).data.step,"title");
  await pool.end();
 });
+
+
+test("new upcoming exam via Telegram: representative publishes once for their own section", async()=>{
+ const pool=await makeDb();await linked(pool,2);sent.length=0;
+ await handleAdminCallback(2,2,"adm:exam");
+ assert.equal((await getFlowState(2)).data.step,"subject");
+ await handleAdminCallback(2,2,"exam:subject:nonlinear-optics");
+ assert.equal((await getFlowState(2)).data.step,"audience");
+ await handleAdminCallback(2,2,"exam:aud:A");
+ assert.equal((await getFlowState(2)).data.step,"kind");
+ await handleAdminCallback(2,2,"exam:kind:0");
+ await handleAdminMessage(2,2,"الكوز الأول في الفصل الثاني");
+ await handleAdminMessage(2,2,"2099-11-24");
+ await handleAdminMessage(2,2,"09:30");
+ await handleAdminMessage(2,2,"مختبر الليزر");
+ await handleAdminMessage(2,2,"المحاضرات 1 إلى 3");
+ await handleAdminMessage(2,2,"تخطي");
+ assert.equal((await getFlowState(2)).data.step,"status");
+ await handleAdminCallback(2,2,"exam:status:confirmed");
+ const st=await getFlowState(2);
+ assert.equal(st.data.step,"confirm");
+ assert.match(sent.at(-1).text,/الفصل الثاني/);
+ await handleAdminCallback(2,2,"pub:exam:"+st.data.nonce);
+ const exams=await q("SELECT * FROM portal_exams");
+ assert.equal(exams.length,1,JSON.stringify(sent.slice(-2)));
+ assert.equal(exams[0].title,"الكوز الأول في الفصل الثاني");
+ assert.equal(exams[0].type,"كوز يومي");
+ assert.equal(exams[0].date,"2099-11-24");
+ assert.equal(exams[0].start_time,"09:30");
+ assert.equal(exams[0].status,"confirmed");
+ assert.deepEqual(asArr(exams[0].sections),["A"]);
+ await handleAdminCallback(2,2,"pub:exam:"+st.data.nonce);
+ assert.equal((await q("SELECT id FROM portal_exams")).length,1);
+ await pool.end();
+});
+
+test("teacher cannot forge an exam in another subject or unauthorized section",async()=>{
+ const pool=await makeDb();await linked(pool,4);sent.length=0;
+ await handleAdminCallback(4,4,"adm:exam");
+ await handleAdminCallback(4,4,"exam:subject:quantum-mechanics");
+ assert.equal((await getFlowState(4)).data.step,"subject");
+ await handleAdminCallback(4,4,"exam:subject:nonlinear-optics");
+ await handleAdminCallback(4,4,"exam:aud:C");
+ assert.equal((await getFlowState(4)).data.step,"audience");
+ await handleAdminCallback(4,4,"exam:aud:B");
+ assert.equal((await getFlowState(4)).data.step,"kind");
+ assert.equal((await q("SELECT * FROM portal_exams")).length,0);
+ await pool.end();
+});
