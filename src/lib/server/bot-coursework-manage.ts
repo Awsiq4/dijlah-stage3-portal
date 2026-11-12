@@ -191,7 +191,7 @@ type ManageState={flow:string|null;data:Record<string,unknown>}|null;
 async function presentProposed(chatId:number,data:Record<string,unknown>,next:unknown){
   const {setFlowState}=await import("./bot.ts");
   const nonce=randomBytes(8).toString("hex");
-  const d={...data,step:"confirm",nonce,nextValue:next};
+  const d:Record<string,unknown>={...data,step:"confirm",nonce,nextValue:next};
   await setFlowState(chatId,"manage-coursework",d);
   const field=String(d.field) as Field;
   await sendMessage(chatId,`✏️ تأكيد تعديل ${NAMES[field]}\n\nقبل: ${formatValue(field,d.oldValue)||"—"}\nبعد: ${formatValue(field,next)||"—"}\n\nما راح ينحفظ إلا بعد التأكيد.`,
