@@ -95,10 +95,14 @@ function restrictedExamType(type: string): boolean {
 export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<string, unknown>): boolean {
   if (!isActive(a)) return false;
   if (type === "telegram") return canManageAllContent(a.role);
+  if (!row && type === "exams") return false;
+  // All university timetable exams (and other non-quiz types) are owner-only,
+  // including against trusted/editor-level sessions and direct API requests.
+  if (type === "exams" && a.role !== "super_admin" &&
+      (restrictedExamType(String(row?.type || "")) ||
+       String(row?.type || "").trim() !== "كوز يومي")) return false;
   if (canManageAllContent(a.role)) return true;
   if (!row) return false;
-  if (type === "exams" && (restrictedExamType(String(row.type || "")) ||
-      String(row.type || "").trim() !== "كوز يومي")) return false;
   if (type === "announcements") return canPublishAnnouncement(a, String(row.scope || "general"), String(row.section || "all"));
   if (type === "lectures") {
     const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];

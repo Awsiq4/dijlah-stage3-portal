@@ -165,10 +165,12 @@ test("assignment and exam authorization share material audience scope",()=>{
 });
 
 test("Midterm and Final are owner-managed; only quizzes by teachers and representatives",()=>{
+ const editor={...superAdmin,id:18,role:"editor"};
  const x={subject_id:"nonlinear-optics",sections:["A"]};
  for(const type of ["Midterm","Final","ميدتيرم","فاينل","نصف السنة","امتحان شهري",""]) {
   assert.equal(canWriteContentRecord(repA,"exams",{...x,type}),false);
   assert.equal(canWriteContentRecord(teacher,"exams",{...x,type}),false);
+  assert.equal(canWriteContentRecord(editor,"exams",{...x,type}),false);
  }
  assert.equal(canWriteContentRecord(repA,"exams",{...x,type:"كوز يومي"}),true);
  assert.equal(canWriteContentRecord(teacher,"exams",{...x,type:"كوز يومي"}),true);

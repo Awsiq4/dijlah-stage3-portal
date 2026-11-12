@@ -231,7 +231,7 @@ export async function publishExam(admin: AdminInfo, input: Record<string, unknow
     status: String(input.status || "provisional"),
   };
   if (!canPublishScheduledExam(admin, String(draft.type)) ||
-      (!["super_admin","editor"].includes(admin.role) && draft.type !== "كوز يومي"))
+      (admin.role !== "super_admin" && draft.type !== "كوز يومي"))
     return fail("مواعيد Midterm وFinal وجداول الجامعة يضيفها المالك فقط؛ بقية الناشرين يضيفون الكوزات");
   const error = validExamSchedule(draft);
   if (error) return fail(error);

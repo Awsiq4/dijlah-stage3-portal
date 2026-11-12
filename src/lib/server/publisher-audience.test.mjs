@@ -7,6 +7,7 @@ const repG={id:3,role:"general_representative",status:"active",is_active:true};
 const teacher={id:4,role:"teacher",status:"active",is_active:true,
  assigned_subjects:["nonlinear-optics"],perms:{teacher_sections:{"nonlinear-optics":["A","B"]}}};
 const owner={id:1,role:"super_admin",status:"active",is_active:true};
+const editor={id:8,role:"editor",status:"active",is_active:true};
 
 test("default publishing audience minimizes prompts without extending permissions",()=>{
  assert.deepEqual(defaultAudience(repA,"nonlinear-optics"),["A"]);
@@ -26,6 +27,7 @@ test("Midterm and Final are never scheduled from staff publisher flows",()=>{
  for(const type of ["Midterm","Final","الميدتيرم","الفاينل","نصف السنة"]) {
    assert.equal(canPublishScheduledExam(repA,type),false);
    assert.equal(canPublishScheduledExam(teacher,type),false);
+   assert.equal(canPublishScheduledExam(editor,type),false);
    assert.equal(canPublishScheduledExam(owner,type),true);
  }
  assert.equal(canPublishScheduledExam(repA,"كوز يومي"),true);
