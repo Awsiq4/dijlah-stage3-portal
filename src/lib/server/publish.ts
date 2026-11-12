@@ -225,7 +225,7 @@ export async function publishAssignment(admin: AdminInfo, input: Record<string, 
     return fail("forbidden: subject or sections not authorized");
   const title = String(input.title || "").trim();
   const dueAt = String(input.due_at || "");
-  if (!title || title.length > 180 || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?(?:[+-]\\d{2}:\\d{2}|Z)?$/.test(dueAt)
+  if (!title || title.length > 180 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:\d{2}|Z)?$/.test(dueAt)
     || Number.isNaN(Date.parse(dueAt)) || Date.parse(dueAt) <= Date.now() - 60_000)
     return fail("عنوان التكليف أو موعد التسليم غير صالح");
   const id = String(input.id || `asg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
