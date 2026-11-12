@@ -1,8 +1,9 @@
 "use client";
 
-import {useEffect, useState} from "react";
+import {Fragment, useEffect, useRef, useState} from "react";
 import type {LucideIcon} from "lucide-react";
-import {BookOpen, ClipboardList, FileQuestion, Megaphone, Pencil, Search, Trash2, ChevronLeft, ChevronRight, ArrowDown, ArrowUp} from "lucide-react";
+import {BookOpen, ClipboardList, FileQuestion, Megaphone, Pencil, Search, Trash2, ChevronLeft, ChevronRight, ArrowDown, ArrowUp, Archive, ArchiveRestore, CalendarClock} from "lucide-react";
+import {assignmentDisplayDay, baghdadToday} from "@/lib/assignment-date";
 import {Empty, Status} from "@/components/UI";
 
 export const CONTENT_SECTIONS = [
@@ -74,19 +75,60 @@ export function useAdminRows(type: string | null) {
   };
 }
 
-export function ContentList({kind, rows, subjects, selected, onEdit, onRemove}: {
+export function ContentList({kind, rows, subjects, selected, onEdit, onRemove, onChanged}: {
   kind: string;
   rows: Row[];
   subjects: Row[];
   selected?: string;
   onEdit: (row: Row) => void;
   onRemove: (row: Row) => void;
+  onChanged: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [subject, setSubject] = useState("");
   const [section, setSection] = useState("");
   const [page, setPage] = useState(1);
   const [ascending, setAscending] = useState(false);
+  const [archived, setArchived] = useState(false);
+  const [quick, setQuick] = useState<{id: string; value: string; expected: string} | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [busy, setBusy] = useState(false);
+  const writing = useRef(false);
+  const supportsArchive = CONTENT_SECTIONS.some(item => item.id === kind);
+  const supportsQuickEdit = kind === "assignments" || kind === "exams";
+
+  async function mutate(row: Row, action: "archive" | "restore" | "quick-edit") {
+    if (writing.current) return;
+    writing.current = true;
+    setBusy(true);
+    setFeedback("");
+    try {
+      const response = await fetch("/api/admin/content", {
+        method: "PATCH", headers: {"content-type": "application/json", "x-portal-admin": "1"},
+        body: JSON.stringify({type: kind, id: row.id, action, ...(action === "quick-edit" && quick ? {value: quick.value, expected: quick.expected} : {})}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFeedback(data.error || "تعذّر تنفيذ الإجراء.");
+        return;
+      }
+      setFeedback(action === "archive" ? "تمت الأرشفة." : action === "restore" ? "تم استرجاع المنشور." : "تم حفظ التعديل.");
+      setQuick(null);
+      onChanged();
+    } catch {
+      setFeedback("تعذّر الاتصال. جرّب مرة ثانية.");
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  }
+
+  function openQuick(row: Row) {
+    const expected = String(kind === "assignments" ? row.due_at || "" : row.status || "");
+    const value = kind === "assignments" ? assignmentDisplayDay(expected) : expected;
+    setFeedback("");
+    setQuick({id: String(row.id), expected, value});
+  }
   const date = DATE_FIELDS[kind];
   const hasFilters = Boolean(query || subject || section);
   function clearFilters() {
@@ -102,7 +144,7 @@ export function ContentList({kind, rows, subjects, selected, onEdit, onRemove}: 
   const filtered = rows.filter(row => {
     const name = String(row.title || row.name || row.id);
     const sections = getSections(row);
-    return (!search || name.toLocaleLowerCase("ar").includes(search))
+    return (!supportsArchive || Boolean(row.archived_at) === archived) && (!search || name.toLocaleLowerCase("ar").includes(search))
       && (!subject || row.subject_id === subject)
       && (!section || sections.includes(section) || sections.includes("all") || (!sections.length && ("sections" in row || "scope" in row)));
   });
@@ -122,6 +164,11 @@ export function ContentList({kind, rows, subjects, selected, onEdit, onRemove}: 
   const showStatus = rows.some(row => row.status || row.archived_at);
 
   return <>
+    {supportsArchive && <div className="view-toggle admin-archive-toggle" aria-label="حالة الأرشفة">
+      <button type="button" aria-pressed={!archived} className={!archived ? "selected" : ""} onClick={() => {setArchived(false); setPage(1); setQuick(null);}}>المحتوى الحالي</button>
+      <button type="button" aria-pressed={archived} className={archived ? "selected" : ""} onClick={() => {setArchived(true); setPage(1); setQuick(null);}}>المؤرشف</button>
+    </div>}
+    {feedback && <p className="note" role="status">{feedback}</p>}
     {rows.length > 0 && <div className="admin-content-filters">
       <label className="search"><Search size={16}/><input type="search" value={query} onChange={event => {setQuery(event.target.value); setPage(1);}} aria-label="بحث بالعنوان" placeholder="ابحث بالعنوان"/></label>
       {showSubject && <select aria-label="تصفية حسب المادة" value={subject} onChange={event => {setSubject(event.target.value); setPage(1);}}>
@@ -157,7 +204,10 @@ export function ContentList({kind, rows, subjects, selected, onEdit, onRemove}: 
         const sectionName = sections.includes("all") || sections.length === 4 || (Array.isArray(row.sections) && !sections.length) ? "كل الشعب" : sections.join("، ");
         const details = [subjectName, sectionName].filter(Boolean).join(" · ");
         const status = row.archived_at ? "مؤرشف" : STATUS_LABELS[String(row.status)];
-        return <tr key={String(row.id)} className={selected === String(row.id) ? "admin-row-selected" : undefined}>
+        const currentQuick = quick?.id === String(row.id) ? quick : null;
+        const isSelected = selected === String(row.id);
+        return <Fragment key={String(row.id)}>
+        <tr className={isSelected ? "admin-row-selected" : undefined}>
           <td className="admin-table-title"><strong>{name}</strong>{details && <p className="subtle small admin-mobile-detail">{details}</p>}</td>
           {showSubject && <td className="admin-table-meta">{subjectName || "—"}</td>}
           {showSection && <td className="admin-table-meta">{sectionName || "—"}</td>}
@@ -165,11 +215,30 @@ export function ContentList({kind, rows, subjects, selected, onEdit, onRemove}: 
           {showStatus && <td className="admin-table-meta admin-status-cell">{status ? <Status tone={["published", "active", "confirmed"].includes(String(row.status)) && !row.archived_at ? "success" : "muted"}>{status}</Status> : "—"}</td>}
           <td className="admin-table-actions"><div>
             <button type="button" className="action-button secondary" aria-label={`تعديل ${name}`} title="تعديل" onClick={() => onEdit(row)}><Pencil size={16}/><span className="admin-edit-label">تعديل</span></button>
+            {supportsQuickEdit && !archived && <button type="button" className="action-button secondary admin-quick-control" aria-label={`تعديل سريع ${name}`} title="تعديل سريع" disabled={busy || isSelected} onClick={() => openQuick(row)}><CalendarClock size={16}/></button>}
+            {supportsArchive && <button type="button" className="action-button secondary" aria-label={`${archived ? "استرجاع" : "أرشفة"} ${name}`} title={archived ? "استرجاع" : "أرشفة"} disabled={busy || isSelected} onClick={() => void mutate(row, archived ? "restore" : "archive")}>{archived ? <ArchiveRestore size={16}/> : <Archive size={16}/>}</button>}
             <button type="button" className="action-button secondary" aria-label={`حذف ${name}`} title="حذف" onClick={() => onRemove(row)}><Trash2 size={16}/></button>
           </div></td>
-        </tr>;
+        </tr>
+        {currentQuick && <tr className="admin-quick-control">
+          <td colSpan={2 + Number(showSubject) + Number(showSection) + Number(Boolean(date)) + Number(showStatus)}>
+            <form className="admin-quick-form" onSubmit={event => {event.preventDefault(); void mutate(row, "quick-edit");}}>
+              <label className="form-field">
+                <span>{kind === "assignments" ? "آخر يوم للتسليم" : "حالة الكويز"}</span>
+                {kind === "assignments" ? <input required type="date" min={baghdadToday()} disabled={busy} value={currentQuick.value} onChange={event => setQuick({...currentQuick, value: event.target.value})}/> :
+                  <select required value={currentQuick.value} disabled={busy} onChange={event => setQuick({...currentQuick, value: event.target.value})}>
+                    <option value="confirmed">مؤكد</option><option value="provisional">مبدئي</option><option value="cancelled">ملغى</option>
+                  </select>}
+              </label>
+              <button type="submit" className="action-button" disabled={busy}>حفظ</button>
+              <button type="button" className="action-button secondary" disabled={busy} onClick={() => setQuick(null)}>إلغاء</button>
+            </form>
+            <p className="subtle small">يُحفظ التعديل من دون إشعار نشر جديد.</p>
+          </td>
+        </tr>}
+        </Fragment>;
       })}</tbody>
-    </table></div> : <Empty title={rows.length ? "ماكو نتائج مطابقة" : "ماكو محتوى بهالقسم"} description={rows.length ? "جرّب تغيير البحث أو الفلاتر." : ""}/>}
+    </table></div> : <Empty title={hasFilters ? "ماكو نتائج مطابقة" : archived ? "ماكو محتوى مؤرشف" : "ماكو محتوى بهالقسم"} description={hasFilters ? "جرّب تغيير البحث أو الفلاتر." : ""}/>}
     {lastPage > 1 && <nav className="admin-pagination" aria-label="صفحات المحتوى">
       <button type="button" className="action-button secondary" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><ChevronRight size={16}/> السابق</button>
       <span>صفحة {currentPage} من {lastPage}</span>

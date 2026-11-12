@@ -24,3 +24,25 @@ test("legacy timestamps are shown only as dates without leaking old hours",()=>{
   assert.equal(assignmentDisplayDay("2026-11-20"),"2026-11-20");
   assert.equal(assignmentDisplayDay(""),"غير محدد");
 });
+
+test("student week follows the Saturday boundary in Baghdad and the selected section", async () => {
+  const {studentWeek} = await import("./student-week.ts");
+  const now = new Date("2026-11-13T21:30:00Z");
+  const result = studentWeek({
+    assignments: [
+      {id:"all", title:"واجب عام", dueAt:"2026-11-14T00:00:00+03:00", sections:["A","B","C","F"]},
+      {id:"other", title:"واجب ب", dueAt:"2026-11-15", sections:["B"]},
+      {id:"past-week", dueAt:"2026-11-13", sections:["A"]},
+    ],
+    exams: [
+      {id:"quiz", type:"كوز يومي", date:"2026-11-15", startTime:"10:00", sections:["A"], status:"cancelled"},
+      {id:"midterm", type:"Midterm", date:"2026-11-15", sections:["A"]},
+    ],
+    schedule: [{id:"moved", section:"A", day:0, status:"moved", start:"09:00"}],
+  }, "A", now);
+  assert.equal(result.today, "2026-11-14");
+  assert.deepEqual([result.dates[0], result.dates.at(-1)], ["2026-11-14", "2026-11-20"]);
+  assert.deepEqual(result.items.map(item => item.id), ["all", "moved", "quiz"]);
+  assert.equal(result.items[0].time, undefined);
+  assert.equal(result.items[2].status, "cancelled");
+});

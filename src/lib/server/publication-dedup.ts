@@ -25,7 +25,7 @@ export class PublicationConflict extends Error {
   }
 }
 
-export async function lockPublication(db: Pick<Queryer, "q">, kind: PublicationKind) {
+export async function lockPublication(db: Pick<Queryer, "q">, kind: PublicationKind | "assignments" | "exams") {
   await db.q(`INSERT INTO portal_publication_locks (kind) VALUES ($1)
     ON CONFLICT (kind) DO UPDATE SET kind=EXCLUDED.kind`, [kind]);
 }

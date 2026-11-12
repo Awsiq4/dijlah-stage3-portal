@@ -336,3 +336,49 @@ test("owner publication stores public display name instead of login email", asyn
   assert.equal(row.author, "Aws Faris");
   await pool.end();
 });
+
+test("web coursework retries enqueue once and archive/restore never queues a new notification", async () => {
+  const pool = await makeDb();
+  try {
+    const {withTx} = await import("./db.ts");
+    const {applyContentUpsert, publicationQueuesTelegram} = await import("./publish.ts");
+    const {archiveCoursework, changeCoursework} = await import("./bot-coursework-manage.ts");
+    const row = {id:"retry-assignment", subject_id:"nonlinear-optics", title:"تطبيق", instructions:"حل التمارين",
+      assigned_at:"2035-01-01", due_at:"2035-01-05", sections:["A"], status:"active"};
+    assert.equal(publicationQueuesTelegram("assignments", row), true);
+    assert.equal(publicationQueuesTelegram("exams", {...row, status:"cancelled"}), false);
+    await withTx(tx => applyContentUpsert(tx, repA, "assignments", row));
+    await withTx(tx => applyContentUpsert(tx, repA, "assignments", row));
+    assert.equal((await q("SELECT id FROM portal_assignments")).length, 1);
+    assert.equal((await q("SELECT id FROM tg_events")).length, 1);
+    assert.equal((await changeCoursework(repB, "a", row.id, "due_at", "2035-01-06", row.due_at, "web")).ok, false);
+    assert.equal((await changeCoursework(repA, "a", row.id, "due_at", "2035-01-06", row.due_at, "web")).ok, true);
+    assert.equal((await changeCoursework(repA, "a", row.id, "due_at", "2035-01-07", row.due_at, "web")).ok, false);
+    assert.equal((await archiveCoursework(repB, "a", row.id, true, "web")).ok, false);
+    assert.equal((await archiveCoursework(repA, "a", row.id, true, "web")).ok, true);
+    assert.ok((await qOne("SELECT archived_at FROM portal_assignments WHERE id=$1", [row.id])).archived_at);
+    assert.equal((await archiveCoursework(repA, "a", row.id, false, "web")).ok, true);
+    assert.equal((await qOne("SELECT archived_at FROM portal_assignments WHERE id=$1", [row.id])).archived_at, null);
+    assert.equal((await q("SELECT id FROM tg_events")).length, 1);
+  } finally {
+    await pool.end();
+  }
+});
+
+test("teacher announcements enforce the same subject and section on the web and can be restored", async () => {
+  const pool = await makeDb();
+  try {
+    const {withTx} = await import("./db.ts");
+    const {applyContentUpsert, archiveContent} = await import("./publish.ts");
+    const row = {id:"teacher-web-ann", title:"تبليغ البصريات", body:"تفاصيل", subject_id:"nonlinear-optics",
+      scope:"teacher", section:"A", published_at:"2035-01-02"};
+    await assert.rejects(withTx(tx => applyContentUpsert(tx, teacher, "announcements", {...row, section:"C"})), {status:403});
+    await assert.rejects(withTx(tx => applyContentUpsert(tx, teacher, "announcements", {...row, section:"invalid"})), {status:403});
+    await withTx(tx => applyContentUpsert(tx, teacher, "announcements", row));
+    assert.equal((await archiveContent(teacher, "announcements", row.id, true)).ok, true);
+    assert.equal((await archiveContent(teacher, "announcements", row.id, false)).ok, true);
+    assert.equal((await q("SELECT id FROM tg_events")).length, 1);
+  } finally {
+    await pool.end();
+  }
+});

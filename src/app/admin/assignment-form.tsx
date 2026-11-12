@@ -63,33 +63,39 @@ export function AssignmentForm({account,initial,onSaved}:{
   }
   setBusy(true);
   try{
-   let url=attachment.trim();
-   if(file) {
-    const ext=/\.pdf$/i.test(file.name)?"pdf":/\.pptx$/i.test(file.name)?"pptx":null;
-    const bytes=new Uint8Array(await file.slice(0,5).arrayBuffer());
-    const valid=ext==="pdf"?String.fromCharCode(...bytes)==="%PDF-":
-      ext==="pptx"&&bytes[0]===80&&bytes[1]===75&&bytes[2]===3&&bytes[3]===4;
-    if(!ext||!valid||!file.size||file.size>100*1024*1024) {
-      setNotice("المرفق لازم PDF/PPTX صالح، بحجم أقل من 100MB.");return;
-    }
-    if(cache.current?.file===file)url=cache.current.url;
-    else {
-     const mime=ext==="pdf"?"application/pdf":PPTX;
-     const path="lectures/"+crypto.randomUUID()+"-assignment."+ext;
-     const result=await upload(path,file,{
-      access:"public",contentType:mime,handleUploadUrl:"/api/admin/upload",
-      headers:{"x-portal-admin":"1"},multipart:file.size>5*1024*1024,
-      clientPayload:JSON.stringify({filename:file.name,contentType:mime,size:file.size,subjectId:subject,sections}),
-      onUploadProgress:({percentage})=>setUploadProgress(Math.round(percentage)),
-     });
-     url=result.url;cache.current={file,url};
-    }
-   }
    if(!id.current)id.current="web-"+crypto.randomUUID();
    const row={id:id.current,subject_id:subject,title:title.trim(),instructions:instructions.trim(),
       assigned_at:String(initial?.assigned_at||new Date().toISOString()),
-      due_at:due,sections,submission:submission.trim(),attachment_url:url,status};
-   const {response,data}=await request("assignments",row);
+      due_at:due,sections,submission:submission.trim(),attachment_url:attachment.trim(),status};
+   const {response,data}=await request("assignments",row,{
+    editing:Boolean(initial),subject:available.find(item=>item.id===subject)?.name,attachment:file?.name,
+    prepare:async()=>{
+      let url=attachment.trim();
+      if(file) {
+       const ext=/\.pdf$/i.test(file.name)?"pdf":/\.pptx$/i.test(file.name)?"pptx":null;
+       const bytes=new Uint8Array(await file.slice(0,5).arrayBuffer());
+       const valid=ext==="pdf"?String.fromCharCode(...bytes)==="%PDF-":
+         ext==="pptx"&&bytes[0]===80&&bytes[1]===75&&bytes[2]===3&&bytes[3]===4;
+       if(!ext||!valid||!file.size||file.size>100*1024*1024) {
+         throw new Error("المرفق لازم PDF/PPTX صالح، بحجم أقل من 100MB.");
+       }
+       if(cache.current?.file===file)url=cache.current.url;
+       else {
+        const mime=ext==="pdf"?"application/pdf":PPTX;
+        const path="lectures/"+crypto.randomUUID()+"-assignment."+ext;
+        const result=await upload(path,file,{
+         access:"public",contentType:mime,handleUploadUrl:"/api/admin/upload",
+         headers:{"x-portal-admin":"1"},multipart:file.size>5*1024*1024,
+         clientPayload:JSON.stringify({filename:file.name,contentType:mime,size:file.size,subjectId:subject,sections}),
+         onUploadProgress:({percentage})=>setUploadProgress(Math.round(percentage)),
+        });
+        url=result.url;cache.current={file,url};
+       }
+      }
+      return {...row,attachment_url:url};
+    },
+   });
+   if(data.cancelled)return;
    if(!response.ok) {setNotice(data.error||"تعذر حفظ التكليف.");return;}
    setNotice("✅ تم حفظ التكليف بنجاح.");
    setFile(undefined);cache.current=null;
@@ -99,7 +105,7 @@ export function AssignmentForm({account,initial,onSaved}:{
      setSections(sectionRep&&account.assigned_section?[account.assigned_section]:[...ALL]);
    }
    onSaved();
-  }catch {setNotice("تعذر رفع المرفق أو حفظ التكليف. راجع اتصالك وحاول مجدداً.");}
+  }catch(error) {setNotice(error instanceof Error && error.message.startsWith("المرفق لازم") ? error.message : "تعذر رفع المرفق أو حفظ التكليف. راجع اتصالك وحاول مجدداً.");}
   finally{setBusy(false);setUploadProgress(0);}
  }
  return <form className="admin-form" onSubmit={save}>

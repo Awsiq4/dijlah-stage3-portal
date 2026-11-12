@@ -103,7 +103,15 @@ export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<s
        String(row?.type || "").trim() !== "كوز يومي")) return false;
   if (canManageAllContent(a.role)) return true;
   if (!row) return false;
-  if (type === "announcements") return canPublishAnnouncement(a, String(row.scope || "general"), String(row.section || "all"));
+  if (type === "announcements") {
+    const scope = String(row.scope || "general");
+    const section = String(row.section || "all");
+    if (scope === "teacher") {
+      if (section !== "all" && !ALL_SECTIONS.includes(section)) return false;
+      return canPublishSubjectContent(a, String(row.subject_id || ""), section === "all" ? ALL_SECTIONS : [section]);
+    }
+    return canPublishAnnouncement(a, scope, section);
+  }
   if (type === "lectures") {
     const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
     return canPublishMaterial(a, String(row.subject_id || ""), sections);

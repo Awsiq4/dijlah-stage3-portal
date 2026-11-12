@@ -77,50 +77,56 @@ export function MaterialForm({account, initial, rows, onSaved}: {
     lock.current = true;
     let saving = false;
     try {
-      let fileUrl = String(initial?.file_url || "");
-      if (file) {
-        const extension = /\.pptx$/i.test(file.name) ? "pptx" : /\.pdf$/i.test(file.name) ? "pdf" : null;
-        const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
-        const pdfValid = extension === "pdf" && bytes.length >= 5 && String.fromCharCode(...bytes) === "%PDF-";
-        const pptxValid = extension === "pptx" && bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
-        if (!file.size || file.size > MATERIAL_LIMIT || !extension || (!pdfValid && !pptxValid)) {
-          setNotice("اختر ملف PDF أو PPTX صالحًا بحجم لا يتجاوز 100 ميغابايت.");
-          return;
-        }
-        const contentType = extension === "pptx" ? PPTX_MIME : "application/pdf";
-        const cached = uploadCache.current;
-        if (cached?.file === file && cached.subject === subject && cached.audience === selection) {
-          fileUrl = cached.url;
-        } else {
-          setStatus("uploading");
-          setProgress(0);
-          const basename = file.name.replace(/\.(pdf|pptx)$/i, "").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 96) || "document";
-          const pathname = `lectures/${crypto.randomUUID()}-${basename}.${extension}`;
-          const blob = await upload(pathname, file, {
-            access: "public",
-            contentType,
-            handleUploadUrl: "/api/admin/upload",
-            headers: {"x-portal-admin": "1"},
-            multipart: file.size > 5 * 1024 * 1024,
-            clientPayload: JSON.stringify({filename: file.name, contentType, size: file.size, subjectId: subject, sections}),
-            onUploadProgress: ({percentage}) => setProgress(Math.round(percentage)),
-          });
-          fileUrl = blob.url;
-          uploadCache.current = {file, subject, audience: selection, url: fileUrl};
-        }
-      }
-      saving = true;
       setStatus("saving");
       if (!draftId.current) draftId.current = String(initial?.id || `web-${crypto.randomUUID()}`);
       const nextNumber = 1 + rows.reduce((max, row) => row.subject_id === subject && row.material_kind !== "summary" ? Math.max(max, Number(row.number) || 0) : max, 0);
       const row = {
         id: draftId.current, subject_id: subject, material_kind: kind,
         number: kind === "summary" ? 1 : Number(number) || nextNumber,
-        title: title.trim(), description: description.trim(), file_url: fileUrl,
+        title: title.trim(), description: description.trim(), file_url: String(initial?.file_url || ""),
         file_name: file?.name || String(initial?.file_name || ""), sections,
         status: initial?.status || "published", updated_at: new Date().toISOString().slice(0, 10),
       };
-      const {response, data} = await request("lectures", row);
+      const {response, data} = await request("lectures", row, {
+        editing: Boolean(initial), subject: subjectOptions.find(item => item.id === subject)?.name, attachment: file?.name,
+        prepare: async () => {
+          let fileUrl = String(initial?.file_url || "");
+          if (file) {
+            const extension = /\.pptx$/i.test(file.name) ? "pptx" : /\.pdf$/i.test(file.name) ? "pdf" : null;
+            const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+            const pdfValid = extension === "pdf" && bytes.length >= 5 && String.fromCharCode(...bytes) === "%PDF-";
+            const pptxValid = extension === "pptx" && bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+            if (!file.size || file.size > MATERIAL_LIMIT || !extension || (!pdfValid && !pptxValid)) {
+              throw new Error("اختر ملف PDF أو PPTX صالحًا بحجم لا يتجاوز 100 ميغابايت.");
+            }
+            const contentType = extension === "pptx" ? PPTX_MIME : "application/pdf";
+            const cached = uploadCache.current;
+            if (cached?.file === file && cached.subject === subject && cached.audience === selection) {
+              fileUrl = cached.url;
+            } else {
+              setStatus("uploading");
+              setProgress(0);
+              const basename = file.name.replace(/\.(pdf|pptx)$/i, "").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 96) || "document";
+              const pathname = `lectures/${crypto.randomUUID()}-${basename}.${extension}`;
+              const blob = await upload(pathname, file, {
+                access: "public",
+                contentType,
+                handleUploadUrl: "/api/admin/upload",
+                headers: {"x-portal-admin": "1"},
+                multipart: file.size > 5 * 1024 * 1024,
+                clientPayload: JSON.stringify({filename: file.name, contentType, size: file.size, subjectId: subject, sections}),
+                onUploadProgress: ({percentage}) => setProgress(Math.round(percentage)),
+              });
+              fileUrl = blob.url;
+              uploadCache.current = {file, subject, audience: selection, url: fileUrl};
+            }
+          }
+          saving = true;
+          setStatus("saving");
+          return {...row, file_url: fileUrl};
+        },
+      });
+      if (data.cancelled) return;
       if (!response.ok) {
         setNotice(data.issue ? data.error || "" : response.status === 401 ? "انتهت جلسة الدخول. سجّل الدخول مجددًا." : response.status === 403 ? "حسابك لا يملك صلاحية النشر لهذه المادة أو الشعبة." : data.error || "تعذّر حفظ المنشور. جرّب مرة ثانية من نفس الشاشة.");
         return;
@@ -137,7 +143,8 @@ export function MaterialForm({account, initial, rows, onSaved}: {
         if (input.current) input.current.value = "";
       }
       onSaved();
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("اختر ملف")) {setNotice(error.message); return;}
       setNotice(saving ? "تعذّر الاتصال أثناء الحفظ. جرّب مرة ثانية من نفس الشاشة." : "تعذّر رفع الملف. تأكد من الاتصال وحاول مجددًا. بياناتك باقية في النموذج.");
     } finally {
       lock.current = false;
