@@ -5,11 +5,12 @@ import {upload} from "@vercel/blob/client";
 import {Send} from "lucide-react";
 import {usePublicationRequest} from "./publication-review";
 import type {PublishingAccount} from "./material-form";
+import {assignmentDayAllowed,assignmentDisplayDay} from "@/lib/assignment-date";
 
 type Row = Record<string,unknown>;
 const ALL = ["A","B","C","F"];
 const PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-const savedDate = (value:unknown):string => String(value || "").slice(0,16);
+const savedDate = assignmentDisplayDay;
 export function AssignmentForm({account,initial,onSaved}:{
  account:PublishingAccount;initial?:Row;onSaved:()=>void;
 }) {
@@ -23,7 +24,7 @@ export function AssignmentForm({account,initial,onSaved}:{
    sectionRep && account.assigned_section ? [account.assigned_section] : [...ALL]);
  const [title,setTitle]=useState(String(initial?.title||""));
  const [instructions,setInstructions]=useState(String(initial?.instructions||""));
- const [due,setDue]=useState(savedDate(initial?.due_at));
+ const [due,setDue]=useState(initial?.due_at ? savedDate(initial.due_at) : "");
  const [submission,setSubmission]=useState(String(initial?.submission||""));
  const [attachment,setAttachment]=useState(String(initial?.attachment_url||""));
  const [file,setFile]=useState<File>();
@@ -54,12 +55,8 @@ export function AssignmentForm({account,initial,onSaved}:{
     (sectionRep && sections.length!==ALL.length && (sections.length!==1||sections[0]!==account.assigned_section))) {
     setNotice("اختر المادة والشعب واكتب عنوان التكليف وتعليماته.");return;
   }
-  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(due)){
-    setNotice("حدد آخر موعد للتسليم بالتاريخ والوقت.");return;
-  }
-  const iso=due+":00+03:00";
-  if(Number.isNaN(Date.parse(iso)) || (!initial && Date.parse(iso)<=Date.now())) {
-    setNotice("موعد التسليم غير صالح أو انتهى.");return;
+  if(!assignmentDayAllowed(due) && !(initial && due===savedDate(initial.due_at))) {
+    setNotice("حدد يوماً صحيحاً للتسليم (اليوم أو بعده)، بدون ساعة.");return;
   }
   if(attachment && !/^https:\/\/[^\s]+$/i.test(attachment)) {
     setNotice("رابط المرفق يجب أن يبدأ بـ https://");return;
@@ -91,7 +88,7 @@ export function AssignmentForm({account,initial,onSaved}:{
    if(!id.current)id.current="web-"+crypto.randomUUID();
    const row={id:id.current,subject_id:subject,title:title.trim(),instructions:instructions.trim(),
       assigned_at:String(initial?.assigned_at||new Date().toISOString()),
-      due_at:iso,sections,submission:submission.trim(),attachment_url:url,status};
+      due_at:due,sections,submission:submission.trim(),attachment_url:url,status};
    const {response,data}=await request("assignments",row);
    if(!response.ok) {setNotice(data.error||"تعذر حفظ التكليف.");return;}
    setNotice("✅ تم حفظ التكليف بنجاح.");
@@ -114,8 +111,8 @@ export function AssignmentForm({account,initial,onSaved}:{
     {available.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
    </select>
   </label>
-  <label className="form-field"><span>آخر موعد للتسليم (بتوقيت بغداد) *</span>
-   <input type="datetime-local" required value={due} onChange={e=>setDue(e.target.value)}/>
+  <label className="form-field"><span>آخر يوم للتسليم *</span>
+   <input type="date" required value={due} onChange={e=>setDue(e.target.value)}/>
   </label>
   <label className="form-field wide"><span>عنوان الواجب أو التكليف *</span>
    <input required maxLength={180} value={title} onChange={e=>setTitle(e.target.value)}/>
