@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
         await handleOwnerCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("stu:") ) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("qmanage:") || data.startsWith("page:my:")) {
+      } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("qmanage:") || data.startsWith("page:my:") || data.startsWith("cw:")) {
         await handleManageCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || (data === "adm:new" || data === "adm:materials") || data === "pdf:new") {
         await handleNavCallback(Number(callback.message.chat.id), userId, data);
