@@ -12,6 +12,8 @@ export type PublishOk = {ok: true; id: string; inserted: boolean; action?: "expa
 export type PublishFail = {ok: false; error: string; issue?: PublicationIssue};
 export type PublishResult = PublishOk | PublishFail;
 
+import {validExamSchedule} from "./exam-validation.ts";
+
 const fail = (error: string): PublishFail => ({ok: false, error});
 
 async function insertWithOwnership(
@@ -43,7 +45,7 @@ async function insertWithOwnership(
       await tx.q("UPDATE portal_lectures SET file_sha256=$2 WHERE id=$1", [row.id, hash]);
     }
     await audit(admin.email || `admin#${admin.id}`, `publish.${type}`, {id: row.id, source, role: admin.role}, tx);
-    const notificationEvents = inserted && (newPublication || type === "assignments") && telegramServiceEnabled()
+    const notificationEvents = inserted && (newPublication || type === "assignments" || type === "exams") && telegramServiceEnabled()
       ? await enqueueNewPublication(tx, type, row) : [];
     return {ok: true, id: String(row.id), inserted, notificationEvents} as PublishOk;
   });
@@ -118,6 +120,17 @@ async function enqueueNewPublication(db: Queryer, type: WritableContentType, row
     if (sections.length === 4) await enqueue({...info, version: 1, scope: "general"});
     else for (const section of sections) {
       await enqueue({...info, url: publicationUrl("lectures", {id: refId, sections: [section]}), version: "audience-" + section, scope: "section", section});
+    }
+  } else if (type === "exams" && row.status !== "cancelled") {
+    const sections = Array.isArray(row.sections) ? [...new Set(row.sections.map(String))] : [];
+    const info = {type: "exam" as const, refId, title,
+      body: "النوع: " + String(row.type || "") + "\nالتاريخ: " + String(row.date || "") +
+        "\nالوقت: " + String(row.start_time || "") + "\nالقاعة: " + String(row.room || "غير محددة"),
+      url: "/exams", subject_id};
+    if (sections.length === 4 && ["A","B","C","F"].every(s => sections.includes(s))) {
+      await enqueue({...info, version: 1, scope: "general"});
+    } else for (const section of sections) {
+      await enqueue({...info, version: "audience-" + section, scope: "section", section});
     }
   } else if (type === "assignments") {
     const sections = Array.isArray(row.sections) ? [...new Set(row.sections.map(String))] : [];
@@ -205,16 +218,24 @@ export async function publishLecture(
 // ---- exams / assignments (subject-scoped) ----
 export async function publishExam(admin: AdminInfo, input: Record<string, unknown> & {subjectId?: string; sections?: string[]; source?: "web" | "telegram"}): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
-  const subjectId = String(input.subjectId || "");
-  const sections = input.sections && (input.sections as string[]).length ? (input.sections as string[]) : ["A", "B", "C", "F"];
-  if (subjectId && !canPublishSubjectContent(admin, subjectId, sections)) return fail("forbidden: subject or sections not authorized");
-  if (!canPublishSubjectContent(admin, subjectId, sections) && !["super_admin", "editor"].includes(admin.role)) return fail("forbidden");
+  const subjectId = String(input.subjectId || input.subject_id || "");
+  const sections = Array.isArray(input.sections) ? input.sections.map(String) : [];
+  if (!canPublishMaterial(admin, subjectId, sections)) return fail("forbidden: subject or sections not authorized");
   const id = String(input.id || `exam-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-  let row: Record<string, unknown>;
-  try { row = sanitizeRow("exams", {...input, id, sections: input.sections || ["A", "B", "C", "F"]}); } catch (e) { return fail(e instanceof Error ? e.message : "invalid input"); }
-  const res = await insertWithOwnership("exams", admin, row, input.source || "web", input.source === "telegram" ? "nothing" : input.id ? "update" : "nothing");
-  if (res.ok && res.inserted) await notifyIfEnabled({type: "exam", refId: id, title: String(input.title || ""), url: "/exams", scope: "general", subject_id: subjectId});
-  return res;
+  const draft: Record<string,unknown> = {
+    id, subject_id: subjectId, title: String(input.title || "").trim(),
+    type: String(input.type || "").trim(), date: String(input.date || ""),
+    start_time: String(input.start_time || ""), room: String(input.room || "").trim(),
+    sections, topics: String(input.topics || "").trim(), notes: String(input.notes || "").trim(),
+    status: String(input.status || "provisional"),
+  };
+  const error = validExamSchedule(draft);
+  if (error) return fail(error);
+  let row: Record<string,unknown>;
+  try { row = sanitizeRow("exams", draft); }
+  catch(e) { return fail(e instanceof Error ? e.message : "invalid input"); }
+  return insertWithOwnership("exams", admin, row, input.source || "web", "nothing")
+    .catch(handlePublicationConflict);
 }
 
 export async function publishAssignment(admin: AdminInfo, input: Record<string, unknown> & {subjectId?: string; sections?: string[]; source?: "web" | "telegram"}): Promise<PublishResult> {
@@ -255,6 +276,10 @@ export async function applyContentUpsert(
 ): Promise<PublishOk | void> {
   const id = String(row.id);
   const clean = sanitizeRow(type, row);
+  if (type === "exams") {
+    const validationError = validExamSchedule(clean, false);
+    if (validationError) throw Object.assign(new Error(validationError), {status: 400});
+  }
   if (type === "announcements" && (!clean.scope || clean.scope === "general")) clean.section = "all";
   const scoped = !canManageAllContent(admin.role);
   const owner = scoped ? {id: admin.id, source} : undefined;
@@ -271,8 +296,8 @@ export async function applyContentUpsert(
     }
   }
   let newPublication = false;
-  if (type === "assignments") {
-    const existing = await tx.qOne<{id: string}>("SELECT id FROM portal_assignments WHERE id=$1", [id]);
+  if (type === "assignments" || type === "exams") {
+    const existing = await tx.qOne<{id: string}>(`SELECT id FROM ${SCHEMAS[type].table} WHERE id=$1`, [id]);
     newPublication = !existing;
   }
   if (type === "announcements" || type === "lectures") {
@@ -301,7 +326,7 @@ export async function applyContentUpsert(
   }
   if (type === "lectures") await tx.q("UPDATE portal_lectures SET file_sha256=$2 WHERE id=$1", [id, hash]);
   await audit(admin.email || `admin#${admin.id}`, `content.upsert.${type}`, {id, source}, tx);
-  if (newPublication && telegramServiceEnabled()) {
+  if (newPublication && (type !== "exams" || clean.status !== "cancelled") && telegramServiceEnabled()) {
     return {ok: true, id, inserted: true, notificationEvents: await enqueueNewPublication(tx, type, clean)};
   }
 }

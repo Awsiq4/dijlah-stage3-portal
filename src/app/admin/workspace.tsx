@@ -6,6 +6,7 @@ import {Empty,PageHeading,Status} from "@/components/UI";
 import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 import {AssignmentForm} from "./assignment-form";
+import {ExamForm} from "./exam-form";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
 type Row = Record<string, unknown>;
@@ -15,7 +16,7 @@ const WRITE_HEADERS = {"content-type": "application/json", "x-portal-admin": "1"
 export function RoleWorkspace({me}: {me: Me}) {
   const {request, review} = usePublicationRequest();
   const isRep = me.role === "section_representative" || me.role === "general_representative";
-  const [type, setType] = useState<"announcements" | "lectures" | "assignments">("lectures");
+  const [type, setType] = useState<"announcements" | "lectures" | "assignments" | "exams">("lectures");
   const [rows, setRows] = useState<Row[] | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -59,15 +60,17 @@ export function RoleWorkspace({me}: {me: Me}) {
 
   return <>
     {review}
-    <PageHeading title={type === "lectures" ? "نشر ملف PDF" : type === "assignments" ? "الواجبات والتكاليف" : "نشر تبليغ"} description={me.name || me.email}/>
+    <PageHeading title={type === "lectures" ? "نشر ملف PDF" : type === "assignments" ? "الواجبات والتكاليف" : type === "exams" ? "الامتحانات والكوزات" : "نشر تبليغ"} description={me.name || me.email}/>
     <div className="tabs admin-tabs">
       <button className={type === "lectures" ? "selected" : ""} onClick={() => {setType("lectures"); setRows(null); setNotice("");}}>محاضرة أو ملخص</button>
       {isRep&&<button className={type === "announcements" ? "selected" : ""} onClick={() => {setType("announcements"); setRows(null); setNotice("");}}>تبليغ</button>}
       <button className={type === "assignments" ? "selected" : ""} onClick={() => {setType("assignments"); setRows(null); setNotice("");}}>الواجبات والتكاليف</button>
+      <button className={type === "exams" ? "selected" : ""} onClick={() => {setType("exams"); setRows(null); setNotice("");}}>الامتحانات والكوزات</button>
     </div>
     <div className="panel"><div className="panel-body">
       {type === "lectures" ? <MaterialForm account={me} rows={rows || []} onSaved={() => { load(); }}/> :
        type === "assignments" ? <AssignmentForm account={me} onSaved={()=>load()}/> :
+       type === "exams" ? <ExamForm account={me} onSaved={()=>load()}/> :
         <form className="admin-form" onSubmit={publishAnnouncement}>
           <label className="form-field wide"><span>العنوان</span><input required value={title} onChange={e => setTitle(e.target.value)}/></label>
           <label className="form-field wide"><span>نص التبليغ</span><textarea required rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
@@ -75,7 +78,7 @@ export function RoleWorkspace({me}: {me: Me}) {
         </form>}
       {notice && <p className="note" role="status">{notice}</p>}
     </div></div>
-    <div className="panel"><div className="panel-heading"><h2>{type === "lectures" ? "ملفاتي" : type === "assignments" ? "تكاليفي" : "تبليغاتي"}</h2></div><div className="panel-body">
+    <div className="panel"><div className="panel-heading"><h2>{type === "lectures" ? "ملفاتي" : type === "assignments" ? "تكاليفي" : type === "exams" ? "امتحاناتي" : "تبليغاتي"}</h2></div><div className="panel-body">
       {rows === null ? <Empty description="جارٍ التحميل…"/> : !rows.length ? <Empty description="لا يوجد محتوى منشور بعد."/> : rows.map(row =>
         <div className="list-row" key={String(row.id)}>
           <div className="grow"><strong>{String(row.title || row.id)}</strong></div>

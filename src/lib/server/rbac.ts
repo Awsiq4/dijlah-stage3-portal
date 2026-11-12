@@ -105,7 +105,9 @@ export function canWriteContentRecord(a: AdminInfo, type: string, row?: Record<s
   }
   if (type === "exams") {
     const sections = Array.isArray(row.sections) && row.sections.length ? row.sections.map(String) : ["A", "B", "C", "F"];
-    return canPublishSubjectContent(a, String(row.subject_id || ""), sections);
+    // An exam's time/place is publishable by a representative in the same
+    // sections where their lecture/assignment publishing is already allowed.
+    return canPublishMaterial(a, String(row.subject_id || ""), sections);
   }
   return false; // schedule etc.: privileged roles only
 }
