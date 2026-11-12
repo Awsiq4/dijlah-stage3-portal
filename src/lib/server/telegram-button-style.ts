@@ -26,7 +26,7 @@ export function styleForTelegramButton(button: Record<string, unknown>): InlineB
 
   // Most-used entry points and actions — deliberately not every menu item.
   if (data === "stu:ann" || data === "stu:lec" ||
-      data === "adm:new" || data === "adm:quick" || data === "adm:ann" ||
+      data === "adm:new" || data === "adm:quick" || data === "adm:ann" || data === "adm:exam" ||
       data === "stu:sched:today" || data === "flow:resume" ||
       (data === "own:stats" && label.includes("إحصائيات")) ||
       (data === "sup:o:home" && label.includes("إدارة الدعم")) ||
