@@ -14,7 +14,7 @@ export function styleForTelegramButton(button: Record<string, unknown>): InlineB
   if (!data) return null;
 
   // Destructive or privacy-sensitive operations — keep Cancel and Back neutral.
-  if (/^it:del(?:ok)?:/.test(data) || data === "stu:stop" || data === "flow:discard") return "danger";
+  if (/^it:del(?:ok)?:/.test(data) || data.startsWith("qmanage:delete:") || data === "stu:stop" || data === "flow:discard") return "danger";
   if (data === "own:notif:toggle" && label.includes("تعطيل")) return "danger";
 
   // Final publishing, successful state transitions and explicit activation.
@@ -26,7 +26,7 @@ export function styleForTelegramButton(button: Record<string, unknown>): InlineB
 
   // Most-used entry points and actions — deliberately not every menu item.
   if (data === "stu:ann" || data === "stu:lec" ||
-      data === "adm:new" || data === "adm:ann" ||
+      data === "adm:new" || data === "adm:quick" || data === "adm:ann" ||
       data === "stu:sched:today" || data === "flow:resume" ||
       (data === "own:stats" && label.includes("إحصائيات")) ||
       (data === "sup:o:home" && label.includes("إدارة الدعم")) ||
