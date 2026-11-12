@@ -166,7 +166,7 @@ export async function publishAnnouncement(
 // ---- lectures ----
 export async function publishLecture(
   admin: AdminInfo,
-  input: {id?: string; subjectId: string; number: number; title: string; description?: string; fileUrl: string; fileName?: string; sections?: string[]; source?: "web" | "telegram"; options?: PublicationOptions; fingerprint?: string}
+  input: {id?: string; subjectId: string; number: number; title: string; description?: string; fileUrl: string; fileName?: string; sections?: string[]; source?: "web" | "telegram"; options?: PublicationOptions; fingerprint?: string; materialKind?: "lecture" | "summary"}
 ): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
   const ALL = ["A", "B", "C", "F"];
@@ -178,6 +178,7 @@ export async function publishLecture(
   try {
     row = sanitizeRow("lectures", {
       id, subject_id: input.subjectId, number: input.number, title: input.title,
+      material_kind: input.materialKind === "summary" ? "summary" : "lecture",
       description: input.description || "", file_url: input.fileUrl, file_name: input.fileName || input.fileUrl.split("/").pop() || "",
       sections, status: "published", updated_at: new Date().toISOString().slice(0, 10),
     });

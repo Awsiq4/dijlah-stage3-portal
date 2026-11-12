@@ -12,6 +12,7 @@ import {publishAnnouncement, publishLecture, updateAnnouncementOwn, updateLectur
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {tgFetch} from "./telegram.ts";
 import {uploadLectureFile, validMaterialFile, materialMime, MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
+import {publishPastQuestion, ensureQuestionBankSchema, validExamKind, EXAM_KINDS, questionImageMime, uploadQuestionImage} from "./bot-question-bank.ts";
 
 
 export type LinkedAdmin = AdminInfo & {link_id: number};
@@ -143,6 +144,16 @@ export function adminMenu(admin?: AdminInfo) {
   return admin ? homeMenuFor(admin, true) : {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]};
 }
 const navigation = {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}, {text: "❌ إلغاء", callback_data: "adm:cancel"}]]};
+const questionKindKeyboard = () => ({inline_keyboard: [
+  [{text: "📝 أسئلة امتحان يومي", callback_data: "q:kind:quiz"}],
+  [{text: "📋 أسئلة Midterm", callback_data: "q:kind:midterm"}],
+  [{text: "📑 أسئلة Final", callback_data: "q:kind:final"}],
+  ...navigation.inline_keyboard,
+]});
+function shortAnnouncementTitle(body: string, prefix = "") {
+  const first = body.trim().split(/\n/)[0].replace(/\s+/g, " ").slice(0, 90);
+  return (prefix + first).slice(0, 180);
+}
 const confirmKeyboard = (kind: string, nonce: string) => ({inline_keyboard: [
   [{text: "✅ نشر الآن", callback_data: `pub:${kind}:${nonce}`}],
   [{text: "✏️ تعديل العنوان", callback_data: `draft:title:${nonce}`}, {text: kind === "ann" ? "✏️ تعديل النص" : "📎 تغيير الملف", callback_data: `draft:${kind === "ann" ? "body" : "file"}:${nonce}`}],
@@ -158,6 +169,7 @@ export async function resumeDraft(chatId: number, userId: number): Promise<void>
   if (d.step === "publishing") { await sendMessage(chatId, "طلب النشر قيد المعالجة. لا تعِد النشر؛ تحقق من إدارة منشوراتي.", {replyMarkup: adminMenu(admin)}); return; }
   if (d.step === "confirm") { await previewDraft(chatId, state.flow, d); return; }
   if (d.step === "subject") { await askSubjects(chatId, admin, state.flow === "ann" ? "ann:subj:" : "lec:subj:"); return; }
+  if (d.step === "examKind") { await sendMessage(chatId, "📝 حدد نوع الأسئلة السابقة:", {replyMarkup: questionKindKeyboard()}); return; }
   if (d.step === "audience") { await sendMessage(chatId, "اختر الشعبة:", {replyMarkup: audienceKeyboard(admin, String(d.subjectId || ""))}); return; }
   if (state.flow === "pendingpdf") { await sendMessage(chatId, "الملف محفوظ. هل نبدأ نشره؟", {replyMarkup: {inline_keyboard: [[{text: "إنشاء ملزمة", callback_data: "pdf:new"}], ...navigation.inline_keyboard]}}); return; }
   const prompt = state.flow === "repfile" || d.step === "file" ? "أرسل ملف PDF أو PowerPoint (PPTX)." : d.step === "body" ? "اكتب نص التبليغ." : d.step === "desc" ? "اكتب الوصف الجديد، أو أرسل تخطي." : "اكتب العنوان.";
@@ -173,7 +185,9 @@ async function previewDraft(chatId: number, flow: string, d: Record<string, unkn
   await setState(chatId, flow, {...d, step: "confirm", nonce});
   const subject = d.subjectId ? await qOne<{name: string}>(`SELECT name FROM portal_subjects WHERE id=$1`, [d.subjectId]) : null;
   const scope = d.scope === "section" ? `شعبة ${d.section}` : d.scope === "teacher" ? `شعبة ${d.section === "all" ? "جميع الشعب" : d.section}` : "جميع الشعب";
-  const details = flow === "ann" ? `${d.body || ""}\nالجمهور: ${scope}` : `الجمهور: ${audienceLabel((d.sections as string[]) || [])}\nالملف محفوظ وجاهز للنشر.`;
+  const details = flow === "ann"
+    ? `${d.body || ""}\nالجمهور: ${scope}`
+    : `${d.materialKind === "questions" ? "بنك الأسئلة · " + (EXAM_KINDS[String(d.examKind) as keyof typeof EXAM_KINDS] || "") + "\n" : d.materialKind === "summary" ? "الملخصات\n" : ""}الجمهور: ${audienceLabel((d.sections as string[]) || [])}\nالملف محفوظ وجاهز للنشر.`;
   await sendMessage(chatId, `معاينة قبل النشر\n${subject?.name || ""}\n${d.title || ""}\n\n${details}`, {replyMarkup: confirmKeyboard(flow, nonce)});
 }
 
@@ -208,6 +222,11 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
   if (text.length > 3000 || ((state.data.step === "title") && (!text.trim() || text.length > 180))) { await sendMessage(chatId, "اكتب عنوانًا من 1 إلى 180 حرفًا، ونصًا لا يتجاوز 3000 حرف.", {replyMarkup: navigation}); return; }
   if (state.flow === "ann") {
     const d = state.data;
+    if (d.step === "body" && (d.quick || d.resultAnnouncement)) {
+      const prefix = d.resultAnnouncement ? "صدور نتائج: " : "";
+      await previewDraft(chatId, "ann", {...d, title: shortAnnouncementTitle(text, prefix), body: text});
+      return;
+    }
     if (d.step === "title") { if (d.body) { await previewDraft(chatId, "ann", {...d, title: text}); return; } await setState(chatId, "ann", {...d, step: "body", title: text}); await sendMessage(chatId, "اكتب نص التبليغ:", {replyMarkup: navigation}); return; }
     if (d.step === "body") {
       await previewDraft(chatId, "ann", {...d, body: text});
@@ -270,11 +289,14 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
       if (d.fileUrl) { await previewDraft(chatId, "lec", next); return; }
       await setState(chatId, "lec", next);
       if (d.pendingDoc) { await handleAdminMessage(chatId, userId, "", d.pendingDoc as TgDocument); return; }
-      await sendMessage(chatId, "أرسل ملف PDF أو PPTX هنا (حتى 20MB).", {replyMarkup: navigation}); return;
+      await sendMessage(chatId, d.materialKind === "questions"
+        ? "📑 أرسل أسئلة الامتحان كصورة JPG/PNG أو ملف PDF/PPTX (حتى 20MB)."
+        : "أرسل ملف PDF أو PPTX هنا (حتى 20MB).", {replyMarkup: navigation}); return;
     }
     if (d.step === "file") {
       if (document) {
-        if (!materialMime(document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير مدعوم. أرسل PDF أو PPTX أو رابط ملف محفوظ."); return; }
+        const image = d.materialKind === "questions" && /\.(?:jpe?g|png)$/i.test(document.file_name || "");
+        if (!materialMime(document.file_name || "") && !image) { await sendMessage(chatId, "⚠️ الملف غير مدعوم. أرسل PDF أو PPTX، وللأسئلة السابقة يمكن إرسال صورة JPG/PNG."); return; }
         if ((document.file_size || 0) > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
         if (!storageConfigured()) { await sendMessage(chatId, "⚠️ تخزين الملفات غير مهيأ على الخادم. استخدم لوحة الويب لرفع الملف."); return; }
         let stage: PdfUploadStage = "telegram-getFile";
@@ -287,9 +309,13 @@ export async function handleAdminMessage(chatId: number, userId: number, text: s
           const buf = Buffer.from(await dl.arrayBuffer());
           stage = "file-validation";
           if (buf.length > MAX_PDF_BYTES) { await sendMessage(chatId, "⚠️ الملف أكبر من 20MB — ارفعه من لوحة الويب."); return; }
-          if (!validMaterialFile(buf, document.file_name || "")) { await sendMessage(chatId, "⚠️ الملف غير صالح. أرسل PDF أو PPTX سليمًا."); return; }
+          if (!validMaterialFile(buf, document.file_name || "") && !(image && questionImageMime(document.file_name || "", buf))) {
+            await sendMessage(chatId, "⚠️ الملف غير صالح أو لا يطابق صيغته. أرسل PDF أو PPTX أو صورة سليمة."); return;
+          }
           stage = "blob-upload";
-          const {url} = await uploadLectureFile(buf, document.file_name || "lecture.pdf");
+          const {url} = image
+            ? await uploadQuestionImage(buf, document.file_name || "question.jpg")
+            : await uploadLectureFile(buf, document.file_name || "lecture.pdf");
           const draft = {...d, fileUrl: url, fileName: (document.file_name || "lecture.pdf").slice(0, 120), fingerprint: createHash("sha256").update(buf).digest("hex"), pendingDoc: undefined, step: "confirm"};
           // Persist the uploaded URL before sending the confirmation message.
           // If Telegram fails after storage succeeds, /start can resume this draft without re-uploading.
@@ -343,6 +369,20 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
   const admin = await getLinkedAdmin(userId);
   if (!admin) { await sendMessage(chatId, "⚠️ حساب Telegram غير مربوط. استخدم «ربط حساب Telegram» من إعدادات الحساب في الموقع."); return; }
 
+  if (data === "adm:quick") {
+    if (!canUseTelegramPublishing(admin)) return;
+    const scope = admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general";
+    const step = admin.role === "teacher" ? "subject" : "body";
+    await setState(chatId, "ann", {scope, section: admin.assigned_section || "all", step, quick: true, draftId: `ann-tg-${chatId}-${Date.now()}`});
+    if (step === "subject") await askSubjects(chatId, admin, "ann:subj:");
+    else await sendMessage(chatId, "📢 أرسل نص التبليغ مباشرةً. سنستخرج عنوانه تلقائياً.\nتقدر تنسخ أو تعيد توجيه رسالة نصية.", {replyMarkup: navigation});
+    return;
+  }
+  if (data === "adm:results") {
+    await setState(chatId, "ann", {scope: admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general", section: admin.assigned_section || "all", step: "subject", resultAnnouncement: true, draftId: `ann-tg-${chatId}-${Date.now()}`});
+    await askSubjects(chatId, admin, "ann:subj:");
+    return;
+  }
   if (data === "adm:ann") {
     if (!canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ حسابك معلّق — تم سحب صلاحيات النشر فوراً."); return; }
     await setState(chatId, "ann", {scope: admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general", section: admin.assigned_section || "all", step: admin.role === "teacher" ? "subject" : "title", draftId: `ann-tg-${chatId}-${Date.now()}`});
@@ -350,9 +390,21 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
     await sendMessage(chatId, "عنوان التبليغ:", {replyMarkup: navigation});
     return;
   }
-  if (data === "adm:lec") {
-    await setState(chatId, "lec", {step: "subject", draftId: `lec-tg-${chatId}-${Date.now()}`});
+  if (data === "adm:lec" || data === "adm:summary" || data === "adm:questions") {
+    if (data === "adm:questions" && !await ensureQuestionBankSchema()) {
+      await sendMessage(chatId, "⚠️ لم تكتمل تهيئة بنك الأسئلة على الخادم. راجع الإدارة أو أعد المحاولة.", {replyMarkup: adminMenu(admin)});
+      return;
+    }
+    const materialKind = data === "adm:summary" ? "summary" : data === "adm:questions" ? "questions" : "lecture";
+    await setState(chatId, "lec", {step: "subject", materialKind, draftId: `lec-tg-${chatId}-${Date.now()}`});
     await askSubjects(chatId, admin, "lec:subj:");
+    return;
+  }
+  if (data.startsWith("q:kind:")) {
+    const kind = data.slice(7), state = await getState(chatId);
+    if (!validExamKind(kind) || state?.flow !== "lec" || state.data.materialKind !== "questions" || state.data.step !== "examKind") return;
+    await setState(chatId, "lec", {...state.data, examKind: kind, step: "title"});
+    await sendMessage(chatId, `✏️ اكتب عنوان الأسئلة (${EXAM_KINDS[kind]}). اذكر السنة أو الفصل إذا معروف:`, {replyMarkup: navigation});
     return;
   }
   if (data.startsWith("lec:subj:") || data.startsWith("ann:subj:")) {
@@ -370,8 +422,14 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
     if (!state || (state.flow !== "ann" && state.flow !== "lec")) return;
     const allowed = admin.role === "teacher" ? teacherSections(admin, String(state.data.subjectId)) : null;
     if (allowed && !sections.every(s => allowed.includes(s as never))) { await resumeDraft(chatId, userId); return; }
-    await setState(chatId, state.flow, {...state.data, step: "title", sections, section: aud === "all" ? "all" : sections[0]});
-    await sendMessage(chatId, "اكتب العنوان:", {replyMarkup: navigation});
+    const step = state.data.materialKind === "questions" ? "examKind" : (state.data.quick || state.data.resultAnnouncement) ? "body" : "title";
+    await setState(chatId, state.flow, {...state.data, step, sections, section: aud === "all" ? "all" : sections[0]});
+    if (step === "examKind") await sendMessage(chatId, "📝 حدد نوع الأسئلة السابقة:", {replyMarkup: questionKindKeyboard()});
+    else await sendMessage(chatId, step === "body"
+      ? state.data.resultAnnouncement
+        ? "📊 اكتب إعلان صدور النتائج فقط. لا ترسل أسماء الطلاب أو كشوف درجاتهم أو علاماتهم الشخصية."
+        : "📢 أرسل نص التبليغ، والعنوان يتحدد تلقائياً:"
+      : "اكتب العنوان:", {replyMarkup: navigation});
     return;
   }
   if (data === "adm:me") {
@@ -428,13 +486,31 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu(admin)}); return; }
       const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
       const subject = await qOne<{name: string}>(`SELECT name FROM portal_subjects WHERE id=$1`, [String(d.subjectId)]);
-      const count = await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
-      const r = await publishLecture(fresh, {id: typeof d.draftId === "string" ? d.draftId : undefined, subjectId: String(d.subjectId), number: (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), fileName: typeof d.fileName === "string" ? d.fileName : undefined, sections, source: "telegram", options, fingerprint: typeof d.fingerprint === "string" ? d.fingerprint : undefined});
+      if (d.materialKind === "questions") {
+        const questionResult = await publishPastQuestion(fresh, {
+          id: String(d.draftId || `questions-tg-${chatId}-${Date.now()}`),
+          subjectId: String(d.subjectId), examKind: d.examKind as "quiz" | "midterm" | "final",
+          title: String(d.title || ""),
+          academicYear: String(d.title || "").match(/20\d{2}(?:[–/-]20\d{2})?/)?.[0] || "",
+          fileUrl: String(d.fileUrl || ""), fileName: String(d.fileName || ""),
+          fingerprint: String(d.fingerprint || ""), sections,
+        });
+        if (questionResult.ok) await clearState(chatId);
+        else await previewDraft(chatId, "lec", d);
+        await sendMessage(chatId, questionResult.ok
+          ? questionResult.inserted
+            ? `✅ أضيفت أسئلة الامتحان إلى بنك الأسئلة.\n📘 المادة: ${subject?.name || d.subjectId}\n📝 النوع: ${EXAM_KINDS[d.examKind as keyof typeof EXAM_KINDS]}\n🔗 ${questionResult.url}`
+            : "ℹ️ هذه الأسئلة موجودة مسبقاً في بنك الأسئلة؛ لم يُنشر ملف مكرر."
+          : `⛔ تعذر النشر: ${questionResult.error}`, {replyMarkup: adminMenu(admin)});
+        return;
+      }
+      const count = d.materialKind === "summary" ? null : await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
+      const r = await publishLecture(fresh, {id: typeof d.draftId === "string" ? d.draftId : undefined, subjectId: String(d.subjectId), number: d.materialKind === "summary" ? 1 : (count?.c || 0) + 1, title: String(d.title || ""), fileUrl: String(d.fileUrl || ""), fileName: typeof d.fileName === "string" ? d.fileName : undefined, sections, source: "telegram", options, fingerprint: typeof d.fingerprint === "string" ? d.fingerprint : undefined, materialKind: d.materialKind === "summary" ? "summary" : "lecture"});
       if (r.ok && r.notificationEvents?.length) onPublished?.(r.notificationEvents);
       if (!r.ok && r.issue) { await showPublicationIssue(chatId, admin, kind, d, r.issue); return; }
       if (r.ok) await clearState(chatId); else if (state.flow === "ann" || state.flow === "lec") await previewDraft(chatId, state.flow, state.data);
       await sendMessage(chatId, r.ok
-        ? (r.action ? `✅ ${r.action === "expanded" ? "تم توسيع جمهور الملزمة" : "تم تحديث الملزمة الموجودة"}.\n🔗 ${PORTAL_BASE_URL}${r.url || "/lectures/" + encodeURIComponent(r.id)}` : r.inserted ? `✅ تم نشر المحاضرة\n📘 المادة: <b>${escapeHtml(subject?.name || String(d.subjectId))}</b>\n📄 المحاضرة: <b>${escapeHtml(String(d.title || ""))}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/lectures/${encodeURIComponent(r.id)}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
+        ? (r.action ? `✅ ${r.action === "expanded" ? "تم توسيع جمهور الملزمة" : "تم تحديث الملزمة الموجودة"}.\n🔗 ${PORTAL_BASE_URL}${r.url || "/lectures/" + encodeURIComponent(r.id)}` : r.inserted ? `✅ تم نشر ${d.materialKind === "summary" ? "الملخص في قسم الملخصات" : "المحاضرة"}\n📘 المادة: <b>${escapeHtml(subject?.name || String(d.subjectId))}</b>\n📄 ${d.materialKind === "summary" ? "الملخص" : "المحاضرة"}: <b>${escapeHtml(String(d.title || ""))}</b>\n🎯 الجمهور: ${audienceLabel(sections)}\n🔗 ${PORTAL_BASE_URL}/lectures/${encodeURIComponent(r.id)}` : "ℹ️ هذا النشر منشور مسبقًا (لا تكرار).")
         : `⛔ تعذر النشر: ${r.error}`, {parseMode: "HTML", replyMarkup: adminMenu(admin)});
       return;
     }

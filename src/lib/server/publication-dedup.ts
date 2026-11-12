@@ -104,8 +104,8 @@ export async function checkPublication(
   const title = normalizePublicationText(row.title);
   const body = normalizePublicationText(row.body);
   const rows = kind === "lectures"
-    ? await db.q<Row>(`SELECT * FROM portal_lectures WHERE subject_id=$1 AND id<>$2
-       AND archived_at IS NULL AND status='published' ORDER BY created_at DESC, id`, [row.subject_id, row.id])
+    ? await db.q<Row>(`SELECT * FROM portal_lectures WHERE subject_id=$1 AND id<>$2 AND material_kind=$3
+       AND archived_at IS NULL AND status='published' ORDER BY created_at DESC, id`, [row.subject_id, row.id, row.material_kind || "lecture"])
     : await db.q<Row>(`SELECT * FROM portal_announcements WHERE scope=$1 AND section=$2 AND subject_id=$3 AND id<>$4
        AND archived_at IS NULL AND created_at >= $5 ORDER BY created_at DESC, id`,
        [row.scope || "general", row.section || "all", row.subject_id || "", row.id, new Date(Date.now() - 24 * 3600_000).toISOString()]);

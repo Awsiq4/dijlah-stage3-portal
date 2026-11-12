@@ -155,6 +155,15 @@ export async function POST(req: NextRequest) {
     if (chatId0) await touchActivity(Number(chatId0));
     const message = update.message;
     const callback = update.callback_query;
+    // A Telegram photo is passed to the publishing flow as a JPEG document.
+    // Support-ticket photos are handled first and remain on their existing path.
+    const photo = Array.isArray(message?.photo) ? message.photo.at(-1) : null;
+    const attachment = message?.document
+      ? {file_id: String(message.document.file_id), file_name: message.document.file_name,
+          mime_type: message.document.mime_type, file_size: message.document.file_size}
+      : photo ? {file_id: String(photo.file_id), file_name: "exam-photo-" + String(photo.file_unique_id || photo.file_id).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) + ".jpg",
+          mime_type: "image/jpeg", file_size: photo.file_size}
+      : undefined;
     replyChat = Number(message?.chat?.id || callback?.message?.chat?.id) || undefined;
     if ((message?.chat?.type || callback?.message?.chat?.type) !== "private") return NextResponse.json({ok: true});
     if (message?.chat?.id && (message.text || message.document || message.photo)) {
@@ -184,7 +193,7 @@ export async function POST(req: NextRequest) {
           }
           await handleNavCallback(Number(message.chat.id), Number(message.from?.id || message.chat.id), "nav:home");
         } else if (admin && (await hasActiveFlow(Number(message.chat.id)))) {
-          await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined);
+          await handleAdminMessage(Number(message.chat.id), Number(message.from.id), text, attachment);
         } else {
           await handleCommand(Number(message.chat.id), text, arg, message.from);
         }
@@ -203,7 +212,7 @@ export async function POST(req: NextRequest) {
         }
         // non-command message from a linked admin account -> publishing flow state machine
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
-        const doc = message.document ? {file_id: String(message.document.file_id), file_name: message.document.file_name, mime_type: message.document.mime_type, file_size: message.document.file_size} : undefined;
+        const doc = attachment;
         if (admin && doc && !(await hasActiveFlow(Number(message.chat.id)))) {
           await handleNavCallback(Number(message.chat.id), Number(message.from.id), "doc", doc); // Flow B offer
         } else if (admin) {
@@ -222,11 +231,11 @@ export async function POST(req: NextRequest) {
         await handleOwnerCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("stu:") ) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("page:my:")) {
+      } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("qmanage:") || data.startsWith("page:my:")) {
         await handleManageCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || data === "adm:new" || data === "pdf:new") {
         await handleNavCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
+      } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:") || data.startsWith("q:kind:")) {
         await handleAdminCallback(Number(callback.message.chat.id), userId, data, eventIds => {
           after(() => drainQueue(200, eventIds).then(() => undefined));
         });
