@@ -10,6 +10,7 @@ import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {materialMime, validMaterialFile, storageConfigured, MAX_PDF_BYTES, uploadLectureFile} from "./storage.ts";
 import {safeFileUrl} from "../safe-url.ts";
 import type {TgDocument} from "./bot.ts";
+import {assignmentDayAllowed, assignmentDisplayDay} from "../assignment-date.ts";
 
 const ALL = ["A", "B", "C", "F"];
 const nav = {inline_keyboard: [[{text:"🏠 القائمة الرئيسية",callback_data:"nav:home"}, {text:"❌ إلغاء",callback_data:"adm:cancel"}]]};
@@ -21,15 +22,8 @@ async function botMethods() {
 }
 
 function dueDateBaghdad(value: string): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(value.trim());
-  if (!match) return null;
-  const [year,month,day,hour,minute] = match.slice(1).map(Number);
-  const calendar = new Date(Date.UTC(year, month-1, day, hour, minute));
-  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month-1 ||
-      calendar.getUTCDate() !== day || calendar.getUTCHours() !== hour ||
-      calendar.getUTCMinutes() !== minute) return null;
-  const iso = match[1]+"-"+match[2]+"-"+match[3]+"T"+match[4]+":"+match[5]+":00+03:00";
-  return Date.parse(iso) > Date.now() ? iso : null;
+  const day=value.trim();
+  return assignmentDayAllowed(day) ? day : null;
 }
 
 async function subjectOptions(chatId: number, admin: AdminInfo) {
@@ -61,7 +55,7 @@ async function prompt(chatId: number, d: Draft, admin: AdminInfo) {
     case "subject": await subjectOptions(chatId,admin); return;
     case "audience": await audienceOptions(chatId,admin,String(d.subjectId||"")); return;
     case "details": await sendMessage(chatId,"✍️ أرسل نص التكليف برسالة وحدة. أول سطر راح يكون العنوان، وبقية النص تفاصيل الواجب.",{replyMarkup:nav}); return;
-    case "due": await sendMessage(chatId,"📅 آخر موعد للتسليم بتوقيت بغداد برسالة وحدة، مثال: 2026-11-20 18:00",{replyMarkup:nav}); return;
+    case "due": await sendMessage(chatId,"📅 اختَر يوم التسليم فقط (بدون ساعة).\nاكتب التاريخ بهذا الشكل: 2026-11-20",{replyMarkup:nav}); return;
     case "submission": await sendMessage(chatId,"📨 اكتب طريقة التسليم (مثلاً ورقياً بالمحاضرة، أو عبر المنصة). أرسل «تخطي» إذا غير محددة.",{replyMarkup:nav}); return;
     case "attachment": await sendMessage(chatId,"📎 اختيارياً: أرسل ملف PDF/PPTX (حتى 20MB) أو رابط المرفق، أو أرسل «تخطي».",{replyMarkup:nav}); return;
     case "confirm": await showPreview(chatId,d); return;
@@ -86,7 +80,7 @@ async function showPreview(chatId: number, d: Draft) {
   await setFlowState(chatId,"asg",next);
   const subject = await qOne<{name:string}>("SELECT name FROM portal_subjects WHERE id=$1",[String(d.subjectId||"")]);
   const sections = Array.isArray(d.sections) ? d.sections.join("، ") : "";
-  const due = String(d.dueAt||"").replace("T"," ").replace(":00+03:00"," (بغداد)");
+  const due = assignmentDisplayDay(d.dueAt);
   const text = "📋 معاينة التكليف قبل النشر\n\n📘 المادة: " + (subject?.name || d.subjectId) +
     "\n🎯 الشعب: " + sections + "\n✍️ العنوان: " + String(d.title||"") +
     "\n📄 التعليمات: " + String(d.instructions||"") + "\n🗓 آخر موعد: " + due +
@@ -249,7 +243,7 @@ export async function handleAssignmentMessage(chatId:number,userId:number,text:s
   }
   if (step==="due") {
     const due=dueDateBaghdad(text);
-    if(!due){await sendMessage(chatId,"⚠️ الموعد غير صالح. مثال: 2026-11-20 18:00 (بغداد)");return;}
+    if(!due){await sendMessage(chatId,"⚠️ اكتب تاريخاً صحيحاً (اليوم أو بعده)، بدون ساعة. مثال: 2026-11-20");return;}
     await showPreview(chatId,{...d,dueAt:due});return;
   }
   if (step==="submission") {
