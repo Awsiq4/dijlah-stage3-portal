@@ -168,93 +168,101 @@ test("results announcements do not ask for individual grade-sheet uploads", asyn
  await pool.end();
 });
 
-test("assignment publishing from Telegram: rep can post to own section, correct deadline and no duplicates", async()=>{
+
+test("assignment is three-step: subject, one-message description, deadline, then preview",async()=>{
  const pool=await makeDb();await linked(pool,2);sent.length=0;
  await handleAdminCallback(2,2,"adm:asg");
  assert.equal((await getFlowState(2)).data.step,"subject");
  await handleAdminCallback(2,2,"asg:subj:nonlinear-optics");
- assert.equal((await getFlowState(2)).data.step,"audience");
- await handleAdminCallback(2,2,"asg:aud:sec:A");
- await handleAdminMessage(2,2,"حل مسائل الفصل الأول");
- await handleAdminMessage(2,2,"حل التمارين 1 إلى 5 بالدفتر");
+ let st=await getFlowState(2);
+ assert.equal(st.data.step,"details");
+ assert.deepEqual(st.data.sections,["A"]);
+ await handleAdminMessage(2,2,"حل مسائل الفصل الأول\nحل التمارين 1 إلى 5 بالدفتر");
+ assert.equal((await getFlowState(2)).data.step,"due");
  await handleAdminMessage(2,2,"2099-11-20 18:00");
- await handleAdminMessage(2,2,"التسليم ورقياً في المحاضرة");
- await handleAdminMessage(2,2,"تخطي");
- const state=await getFlowState(2);
- assert.equal(state.flow,"asg");assert.equal(state.data.step,"confirm");
- assert.equal(state.data.dueAt,"2099-11-20T18:00:00+03:00");
- await handleAdminCallback(2,2,"pub:asg:"+state.data.nonce);
+ st=await getFlowState(2);
+ assert.equal(st.data.step,"confirm");
+ assert.equal(st.data.dueAt,"2099-11-20T18:00:00+03:00");
+ assert.equal(st.data.title,"حل مسائل الفصل الأول");
+ await handleAdminCallback(2,2,"pub:asg:"+st.data.nonce);
  const rows=await q("SELECT * FROM portal_assignments");
  assert.equal(rows.length,1,JSON.stringify(sent.slice(-3)));
  assert.equal(rows[0].title,"حل مسائل الفصل الأول");
- assert.equal(rows[0].subject_id,"nonlinear-optics");
+ assert.match(rows[0].instructions,/التمارين 1/);
  assert.deepEqual(asArr(rows[0].sections),["A"]);
- assert.equal(rows[0].due_at,"2099-11-20T18:00:00+03:00");
  assert.ok(!(await getFlowState(2)).flow);
- await handleAdminCallback(2,2,"pub:asg:"+state.data.nonce);
+ await handleAdminCallback(2,2,"pub:asg:"+st.data.nonce);
  assert.equal((await q("SELECT id FROM portal_assignments")).length,1);
  await pool.end();
 });
 
-test("teacher cannot assign to an unapproved section via forged callback", async()=>{
+
+test("teacher assignment defaults to allowed audience, rejects forged section on edit",async()=>{
  const pool=await makeDb();await linked(pool,4);sent.length=0;
  await handleAdminCallback(4,4,"adm:asg");
  await handleAdminCallback(4,4,"asg:subj:quantum-mechanics");
  assert.equal((await getFlowState(4)).data.step,"subject");
  await handleAdminCallback(4,4,"asg:subj:nonlinear-optics");
+ const current=await getFlowState(4);
+ assert.deepEqual(current.data.sections,["A","B"]);
+ assert.equal(current.data.step,"details");
+ await handleAdminMessage(4,4,"واجب الفصل الأول");
+ await handleAdminMessage(4,4,"2099-11-20 18:00");
+ await handleAdminCallback(4,4,"asg:edit:audience");
  await handleAdminCallback(4,4,"asg:aud:sec:C");
  assert.equal((await getFlowState(4)).data.step,"audience");
- assert.equal((await q("SELECT id FROM portal_assignments")).length,0);
  await handleAdminCallback(4,4,"asg:aud:sec:B");
- assert.equal((await getFlowState(4)).data.step,"title");
+ assert.equal((await getFlowState(4)).data.step,"confirm");
+ assert.deepEqual((await getFlowState(4)).data.sections,["B"]);
  await pool.end();
 });
 
 
-test("new upcoming exam via Telegram: representative publishes once for their own section", async()=>{
+test("quiz publishing uses subject + one date/time message and publishes once",async()=>{
  const pool=await makeDb();await linked(pool,2);sent.length=0;
  await handleAdminCallback(2,2,"adm:exam");
  assert.equal((await getFlowState(2)).data.step,"subject");
- await handleAdminCallback(2,2,"exam:subject:nonlinear-optics");
- assert.equal((await getFlowState(2)).data.step,"audience");
- await handleAdminCallback(2,2,"exam:aud:A");
- assert.equal((await getFlowState(2)).data.step,"kind");
- await handleAdminCallback(2,2,"exam:kind:0");
- await handleAdminMessage(2,2,"الكوز الأول في الفصل الثاني");
- await handleAdminMessage(2,2,"2099-11-24");
- await handleAdminMessage(2,2,"09:30");
- await handleAdminMessage(2,2,"مختبر الليزر");
- await handleAdminMessage(2,2,"المحاضرات 1 إلى 3");
- await handleAdminMessage(2,2,"تخطي");
- assert.equal((await getFlowState(2)).data.step,"status");
- await handleAdminCallback(2,2,"exam:status:confirmed");
- const st=await getFlowState(2);
- assert.equal(st.data.step,"confirm");
- assert.match(sent.at(-1).text,/الفصل الثاني/);
- await handleAdminCallback(2,2,"pub:exam:"+st.data.nonce);
- const exams=await q("SELECT * FROM portal_exams");
- assert.equal(exams.length,1,JSON.stringify(sent.slice(-2)));
- assert.equal(exams[0].title,"الكوز الأول في الفصل الثاني");
- assert.equal(exams[0].type,"كوز يومي");
- assert.equal(exams[0].date,"2099-11-24");
- assert.equal(exams[0].start_time,"09:30");
- assert.equal(exams[0].status,"confirmed");
- assert.deepEqual(asArr(exams[0].sections),["A"]);
- await handleAdminCallback(2,2,"pub:exam:"+st.data.nonce);
+ await handleAdminCallback(2,2,"quiz:subj:nonlinear-optics");
+ let state=await getFlowState(2);
+ assert.equal(state.data.step,"datetime");
+ assert.deepEqual(state.data.sections,["A"]);
+ await handleAdminMessage(2,2,"2099-11-24 09:30");
+ state=await getFlowState(2);
+ assert.equal(state.data.step,"confirm");
+ assert.match(sent.at(-1).text,/2099-11-24/);
+ await handleAdminCallback(2,2,"quiz:more");
+ await handleAdminCallback(2,2,"quiz:edit:topics");
+ await handleAdminMessage(2,2,"محاضرات الفصل الأول");
+ state=await getFlowState(2);
+ assert.equal(state.data.step,"confirm");
+ await handleAdminCallback(2,2,"pub:exam:"+state.data.nonce);
+ const rows=await q("SELECT * FROM portal_exams");
+ assert.equal(rows.length,1,JSON.stringify(sent.slice(-2)));
+ assert.equal(rows[0].title,"كوز يومي");
+ assert.equal(rows[0].type,"كوز يومي");
+ assert.equal(rows[0].date,"2099-11-24");
+ assert.equal(rows[0].start_time,"09:30");
+ assert.equal(rows[0].topics,"محاضرات الفصل الأول");
+ assert.deepEqual(asArr(rows[0].sections),["A"]);
+ await handleAdminCallback(2,2,"pub:exam:"+state.data.nonce);
  assert.equal((await q("SELECT id FROM portal_exams")).length,1);
  await pool.end();
 });
 
-test("teacher cannot forge an exam in another subject or unauthorized section",async()=>{
+
+test("teacher quiz audience defaults to permitted sections and rejects forged edits",async()=>{
  const pool=await makeDb();await linked(pool,4);sent.length=0;
  await handleAdminCallback(4,4,"adm:exam");
- await handleAdminCallback(4,4,"exam:subject:quantum-mechanics");
+ await handleAdminCallback(4,4,"quiz:subj:quantum-mechanics");
  assert.equal((await getFlowState(4)).data.step,"subject");
- await handleAdminCallback(4,4,"exam:subject:nonlinear-optics");
- await handleAdminCallback(4,4,"exam:aud:C");
+ await handleAdminCallback(4,4,"quiz:subj:nonlinear-optics");
+ assert.deepEqual((await getFlowState(4)).data.sections,["A","B"]);
+ await handleAdminMessage(4,4,"2099-11-24 09:30");
+ await handleAdminCallback(4,4,"quiz:aud");
+ await handleAdminCallback(4,4,"quiz:aud:C");
  assert.equal((await getFlowState(4)).data.step,"audience");
- await handleAdminCallback(4,4,"exam:aud:B");
- assert.equal((await getFlowState(4)).data.step,"kind");
+ await handleAdminCallback(4,4,"quiz:aud:B");
+ assert.deepEqual((await getFlowState(4)).data.sections,["B"]);
  assert.equal((await q("SELECT * FROM portal_exams")).length,0);
  await pool.end();
 });
