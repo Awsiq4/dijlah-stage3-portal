@@ -82,5 +82,19 @@ test("public layer (pg-mem): only published rows, section targeting correct, dra
   assert.equal(mapped.announcements[0].publishedAt !== undefined, true);
   assert.equal(mapped.schedule[0].section, "A");
   assert.equal(mapped.subjects[0].englishName !== undefined, true);
+  // A private admin login email must never be the owner's public byline:
+  // cover current ownership, legacy posts without created_by, and another publisher.
+  await pool.query(`INSERT INTO portal_admins (id,email,name,password_hash,role)
+    VALUES (90,'owner@private.test','','hash','super_admin'),
+           (91,'teacher@private.test','Dr Example','hash','teacher')`);
+  await pool.query(`INSERT INTO portal_announcements(id,title,scope,section,author,created_by) VALUES
+    ('owner-current','مالك جديد','general','all','owner@private.test',90),
+    ('owner-legacy','مالك قديم','general','all','owner@private.test',NULL),
+    ('teacher-post','تدريسي','teacher','A','Dr Example',91)`);
+  const authors = (await getPublicContent("announcements", "A", defaultQueryer)).content.announcements;
+  assert.equal(authors.find(a => a.id === "owner-current").author,"Aws Faris");
+  assert.equal(authors.find(a => a.id === "owner-legacy").author,"Aws Faris");
+  assert.equal(authors.find(a => a.id === "teacher-post").author,"Dr Example");
+  assert.equal(authors.find(a => a.id === "a-gen").author,"");
   await pool.end();
 });

@@ -325,3 +325,14 @@ test("workers claim the same notification once and leave unrelated events queued
     await pool.end();
   }
 });
+
+test("owner publication stores public display name instead of login email", async () => {
+  const pool = await makeDb();
+  const owner = {id: 1, role: "super_admin", is_active: true, status: "active", name: "", email: "owner@private.test"};
+  await pool.query("INSERT INTO portal_admins(id,email,name,password_hash,role) VALUES(1,'owner@private.test','','hash','super_admin')");
+  const published = await publishAnnouncement(owner, {title: "تبليغ من المالك", body: "محتوى", scope: "general", section: "all", source: "telegram"});
+  assert.equal(published.ok, true);
+  const row = await qOne("SELECT author FROM portal_announcements WHERE id=$1", [published.id]);
+  assert.equal(row.author, "Aws Faris");
+  await pool.end();
+});
