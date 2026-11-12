@@ -92,7 +92,7 @@ test("teacher announcement asks for assigned named subject and allowed audience"
 });
 test("direct PDF draft consumes saved attachment instead of asking to resend", async()=>{
  const pool=await makeDb(); await linked(pool,2); sent.length=0;
- await setFlowState(2,"lec",{step:"title",subjectId:"nonlinear-optics",sections:["A"],pendingDoc:{file_id:"saved",mime_type:"application/pdf",file_size:100}});
+ await setFlowState(2,"lec",{step:"title",subjectId:"nonlinear-optics",sections:["A"],pendingDoc:{file_id:"saved",file_name:"saved.pdf",mime_type:"application/pdf",file_size:100}});
  await handleAdminMessage(2,2,"ملزمة");
  // No storage token in this test: reaching storage validation proves saved document was consumed.
  assert.match(sent.at(-1).text,/تخزين الملفات غير مهيأ/);
