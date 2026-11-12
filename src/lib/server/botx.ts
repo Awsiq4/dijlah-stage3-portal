@@ -167,6 +167,10 @@ export async function handleStudentCallback(chatId: number, userId: number, data
 export async function handleManageCallback(chatId: number, userId: number, data: string): Promise<void> {
   const admin = await getLinkedAdmin(userId);
   if (!admin || !isActive(admin)) { await sendMessage(chatId, "⚠️ حسابك غير مربوط أو معلّق.", {replyMarkup: backHome}); return; }
+  if (data.startsWith("cw:")) {
+    const {handleCourseworkCallback}=await import("./bot-coursework-manage.ts");
+    await handleCourseworkCallback(chatId,userId,data);return;
+  }
 
   if (data === "adm:my") {
     await sendMessage(chatId, "🗂 إدارة منشوراتي — اختر النوع:", {replyMarkup: {inline_keyboard: [
