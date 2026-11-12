@@ -222,11 +222,11 @@ export async function POST(req: NextRequest) {
         await handleOwnerCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("stu:") ) {
         await handleStudentCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("page:my:")) {
+      } else if (data === "adm:my" || data.startsWith("it:") || data.startsWith("qmanage:") || data.startsWith("page:my:")) {
         await handleManageCallback(Number(callback.message.chat.id), userId, data);
       } else if (data.startsWith("nav:") || data === "flow:resume" || data === "flow:discard" || data === "adm:new" || data === "pdf:new") {
         await handleNavCallback(Number(callback.message.chat.id), userId, data);
-      } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:")) {
+      } else if (data.startsWith("draft:") || data.startsWith("ann:") || data.startsWith("adm:") || data.startsWith("pub:") || data.startsWith("lec:") || data.startsWith("q:kind:")) {
         await handleAdminCallback(Number(callback.message.chat.id), userId, data, eventIds => {
           after(() => drainQueue(200, eventIds).then(() => undefined));
         });
