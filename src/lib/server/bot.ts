@@ -484,7 +484,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
           id: String(d.draftId || `questions-tg-${chatId}-${Date.now()}`),
           subjectId: String(d.subjectId), examKind: d.examKind as "quiz" | "midterm" | "final",
           title: String(d.title || ""),
-          academicYear: String(d.title || "").match(/20\\d{2}(?:[–\\/-]20\\d{2})?/)?.[0] || "",
+          academicYear: String(d.title || "").match(/20\d{2}(?:[–/-]20\d{2})?/)?.[0] || "",
           fileUrl: String(d.fileUrl || ""), fileName: String(d.fileName || ""),
           fingerprint: String(d.fingerprint || ""), sections,
         });
