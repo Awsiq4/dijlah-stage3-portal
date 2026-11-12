@@ -28,6 +28,7 @@ export function styleForTelegramButton(button: Record<string, unknown>): InlineB
   if (data === "stu:ann" || data === "stu:lec" ||
       data === "adm:new" || data === "adm:ann" ||
       data === "stu:sched:today" || data === "flow:resume" ||
+      (data === "own:stats" && label.includes("إحصائيات")) ||
       (data === "sup:o:home" && label.includes("إدارة الدعم")) ||
       data === "sup:o:list:pending:0" ||
       data.startsWith("sup:o:reply:") || data.startsWith("sup:s:reply:")) return "primary";
