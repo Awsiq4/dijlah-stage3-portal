@@ -185,7 +185,7 @@ test("assignment publishing from Telegram: rep can post to own section, correct 
  assert.equal(state.data.dueAt,"2099-11-20T18:00:00+03:00");
  await handleAdminCallback(2,2,"pub:asg:"+state.data.nonce);
  const rows=await q("SELECT * FROM portal_assignments");
- assert.equal(rows.length,1);
+ assert.equal(rows.length,1,JSON.stringify(sent.slice(-3)));
  assert.equal(rows[0].title,"حل مسائل الفصل الأول");
  assert.equal(rows[0].subject_id,"nonlinear-optics");
  assert.deepEqual(asArr(rows[0].sections),["A"]);
