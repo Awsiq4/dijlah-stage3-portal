@@ -1,8 +1,9 @@
 "use client";
 
 import {useEffect, useState} from "react";
+import type {LucideIcon} from "lucide-react";
 import {BookOpen, ClipboardList, FileQuestion, Megaphone, Pencil, Search, Trash2} from "lucide-react";
-import {Empty} from "@/components/UI";
+import {Empty, Status} from "@/components/UI";
 
 export const CONTENT_SECTIONS = [
   {id: "lectures", label: "المحاضرات والملخصات", addLabel: "محاضرة أو ملخص", Icon: BookOpen},
@@ -13,6 +14,33 @@ export const CONTENT_SECTIONS = [
 
 export type PublicationType = typeof CONTENT_SECTIONS[number]["id"];
 type Row = Record<string, unknown>;
+
+export function AdminNavGroup<T extends string>({label, items, active, onSelect}: {
+  label?: string;
+  items: readonly {id: T; label: string; Icon: LucideIcon}[];
+  active: string;
+  onSelect: (id: T) => void;
+}) {
+  return <div className="admin-side-group">
+    {label && <p>{label}</p>}
+    {items.map(({id, label: name, Icon}) =>
+      <button key={id} type="button" aria-current={active === id ? "page" : undefined} onClick={() => onSelect(id)}>
+        <Icon size={17}/><span>{name}</span>
+      </button>
+    )}
+  </div>;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  published: "منشور", draft: "مسودة", active: "نشط", closed: "منتهٍ", cancelled: "ملغى",
+  confirmed: "مؤكد", provisional: "مبدئي", normal: "اعتيادي", moved: "منقول", extra: "إضافي",
+};
+const dateFormat = new Intl.DateTimeFormat("ar-IQ", {dateStyle: "medium", timeZone: "Asia/Baghdad"});
+
+function rowDate(row: Row) {
+  const date = new Date(String(row.due_at || row.date || row.published_at || row.created_at || ""));
+  return Number.isNaN(date.getTime()) ? "—" : dateFormat.format(date);
+}
 
 export function useAdminRows(type: string | null) {
   const [result, setResult] = useState<{type: string; rows: Row[]; failed: boolean} | null>(null);
@@ -38,9 +66,10 @@ export function useAdminRows(type: string | null) {
   };
 }
 
-export function ContentList({rows, subjects, onEdit, onRemove}: {
+export function ContentList({rows, subjects, selected, onEdit, onRemove}: {
   rows: Row[];
   subjects: Row[];
+  selected?: string;
   onEdit: (row: Row) => void;
   onRemove: (row: Row) => void;
 }) {
@@ -71,16 +100,27 @@ export function ContentList({rows, subjects, onEdit, onRemove}: {
         {["A", "B", "C", "F"].map(value => <option key={value} value={value}>{value}</option>)}
       </select>}
     </div>}
-    {filtered.length ? <div className="stack">{filtered.map(row => {
-      const name = String(row.title || row.name || row.id);
-      const subjectName = subjectNames.get(String(row.subject_id)) || String(row.subject_id || "");
-      const sections = getSections(row);
-      const details = [subjectName, sections.includes("all") || sections.length === 4 ? "كل الشعب" : sections.join("، ")].filter(Boolean);
-      return <div className="list-row admin-content-row" key={String(row.id)}>
-        <div className="grow"><strong>{name}</strong>{details.length > 0 && <p className="subtle small">{details.join(" · ")}</p>}</div>
-        <button type="button" className="action-button secondary" aria-label={`تعديل ${name}`} onClick={() => onEdit(row)}><Pencil size={16}/></button>
-        <button type="button" className="action-button secondary" aria-label={`حذف ${name}`} onClick={() => onRemove(row)}><Trash2 size={16}/></button>
-      </div>;
-    })}</div> : <Empty title={rows.length ? "ماكو نتائج مطابقة" : "ماكو محتوى بهالقسم"} description={rows.length ? "جرّب تغيير البحث أو الفلاتر." : ""}/>}
+    {filtered.length ? <div className="admin-table-wrap"><table className="admin-content-table">
+      <thead><tr><th scope="col">العنوان</th><th scope="col">المادة</th><th scope="col">الشعبة</th><th scope="col">التاريخ</th><th scope="col">الحالة</th><th scope="col">الإجراءات</th></tr></thead>
+      <tbody>{filtered.map(row => {
+        const name = String(row.title || row.name || row.id);
+        const subjectName = subjectNames.get(String(row.subject_id)) || String(row.subject_id || "");
+        const sections = getSections(row);
+        const sectionName = sections.includes("all") || sections.length === 4 || (Array.isArray(row.sections) && !sections.length) ? "كل الشعب" : sections.join("، ");
+        const details = [subjectName, sectionName].filter(Boolean).join(" · ");
+        const status = row.archived_at ? "مؤرشف" : STATUS_LABELS[String(row.status)];
+        return <tr key={String(row.id)} className={selected === String(row.id) ? "admin-row-selected" : undefined}>
+          <td className="admin-table-title"><strong>{name}</strong>{details && <p className="subtle small admin-mobile-detail">{details}</p>}</td>
+          <td className="admin-table-meta">{subjectName || "—"}</td>
+          <td className="admin-table-meta">{sectionName || "—"}</td>
+          <td className="admin-table-meta">{rowDate(row)}</td>
+          <td className="admin-table-meta">{status ? <Status>{status}</Status> : "—"}</td>
+          <td className="admin-table-actions"><div>
+            <button type="button" className="action-button secondary" aria-label={`تعديل ${name}`} title="تعديل" onClick={() => onEdit(row)}><Pencil size={16}/></button>
+            <button type="button" className="action-button secondary" aria-label={`حذف ${name}`} title="حذف" onClick={() => onRemove(row)}><Trash2 size={16}/></button>
+          </div></td>
+        </tr>;
+      })}</tbody>
+    </table></div> : <Empty title={rows.length ? "ماكو نتائج مطابقة" : "ماكو محتوى بهالقسم"} description={rows.length ? "جرّب تغيير البحث أو الفلاتر." : ""}/>}
   </>;
 }

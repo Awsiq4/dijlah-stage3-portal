@@ -1,13 +1,13 @@
 "use client";
 import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import React,{useCallback,useEffect,useState} from "react";
-import {Plus,Send,Users,Link2,Unlink,Layers,Ellipsis,LogOut,X} from "lucide-react";
+import {Plus,Send,Users,Link2,Unlink,Layers,Ellipsis,LogOut,X,KeyRound} from "lucide-react";
 import {Empty,PageHeading,Status} from "@/components/UI";
 import {usePublicationRequest} from "./publication-review";
 import {MaterialForm, type PublishingAccount} from "./material-form";
 import {AssignmentForm} from "./assignment-form";
 import {ExamForm} from "./exam-form";
-import {CONTENT_SECTIONS, ContentList, useAdminRows, type PublicationType} from "./content-navigation";
+import {CONTENT_SECTIONS, AdminNavGroup, ContentList, useAdminRows, type PublicationType} from "./content-navigation";
 
 type Me = PublishingAccount & {authenticated: boolean; email?: string; name?: string};
 type Row = Record<string, unknown>;
@@ -82,7 +82,14 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
 
   const current = sections.find(item => item.id === type);
   const initial = editing?.id ? editing : undefined;
-  return <div className="admin-shell">
+  return <div className="admin-shell admin-workspace-layout">
+    <nav className="admin-desktop-nav" aria-label="أقسام الإدارة">
+      {canPublish && <AdminNavGroup label="المحتوى" items={sections} active={more ? "" : type} onSelect={id => changeSection(id)}/>}
+      <AdminNavGroup label="الإعدادات" items={[{id: "account", label: "حسابي وأمان الدخول", Icon: KeyRound}]} active={more ? "account" : ""}
+        onSelect={() => {changeSection(type); setMore(true);}}/>
+      <button type="button" className="admin-side-logout" onClick={onLogout}><LogOut size={17}/> تسجيل الخروج</button>
+    </nav>
+    <div className="admin-workspace-main">
     {review}
     <PageHeading title="لوحة الإدارة" description={me.name || me.email} action={canPublish &&
       <button type="button" className="action-button admin-publish" aria-expanded={publishing} onClick={() => setPublishing(value => !value)}><Plus size={18}/> نشر</button>}/>
@@ -93,37 +100,53 @@ export function RoleWorkspace({me, subjects, passkeyLink, onLogout}: {
     </section>}
     <nav className="admin-primary-nav" aria-label="أقسام الإدارة">
       {canPublish && <button type="button" aria-current={!more ? "page" : undefined} onClick={() => changeSection(type)}><Layers size={19}/> المحتوى</button>}
-      <button type="button" aria-current={more ? "page" : undefined} onClick={() => {changeSection(type); setMore(true);}}><Ellipsis size={19}/> المزيد</button>
+      <button type="button" aria-current={more ? "page" : undefined} onClick={() => {changeSection(type); setMore(true);}}><Ellipsis size={19}/> حسابي</button>
     </nav>
     {more ? <>
       <AccountPanel/>
-      <div className="admin-option-grid">{passkeyLink}<button type="button" className="admin-option" onClick={onLogout}><LogOut size={19}/> تسجيل الخروج</button></div>
+      <section className="panel">
+        <div className="panel-heading"><h2>أمان الدخول</h2></div>
+        <div className="panel-body admin-actions">{passkeyLink}<button type="button" className="action-button secondary" onClick={onLogout}><LogOut size={19}/> تسجيل الخروج</button></div>
+      </section>
     </> : canPublish && <>
-      <div className="tabs admin-tabs" aria-label="نوع المحتوى">
+      <div className="tabs admin-tabs admin-mobile-only" aria-label="نوع المحتوى">
         {sections.map(({id, label}) => <button type="button" key={id} aria-pressed={id === type} className={id === type ? "selected" : ""} onClick={() => changeSection(id)}>{label}</button>)}
       </div>
       {notice && <p className="note" role="status">{notice}</p>}
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>{editing ? (initial ? "تعديل" : "إضافة") + " · " + current?.label : current?.label}</h2>
-          {editing ? <button type="button" className="action-button secondary" disabled={busy} onClick={() => changeSection(type)}><X size={16}/> إلغاء</button> :
-            <button type="button" className="action-button" onClick={() => changeSection(type, {})}><Plus size={16}/> إضافة</button>}
-        </div>
-        <div className="panel-body">
-          {editing ? type === "lectures" ? <MaterialForm key={String(initial?.id || "new")} account={me} initial={initial} rows={rows || []} onSaved={reload}/> :
+      <div className={"admin-content-layout" + (editing ? " admin-is-editing" : "")}>
+        <section className="panel admin-list-pane">
+          <div className="panel-heading"><h2>{current?.label}</h2>
+            <button type="button" className="action-button" onClick={() => changeSection(type, {})}><Plus size={16}/> إضافة</button>
+          </div>
+          <div className="panel-body">
+            {failed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : rows ?
+              <ContentList key={type} rows={type === "exams" ? rows.filter(row => row.type === "كوز يومي") : rows} subjects={subjects}
+                selected={initial?.id ? String(initial.id) : undefined} onEdit={row => changeSection(type, row)} onRemove={row => {
+                  if (row.id === initial?.id) setNotice("أغلق نموذج التعديل قبل حذف هذا المنشور.");
+                  else void remove(row);
+                }}/> :
+              <p className="subtle" role="status">جارٍ تحميل المحتوى…</p>}
+          </div>
+        </section>
+        {editing && <section className="panel admin-editor-pane" aria-label={initial ? "تعديل المنشور" : "إضافة منشور"}>
+          <div className="panel-heading">
+            <h2>{initial ? "تعديل" : "إضافة"} · {current?.label}</h2>
+            <button type="button" className="action-button secondary" disabled={busy} onClick={() => changeSection(type)}><X size={16}/> إغلاق</button>
+          </div>
+          <div className="panel-body">
+          {type === "lectures" ? <MaterialForm key={String(initial?.id || "new")} account={me} initial={initial} rows={rows || []} onSaved={reload}/> :
             type === "assignments" ? <AssignmentForm key={String(initial?.id || "new")} account={me} initial={initial} onSaved={saved}/> :
             type === "exams" ? <ExamForm key={String(initial?.id || "new")} account={me} initial={initial} onSaved={saved}/> :
             <form className="admin-form" onSubmit={publishAnnouncement}>
               <label className="form-field wide"><span>العنوان</span><input required value={title} onChange={e => setTitle(e.target.value)}/></label>
               <label className="form-field wide"><span>نص التبليغ</span><textarea required rows={4} value={body} onChange={e => setBody(e.target.value)}/></label>
               <button className="action-button" disabled={busy}><Send size={15}/> {busy ? "جارٍ الحفظ…" : initial ? "حفظ التعديلات" : "نشر التبليغ"}</button>
-            </form>
-          : failed ? <Empty title="تعذّر تحميل المحتوى" description="حاول فتح القسم مجدداً."/> : rows ?
-            <ContentList key={type} rows={type === "exams" ? rows.filter(row => row.type === "كوز يومي") : rows} subjects={subjects} onEdit={row => changeSection(type, row)} onRemove={row => void remove(row)}/> :
-            <p className="subtle" role="status">جارٍ تحميل المحتوى…</p>}
-        </div>
-      </section>
+            </form>}
+          </div>
+        </section>}
+      </div>
     </>}
+    </div>
   </div>;
 }
 
@@ -171,7 +194,7 @@ export function UsersTab() {
   };
 
   return <>
-    <div className="panel"><div className="panel-heading"><h2><Plus size={18}/> إضافة مستخدم (دعوة)</h2></div><div className="panel-body">
+    <div className="panel"><div className="panel-heading"><h2><Plus size={18}/> دعوة تدريسي أو ممثل</h2></div><div className="panel-body">
     {notice && <p className="note" role="status">{notice}</p>}
       <form className="admin-form" onSubmit={invite}>
         <label className="form-field"><span>الاسم *</span><input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} required/></label>
@@ -209,7 +232,7 @@ export function UsersTab() {
       </form>
     </div></div>
 
-    <div className="panel"><div className="panel-heading"><h2><Users size={18}/> الحسابات</h2></div><div className="panel-body">
+    <div className="panel"><div className="panel-heading"><h2><Users size={18}/> حسابات التدريسيين والممثلين</h2></div><div className="panel-body">
       {users === null ? <Empty description="جارٍ التحميل…"/> : users.length ? <div className="stack">{users.map(u => <div className="list-row" key={String(u.id)}>
         <div className="grow"><strong>{String(u.name || u.email)}</strong><p className="subtle small">{String(u.email)} · {String(u.role)} · {String(u.assigned_section || "")} {u.telegram_user_id ? "· Telegram مربوط" : u.telegram_expected_id ? "· بانتظار فتح البوت" : ""}</p></div>
         <Status tone={u.status === "suspended" ? "danger" : "success"}>{String(u.status || "active")}</Status>
@@ -275,18 +298,21 @@ export function TelegramCenterTab() {
     <div className="panel"><div className="panel-heading"><h2>حالة البوت</h2></div><div className="panel-body">
       <div className="stats">
         {stats?.filter(s => String(s.table).startsWith("tg_") || String(s.table).startsWith("portal_telegram")).map(s =>
-          <div className="stat" key={String(s.table)}><SendIcon/><span>{String(s.table)}</span><strong>{String(s.count)}</strong></div>)}
+          <div className="stat" key={String(s.table)}><SendIcon/><span>{{tg_subscribers: "المشتركون", tg_events: "أحداث الإشعارات", tg_deliveries: "عمليات الإرسال"}[String(s.table)] || "روابط تيليجرام"}</span><strong>{String(s.count)}</strong></div>)}
       </div>
       <p className="subtle small">حالة البوت: <Status tone={botStatus?.enabled ? "success" : "muted"}>{botStatus?.enabled ? "مفعّل ✅" : "غير مفعّل أو لم يُتحقق منه"}</Status></p>
-      <p className="subtle small">عنوان Webhook: {botStatus?.webhook?.host || "غير محدد"} {botStatus?.webhook?.pending ? `— بانتظار المعالجة: ${botStatus.webhook.pending}` : ""}</p>
-      <p className="subtle small">يربط زر التفعيل Telegram بعنوان Production الرسمي ولا يغيّر أي بيانات للمستخدمين.</p>
+
     {notice && <p className="note" role="status">{notice}</p>}
       <div style={{display: "flex", gap: 8, flexWrap: "wrap"}}>
-        <button className="action-button" onClick={configureWebhook} disabled={hookBusy}><Link2 size={15}/> {hookBusy ? "جارٍ تفعيل الربط..." : "تفعيل Webhook على الموقع الرسمي"}</button>
         <button className="action-button secondary" onClick={createLink}><Link2 size={15}/> ربط حساب Telegram</button>
-        <button className="action-button secondary" onClick={unlink}><Unlink size={15}/> إلغاء Rabط</button>
+        <button className="action-button secondary" onClick={unlink}><Unlink size={15}/> إلغاء ربط الحساب</button>
       </div>
       <p className="subtle small" style={{marginTop: 8}}>حسابك الحالي: {link}</p>
+      <details className="admin-diagnostics">
+        <summary>التشخيص الفني للبوت</summary>
+        <p className="subtle small">عنوان استقبال تحديثات البوت: {botStatus?.webhook?.host || "غير محدد"} · بانتظار المعالجة: {botStatus?.webhook?.pending ?? "—"}</p>
+        <button type="button" className="action-button secondary" onClick={configureWebhook} disabled={hookBusy}><Link2 size={15}/> {hookBusy ? "جارٍ ربط البوت…" : "ربط البوت بالموقع الرسمي"}</button>
+      </details>
     </div></div>
     <div className="panel"><div className="panel-heading"><h2>الحسابات المرتبطة بـTelegram</h2></div><div className="panel-body">
       {links === null ? <Empty description="…"/> : links.length ? <div className="stack">{links.map(l => <div className="list-row" key={String(l.id)}>
@@ -310,7 +336,7 @@ export function AccountPanel() {
     const j = await res.json().catch(() => ({}));
     setNotice(res.ok && j.deepLink ? `افتح في Telegram: ${j.deepLink}` : (j.error || "تعذر"));
   };
-  return <div className="panel"><div className="panel-heading"><h2>حسابي</h2></div><div className="panel-body">
+  return <div className="panel"><div className="panel-heading"><h2>حسابي على تيليجرام</h2></div><div className="panel-body">
     <p className="subtle small">Telegram: {link}</p>
     {notice && <p className="note" role="status">{notice}</p>}
     <button className="action-button secondary" onClick={create}><Link2 size={15}/> ربط حساب Telegram</button>
