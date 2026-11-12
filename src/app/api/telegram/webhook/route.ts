@@ -242,6 +242,23 @@ export async function POST(req: NextRequest) {
       } else {
         await handleCallback(Number(callback.message.chat.id), data, callback.from);
       }
+      // Keep publisher chats visually tidy: once a menu choice opens the next
+      // screen, remove its now-obsolete inline buttons. Do not touch student,
+      // owner, support, or final-publish confirmation buttons (retries stay safe).
+      const publishingNavigation = data === "adm:new" || data === "adm:materials" ||
+        data === "adm:cancel" || data === "adm:quick" || data === "adm:ann" ||
+        data === "adm:lec" || data === "adm:summary" || data === "adm:questions" ||
+        data === "adm:asg" || data === "adm:exam" || data === "adm:results" ||
+        data.startsWith("quiz:") || data.startsWith("asg:") ||
+        data.startsWith("exam:") || data.startsWith("lec:subj:") ||
+        data.startsWith("lec:aud:") || data.startsWith("ann:subj:") ||
+        data.startsWith("q:kind:") || data.startsWith("draft:");
+      if (publishingNavigation && callback.message.message_id) {
+        const chatId = Number(callback.message.chat.id);
+        const messageId = Number(callback.message.message_id);
+        after(() => tgFetch("editMessageReplyMarkup", {chat_id: chatId, message_id: messageId})
+          .then(() => undefined).catch(() => undefined));
+      }
     }
     await recordBotActivity(update);
     after(()=>wakeSupportDelivery().catch(err=>console.error("support delivery retry:",err instanceof Error?err.message:"error")));
