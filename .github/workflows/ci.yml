@@ -23,6 +23,8 @@ jobs:
         run: npm test
       - name: Support integration tests (isolated in-memory PostgreSQL)
         run: node --experimental-strip-types scripts/support-live-test.mjs --memory
+      - name: Assignment calendar-date validation
+        run: node --experimental-strip-types --test src/lib/assignment-date.test.mjs
       - name: Telegram publishing flow regression tests
         run: node --experimental-strip-types --test src/lib/server/bot-ux.test.mjs
       - name: TypeScript typecheck
