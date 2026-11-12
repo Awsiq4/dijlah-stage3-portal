@@ -1,4 +1,5 @@
 import {BOT_TOKEN} from "./flags.ts";
+import {styleTelegramReplyMarkup} from "./telegram-button-style.ts";
 
 const API_BASE = "https://api.telegram.org";
 
@@ -12,7 +13,9 @@ export async function tgFetch<T>(method: string, params: Record<string, unknown>
     const res = await fetch(`${API_BASE}/bot${BOT_TOKEN}/${method}`, {
       method: "POST",
       headers: {"content-type": "application/json"},
-      body: JSON.stringify(params),
+      body: JSON.stringify(params.reply_markup === undefined
+        ? params
+        : {...params, reply_markup: styleTelegramReplyMarkup(params.reply_markup)}),
       signal: ctrl.signal,
       cache: "no-store",
     });
