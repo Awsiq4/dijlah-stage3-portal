@@ -329,6 +329,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
       [{text: "📑 أسئلة امتحانات سابقة", callback_data: "adm:questions"}],
       [{text: "📊 إعلان صدور نتائج", callback_data: "adm:results"}],
       [{text: "📋 نشر واجب / تكليف", callback_data: "adm:asg"}],
+      [{text: "📝 نشر موعد امتحان / كوز", callback_data: "adm:exam"}],
       [{text: "🏠 رجوع", callback_data: "nav:home"}],
     ]}});
     return;
