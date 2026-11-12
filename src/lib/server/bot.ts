@@ -13,6 +13,7 @@ import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {tgFetch} from "./telegram.ts";
 import {uploadLectureFile, validMaterialFile, materialMime, MAX_PDF_BYTES, storageConfigured} from "./storage.ts";
 import {publishPastQuestion, ensureQuestionBankSchema, validExamKind, EXAM_KINDS, questionImageMime, uploadQuestionImage} from "./bot-question-bank.ts";
+import {defaultAudience,validAudience} from "./publisher-audience.ts";
 
 
 export type LinkedAdmin = AdminInfo & {link_id: number};
@@ -157,7 +158,7 @@ function shortAnnouncementTitle(body: string, prefix = "") {
 const confirmKeyboard = (kind: string, nonce: string) => ({inline_keyboard: [
   [{text: "✅ نشر الآن", callback_data: `pub:${kind}:${nonce}`}],
   [{text: "✏️ تعديل العنوان", callback_data: `draft:title:${nonce}`}, {text: kind === "ann" ? "✏️ تعديل النص" : "📎 تغيير الملف", callback_data: `draft:${kind === "ann" ? "body" : "file"}:${nonce}`}],
-  ...(kind === "lec" ? [[{text: "تغيير المادة", callback_data: `draft:subject:${nonce}`}, {text: "تغيير الجمهور", callback_data: `draft:audience:${nonce}`}]] : []),
+  ...(kind === "lec" ? [[{text:"تغيير المادة",callback_data:`draft:subject:${nonce}`},{text:"تغيير الجمهور",callback_data:`draft:audience:${nonce}`}]] : [[{text:"🎯 تغيير الشعبة",callback_data:`draft:audience:${nonce}`}]]),
   [{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}, {text: "❌ إلغاء", callback_data: "adm:cancel"}],
 ]});
 export function escapeHtml(value: unknown): string { return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
@@ -436,26 +437,51 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
   if (data.startsWith("lec:subj:") || data.startsWith("ann:subj:")) {
     const subjectId = data.slice(9);
     const state = await getState(chatId);
-    if (!state || (state.flow !== "lec" && state.flow !== "ann") || (admin.role === "teacher" && !admin.assigned_subjects?.includes(subjectId))) { await sendMessage(chatId, "هذا الاختيار غير متاح. افتح القائمة مجددًا.", {replyMarkup: adminMenu(admin)}); return; }
-    await setState(chatId, state.flow, {...state.data, step: "audience", subjectId});
-    await sendMessage(chatId, "🎯 اختر الجمهور (الشعب):", {replyMarkup: audienceKeyboard(admin, subjectId)});
+    const subject = await qOne<{id:string}>("SELECT id FROM portal_subjects WHERE id=$1",[subjectId]);
+    const sections = defaultAudience(admin,subjectId);
+    if (!state || !subject || (state.flow !== "lec" && state.flow !== "ann") ||
+        !validAudience(admin,subjectId,sections)) {
+      await sendMessage(chatId, "هذه المادة خارج صلاحياتك. افتح النشر من جديد.", {replyMarkup: adminMenu(admin)});return;
+    }
+    if (state.flow === "ann") {
+      // Teacher announcements are either for one section or all four.
+      // If assigned some but not all, allow an explicit target selection.
+      const chooseAudience = admin.role === "teacher" && sections.length > 1 && sections.length < 4;
+      if (chooseAudience) {
+        await setState(chatId,"ann",{...state.data,step:"audience",subjectId});
+        await sendMessage(chatId,"🎯 اختر شعبة التبليغ:",{replyMarkup:audienceKeyboard(admin,subjectId)});
+        return;
+      }
+      const section = sections.length===4?"all":sections[0];
+      const step=state.data.quick||state.data.resultAnnouncement?"body":"title";
+      await setState(chatId,"ann",{...state.data,subjectId,sections,section,step});
+      await sendMessage(chatId,step==="body"?"📢 أرسل نص التبليغ، والعنوان يتحدد تلقائياً:":"✏️ اكتب العنوان:",{replyMarkup:navigation});
+      return;
+    }
+    const step=state.data.materialKind==="questions"?"examKind":state.data.fileUrl&&state.data.title?"confirm":"title";
+    const next={...state.data,subjectId,sections,section:sections.length===4?"all":sections[0],step};
+    if(step==="confirm"){await previewDraft(chatId,"lec",next);return;}
+    await setState(chatId,"lec",next);
+    if(step==="examKind")await sendMessage(chatId,"📝 نوع الأسئلة السابقة:",{replyMarkup:questionKindKeyboard()});
+    else await sendMessage(chatId,"✏️ اكتب عنوان الملف:",{replyMarkup:navigation});
     return;
   }
   if (data.startsWith("lec:aud:")) {
-    const aud = data.slice(8); // own | all | sec:X
-    const sections = aud === "all" ? ["A", "B", "C", "F"] : aud === "own" ? [String(admin.assigned_section)] : [aud.slice(4)];
+    const aud = data.slice(8);
+    const sections = aud === "all" ? ["A", "B", "C", "F"] : aud === "own" ? [String(admin.assigned_section)] : aud.startsWith("sec:") ? [aud.slice(4)] : [];
     const state = await getState(chatId);
     if (!state || (state.flow !== "ann" && state.flow !== "lec")) return;
-    const allowed = admin.role === "teacher" ? teacherSections(admin, String(state.data.subjectId)) : null;
-    if (allowed && !sections.every(s => allowed.includes(s as never))) { await resumeDraft(chatId, userId); return; }
+    if (!validAudience(admin,String(state.data.subjectId||""),sections)) {
+      await sendMessage(chatId,"هذا الجمهور خارج صلاحياتك.");return;
+    }
+    const d={...state.data,sections,section:aud==="all"?"all":sections[0]};
+    if (state.data.title && (state.flow==="ann" ? state.data.body : state.data.fileUrl)) {
+      await previewDraft(chatId,state.flow,d);return;
+    }
     const step = state.data.materialKind === "questions" ? "examKind" : (state.data.quick || state.data.resultAnnouncement) ? "body" : "title";
-    await setState(chatId, state.flow, {...state.data, step, sections, section: aud === "all" ? "all" : sections[0]});
-    if (step === "examKind") await sendMessage(chatId, "📝 حدد نوع الأسئلة السابقة:", {replyMarkup: questionKindKeyboard()});
-    else await sendMessage(chatId, step === "body"
-      ? state.data.resultAnnouncement
-        ? "📊 اكتب إعلان صدور النتائج فقط. لا ترسل أسماء الطلاب أو كشوف درجاتهم أو علاماتهم الشخصية."
-        : "📢 أرسل نص التبليغ، والعنوان يتحدد تلقائياً:"
-      : "اكتب العنوان:", {replyMarkup: navigation});
+    await setState(chatId,state.flow,{...d,step});
+    if(step==="examKind")await sendMessage(chatId,"📝 نوع الأسئلة السابقة:",{replyMarkup:questionKindKeyboard()});
+    else await sendMessage(chatId,step==="body"?"📢 أرسل نص التبليغ:":"✏️ اكتب العنوان:",{replyMarkup:navigation});
     return;
   }
   if (data === "adm:me") {
@@ -471,6 +497,9 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
     const [, field, nonce] = data.split(":");
     if (state.data.step !== "confirm" || nonce !== state.data.nonce) { await sendMessage(chatId, "زر قديم. افتح المسودة مجددًا.", {replyMarkup: adminMenu(admin)}); return; }
     if (!["title", "body", "file", "subject", "audience"].includes(field)) return;
+    if (field==="audience" && state.flow==="ann" && admin.role!=="teacher") {
+      await sendMessage(chatId,"نطاق تبليغك محدد حسب صلاحية حسابك.");return;
+    }
     await setState(chatId, state.flow!, {...state.data, nonce: undefined, step: field, ...(field === "file" ? {fileUrl: undefined, fileName: undefined, fingerprint: undefined, pendingDoc: undefined} : {})});
     await resumeDraft(chatId, userId); return;
   }
@@ -510,7 +539,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       // re-check EVERYTHING on final confirmation: link, account status, role, subject, audience
       const fresh = await getLinkedAdmin(userId);
       if (!fresh) { await clearState(chatId); await sendMessage(chatId, "⛔ تم إلغاء الربط أو تعليق الحساب — لا يمكن النشر.", {replyMarkup: adminMenu(admin)}); return; }
-      const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : ["A", "B", "C", "F"];
+      const sections = Array.isArray(d.sections) && d.sections.length ? d.sections.map(String) : [];
       const subject = await qOne<{name: string}>(`SELECT name FROM portal_subjects WHERE id=$1`, [String(d.subjectId)]);
       if (d.materialKind === "questions") {
         const questionResult = await publishPastQuestion(fresh, {
