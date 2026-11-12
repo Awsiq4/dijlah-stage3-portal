@@ -20,9 +20,9 @@ export type PastQuestion = {
 };
 
 export function questionImageMime(filename: string, bytes: Buffer): string | null {
-  if (/\\.jpe?g$/i.test(filename) && bytes.length >= 3 &&
+  if (/\.jpe?g$/i.test(filename) && bytes.length >= 3 &&
       bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (/\\.png$/i.test(filename) && bytes.length >= 8 &&
+  if (/\.png$/i.test(filename) && bytes.length >= 8 &&
       bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return "image/png";
   return null;
 }
