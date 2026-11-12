@@ -37,3 +37,13 @@ export function isKnownProjectPreviewWebhook(value: string): boolean {
   return url.hostname === "dijlah-stage3-portal-awsiq4.vercel.app"
     || /^dijlah-stage3-portal-[a-z0-9-]+-awsiq4\.vercel\.app$/i.test(url.hostname);
 }
+
+// A production link is usable if Telegram already calls either verified
+// production alias. Only this project's Preview (or an empty webhook) can be
+// safely auto-repaired; an unfamiliar destination must remain blocked.
+export function decideSupportWebhookAction(current: string | null | undefined): "ready" | "repair" | "untrusted" {
+  if (!current) return "repair";
+  if (isOfficialProductionWebhook(current)) return "ready";
+  if (isKnownProjectPreviewWebhook(current)) return "repair";
+  return "untrusted";
+}
