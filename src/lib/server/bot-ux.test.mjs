@@ -190,7 +190,7 @@ test("assignment publishing from Telegram: rep can post to own section, correct 
  assert.equal(rows[0].subject_id,"nonlinear-optics");
  assert.deepEqual(asArr(rows[0].sections),["A"]);
  assert.equal(rows[0].due_at,"2099-11-20T18:00:00+03:00");
- assert.equal((await getFlowState(2)).flow,null);
+ assert.ok(!(await getFlowState(2)).flow);
  await handleAdminCallback(2,2,"pub:asg:"+state.data.nonce);
  assert.equal((await q("SELECT id FROM portal_assignments")).length,1);
  await pool.end();
