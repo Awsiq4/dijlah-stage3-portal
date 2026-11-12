@@ -26,6 +26,6 @@ export function canPublishScheduledExam(admin:AdminInfo,type:string):boolean {
   if (canonical.includes("midterm")||canonical.includes("final")||
       canonical.includes("ميد")||canonical.includes("فاينل")||
       canonical.includes("نصف السنة")||canonical.includes("نهاية السنة"))
-    return admin.role==="super_admin" || admin.role==="editor";
+    return admin.role==="super_admin";
   return true;
 }
