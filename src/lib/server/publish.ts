@@ -259,7 +259,7 @@ export async function publishAssignment(admin: AdminInfo, input: Record<string, 
   const title = String(input.title || "").trim();
   const dueAt = String(input.due_at || "");
   if (!title || title.length > 180 || !assignmentDayAllowed(dueAt))
-    return fail("عنوان التكليف أو تاريخ التسليم غير صالح؛ اكتب اليوم فقط بدون ساعة");
+    return fail("عنوان الواجب أو تاريخ التسليم غير صالح؛ اكتب اليوم فقط بدون ساعة");
   const id = String(input.id || `asg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   let row: Record<string, unknown>;
   try {

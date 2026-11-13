@@ -25,7 +25,7 @@ const FIELDS:Record<CourseworkKind,Field[]>={
   q:["title","date","start_time","room","topics","notes","status","sections"],
 };
 const NAMES:Record<Field,string>={
-  title:"العنوان",instructions:"تعليمات التكليف",due_at:"آخر يوم للتسليم",
+  title:"العنوان",instructions:"تعليمات الواجب",due_at:"آخر يوم للتسليم",
   submission:"طريقة التسليم",attachment_url:"رابط المرفق",
   date:"تاريخ الكوز",start_time:"وقت الكوز",room:"القاعة",
   topics:"المواضيع",notes:"ملاحظات",status:"الحالة",sections:"الشعب",
@@ -34,7 +34,7 @@ const ALL=["A","B","C","F"];
 const PAGE_SIZE=6;
 const nav={inline_keyboard:[[{text:"🏠 الرئيسية",callback_data:"nav:home"}]]};
 const table=(kind:CourseworkKind)=>kind==="a"?"portal_assignments":"portal_exams";
-const label=(kind:CourseworkKind)=>kind==="a"?"📋 الواجبات والتكاليف":"📝 الكوزات اليومية";
+const label=(kind:CourseworkKind)=>kind==="a"?"📋 الواجبات":"📝 الكوزات اليومية";
 const ownerName=(row:CourseworkRow)=>row.archived_at?"مؤرشف":
   ({active:"نشط",closed:"منتهٍ",cancelled:"ملغى",confirmed:"مؤكد",provisional:"مبدئي"} as Record<string,string>)[String(row.status)]||"منشور";
 const formatValue=(field:Field,value:unknown):string=>field==="sections"?

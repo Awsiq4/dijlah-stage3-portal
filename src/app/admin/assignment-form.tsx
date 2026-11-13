@@ -53,7 +53,7 @@ export function AssignmentForm({account,initial,onSaved}:{
   if(!available.some(s=>s.id===subject)||!title.trim()||!instructions.trim()||!sections.length ||
     !sections.every(s=>allowed.includes(s))||
     (sectionRep && sections.length!==ALL.length && (sections.length!==1||sections[0]!==account.assigned_section))) {
-    setNotice("اختر المادة والشعب واكتب عنوان التكليف وتعليماته.");return;
+    setNotice("اختر المادة والشعب واكتب عنوان الواجب وتعليماته.");return;
   }
   if(!assignmentDayAllowed(due) && !(initial && due===savedDate(initial.due_at))) {
     setNotice("حدد يوماً صحيحاً للتسليم (اليوم أو بعده)، بدون ساعة.");return;
@@ -96,8 +96,8 @@ export function AssignmentForm({account,initial,onSaved}:{
     },
    });
    if(data.cancelled)return;
-   if(!response.ok) {setNotice(data.error||"تعذر حفظ التكليف.");return;}
-   setNotice("✅ تم حفظ التكليف بنجاح.");
+   if(!response.ok) {setNotice(data.error||"تعذر حفظ الواجب.");return;}
+   setNotice("✅ تم حفظ الواجب بنجاح.");
    setFile(undefined);cache.current=null;
    if(!initial) {
      id.current=""; setTitle("");setInstructions("");setDue("");
@@ -105,7 +105,7 @@ export function AssignmentForm({account,initial,onSaved}:{
      setSections(sectionRep&&account.assigned_section?[account.assigned_section]:[...ALL]);
    }
    onSaved();
-  }catch(error) {setNotice(error instanceof Error && error.message.startsWith("المرفق لازم") ? error.message : "تعذر رفع المرفق أو حفظ التكليف. راجع اتصالك وحاول مجدداً.");}
+  }catch(error) {setNotice(error instanceof Error && error.message.startsWith("المرفق لازم") ? error.message : "تعذر رفع المرفق أو حفظ الواجب. راجع اتصالك وحاول مجدداً.");}
   finally{setBusy(false);setUploadProgress(0);}
  }
  return <form className="admin-form" onSubmit={save}>
@@ -120,7 +120,7 @@ export function AssignmentForm({account,initial,onSaved}:{
   <label className="form-field"><span>آخر يوم للتسليم *</span>
    <input type="date" required value={due} onChange={e=>setDue(e.target.value)}/>
   </label>
-  <label className="form-field wide"><span>عنوان الواجب أو التكليف *</span>
+  <label className="form-field wide"><span>عنوان الواجب *</span>
    <input required maxLength={180} value={title} onChange={e=>setTitle(e.target.value)}/>
   </label>
   <label className="form-field wide"><span>التعليمات *</span>
@@ -151,7 +151,7 @@ export function AssignmentForm({account,initial,onSaved}:{
     </label>}
   </details>
   <button className="action-button" disabled={busy} style={{gridColumn:"1/-1",justifySelf:"start"}}>
-   <Send size={15}/>{busy ? (uploadProgress?"رفع المرفق "+uploadProgress+"%":"جارٍ الحفظ…"):initial?"حفظ التعديلات":"نشر التكليف"}
+   <Send size={15}/>{busy ? (uploadProgress?"رفع المرفق "+uploadProgress+"%":"جارٍ الحفظ…"):initial?"حفظ التعديلات":"نشر الواجب"}
   </button>
  </form>;
 }

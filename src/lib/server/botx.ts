@@ -184,7 +184,7 @@ export async function handleManageCallback(chatId: number, userId: number, data:
     await sendMessage(chatId, "🗂 إدارة منشوراتي — اختر النوع:", {replyMarkup: {inline_keyboard: [
       [{text: "📢 تبليغاتي", callback_data: "page:my:announcements:0"}],
       [{text: "📚 محاضراتي وملخصاتي", callback_data: "page:my:lectures:0"}],
-      [{text: "📋 الواجبات والتكاليف", callback_data: "cw:p:a:0"}],
+      [{text: "📋 الواجبات", callback_data: "cw:p:a:0"}],
       [{text: "📝 الكوزات اليومية", callback_data: "cw:p:q:0"}],
       [{text: "📑 أسئلة الامتحانات السابقة", callback_data: "page:my:questions:0"}],
       [{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}],
@@ -338,7 +338,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
   if (data === "adm:new") {
     await sendMessage(chatId, "➕ شنو تريد تنشر؟", {replyMarkup: {inline_keyboard: [
       [{text: "📚 محاضرة أو ملخص", callback_data: "adm:materials"}],
-      [{text: "📋 واجب / تكليف", callback_data: "adm:asg"}],
+      [{text: "📋 واجب / واجب", callback_data: "adm:asg"}],
       [{text: "📝 كوز يومي", callback_data: "adm:exam"}],
       [{text: "📑 أسئلة امتحانات سابقة", callback_data: "adm:questions"}],
       [{text: "🏠 الرئيسية", callback_data: "nav:home"}],

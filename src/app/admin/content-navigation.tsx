@@ -9,7 +9,7 @@ import {Empty, Status} from "@/components/UI";
 export const CONTENT_SECTIONS = [
   {id: "lectures", label: "المحاضرات والملخصات", addLabel: "محاضرة أو ملخص", Icon: BookOpen},
   {id: "announcements", label: "التبليغات", addLabel: "تبليغ", Icon: Megaphone},
-  {id: "assignments", label: "الواجبات والتكاليف", addLabel: "واجب أو تكليف", Icon: ClipboardList},
+  {id: "assignments", label: "الواجبات", addLabel: "واجب", Icon: ClipboardList},
   {id: "exams", label: "الكويزات", addLabel: "كويز", Icon: FileQuestion},
 ] as const;
 

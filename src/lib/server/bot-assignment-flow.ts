@@ -29,7 +29,7 @@ function dueDateBaghdad(value: string): string | null {
 async function subjectOptions(chatId: number, admin: AdminInfo) {
   const subjects = await q<{id:string;name:string}>("SELECT id,name FROM portal_subjects ORDER BY name");
   const options = admin.role === "teacher" ? subjects.filter(s=>admin.assigned_subjects?.includes(s.id)) : subjects;
-  await sendMessage(chatId, options.length ? "📚 اختر مادة الواجب أو التكليف:" : "ماكو مواد متاحة لحسابك.", {
+  await sendMessage(chatId, options.length ? "📚 اختر مادة الواجب:" : "ماكو مواد متاحة لحسابك.", {
     replyMarkup:{inline_keyboard:[...options.map(s=>[{text:s.name,callback_data:"asg:subj:"+s.id}]), ...nav.inline_keyboard]}
   });
 }
@@ -54,14 +54,14 @@ async function prompt(chatId: number, d: Draft, admin: AdminInfo) {
   switch(d.step) {
     case "subject": await subjectOptions(chatId,admin); return;
     case "audience": await audienceOptions(chatId,admin,String(d.subjectId||"")); return;
-    case "details": await sendMessage(chatId,"✍️ أرسل نص التكليف برسالة وحدة. أول سطر راح يكون العنوان، وبقية النص تفاصيل الواجب.",{replyMarkup:nav}); return;
+    case "details": await sendMessage(chatId,"✍️ أرسل نص الواجب برسالة وحدة. أول سطر راح يكون العنوان، وبقية النص تفاصيل الواجب.",{replyMarkup:nav}); return;
     case "due": await sendMessage(chatId,"📅 اختَر يوم التسليم فقط (بدون ساعة).\nاكتب التاريخ بهذا الشكل: 2026-11-20",{replyMarkup:nav}); return;
     case "submission": await sendMessage(chatId,"📨 اكتب طريقة التسليم (مثلاً ورقياً بالمحاضرة، أو عبر المنصة). أرسل «تخطي» إذا غير محددة.",{replyMarkup:nav}); return;
     case "attachment": await sendMessage(chatId,"📎 اختيارياً: أرسل ملف PDF/PPTX (حتى 20MB) أو رابط المرفق، أو أرسل «تخطي».",{replyMarkup:nav}); return;
     case "confirm": await showPreview(chatId,d); return;
     case "more": await showDetailsMenu(chatId); return;
     case "publishing": await sendMessage(chatId,"الطلب قيد النشر؛ لا تعِد الإرسال. راجع قسم الواجبات.",{replyMarkup:nav}); return;
-    default: await sendMessage(chatId,"المسودة غير مكتملة. افتح نشر تكليف من جديد.",{replyMarkup:nav});
+    default: await sendMessage(chatId,"المسودة غير مكتملة. افتح نشر واجب من جديد.",{replyMarkup:nav});
   }
 }
 
@@ -81,13 +81,13 @@ async function showPreview(chatId: number, d: Draft) {
   const subject = await qOne<{name:string}>("SELECT name FROM portal_subjects WHERE id=$1",[String(d.subjectId||"")]);
   const sections = Array.isArray(d.sections) ? d.sections.join("، ") : "";
   const due = assignmentDisplayDay(d.dueAt);
-  const text = "📋 معاينة التكليف قبل النشر\n\n📘 المادة: " + (subject?.name || d.subjectId) +
+  const text = "📋 معاينة الواجب قبل النشر\n\n📘 المادة: " + (subject?.name || d.subjectId) +
     "\n🎯 الشعب: " + sections + "\n✍️ العنوان: " + String(d.title||"") +
     "\n📄 التعليمات: " + String(d.instructions||"") + "\n🗓 آخر موعد: " + due +
     (d.submission ? "\n📨 طريقة التسليم: " + String(d.submission) : "") +
     (d.attachmentUrl ? "\n📎 يوجد مرفق" : "");
   await sendMessage(chatId,text,{replyMarkup:{inline_keyboard:[
-    [{text:"✅ نشر التكليف",callback_data:"pub:asg:"+nonce}],
+    [{text:"✅ نشر الواجب",callback_data:"pub:asg:"+nonce}],
     [{text:"🎯 تغيير الشعب",callback_data:"asg:edit:audience"},{text:"✏️ تفاصيل إضافية",callback_data:"asg:more"}],
     ...nav.inline_keyboard,
   ]}});
@@ -97,7 +97,7 @@ export async function startAssignmentFlow(chatId: number, userId: number) {
   const {getLinkedAdmin,setFlowState} = await botMethods();
   const admin = await getLinkedAdmin(userId);
   if (!admin || !canUseTelegramPublishing(admin)) {
-    await sendMessage(chatId,"⛔ حسابك غير مخوّل لنشر التكاليف."); return;
+    await sendMessage(chatId,"⛔ حسابك غير مخوّل لنشر الواجبات."); return;
   }
   const data = {step:"subject",draftId:"asg-tg-"+chatId+"-"+Date.now()};
   await setFlowState(chatId,"asg",data);
@@ -169,7 +169,7 @@ export async function handleAssignmentCallback(chatId: number,userId: number,dat
       const fresh = await getLinkedAdmin(userId);
       const sections = Array.isArray(d.sections) ? d.sections.map(String) : [];
       if (!fresh || !validAudience(fresh,String(d.subjectId||""),sections)) {
-        await setFlowState(chatId,"",{});await sendMessage(chatId,"⛔ تم تغيير الصلاحيات؛ لم يُنشر التكليف.");return;
+        await setFlowState(chatId,"",{});await sendMessage(chatId,"⛔ تم تغيير الصلاحيات؛ لم يُنشر الواجب.");return;
       }
       const res = await publishAssignment(fresh,{
         id:String(d.draftId||""),subjectId:String(d.subjectId||""),
@@ -181,12 +181,12 @@ export async function handleAssignmentCallback(chatId: number,userId: number,dat
         await setFlowState(chatId,"",{});
         if (res.notificationEvents?.length) onPublished?.(res.notificationEvents);
         await sendMessage(chatId,res.inserted
-          ? "✅ تم نشر التكليف للطلاب.\n🔗 "+PORTAL_BASE_URL+"/assignments"
-          : "ℹ️ التكليف منشور مسبقاً، ولم تتم إعادة نشره.",
-          {replyMarkup:{inline_keyboard:[[ {text:"📋 نشر تكليف آخر",callback_data:"adm:asg"} ],...nav.inline_keyboard]}});
+          ? "✅ تم نشر الواجب للطلاب.\n🔗 "+PORTAL_BASE_URL+"/assignments"
+          : "ℹ️ الواجب منشور مسبقاً، ولم تتم إعادة نشره.",
+          {replyMarkup:{inline_keyboard:[[ {text:"📋 نشر واجب آخر",callback_data:"adm:asg"} ],...nav.inline_keyboard]}});
       } else {
         await showPreview(chatId,d);
-        await sendMessage(chatId,"⛔ لم يُنشر التكليف: "+res.error,{replyMarkup:nav});
+        await sendMessage(chatId,"⛔ لم يُنشر الواجب: "+res.error,{replyMarkup:nav});
       }
     } catch (error) {
       await showPreview(chatId,d);
@@ -233,7 +233,7 @@ export async function handleAssignmentMessage(chatId:number,userId:number,text:s
   }
   if (text.length>3000) {await sendMessage(chatId,"النص طويل جداً؛ الحد 3000 حرف.");return;}
   if (step==="details") {
-    if (!text.trim()) {await sendMessage(chatId,"اكتب نص التكليف أولاً.");return;}
+    if (!text.trim()) {await sendMessage(chatId,"اكتب نص الواجب أولاً.");return;}
     const full=text.trim();
     const title=full.split(/\n/)[0].replace(/\s+/g," ").slice(0,180);
     const next={...d,title,instructions:full,step:"due"};
