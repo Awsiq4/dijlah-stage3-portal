@@ -54,3 +54,23 @@ export function deleteWebhook() {
 export function getMe() {
   return tgFetch<{id: number; username: string; is_bot: boolean}>("getMe", {});
 }
+
+// Telegram's command-menu button beside the chat input.
+let lastCommandsSync = 0;
+export async function syncBotCommands(): Promise<boolean> {
+  const now = Date.now();
+  if (now - lastCommandsSync < 30 * 60_000) return true;
+  lastCommandsSync = now;
+  const commands = [
+    {command:"start",description:"فتح القائمة الرئيسية"},
+    {command:"menu",description:"القائمة الرئيسية"},
+    {command:"section",description:"تغيير الشعبة"},
+    {command:"settings",description:"إعدادات الإشعارات"},
+    {command:"help",description:"المساعدة"},
+  ];
+  const done = await tgFetch("setMyCommands",{commands});
+  if (!done.ok) {lastCommandsSync=0;return false;}
+  const menu = await tgFetch("setChatMenuButton",{menu_button:{type:"commands"}});
+  if (!menu.ok) {lastCommandsSync=0;return false;}
+  return true;
+}

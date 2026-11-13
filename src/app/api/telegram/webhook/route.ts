@@ -3,7 +3,7 @@ import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTI
 import {issueOwnerEnrollment} from "@/lib/server/owner-mfa";
 import {verifySubscribeToken} from "@/lib/server/tokens";
 import {q, qOne} from "@/lib/server/db";
-import {sendMessage, tgFetch} from "@/lib/server/telegram";
+import {sendMessage, tgFetch, syncBotCommands} from "@/lib/server/telegram";
 import {drainQueue} from "@/lib/server/notify";
 import {getLinkedAdmin, bindInvitedStaff, handleLinkStart, handleAdminMessage, handleAdminCallback, hasActiveFlow, adminMenu} from "@/lib/server/bot";
 import {handleStudentCallback, handleManageCallback, handleNavCallback} from "@/lib/server/botx";
@@ -181,6 +181,7 @@ export async function POST(req: NextRequest) {
         // a linked admin mid-flow may send a file URL starting with "/" — route by active flow first
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
         if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
+          after(()=>syncBotCommands().then(()=>undefined));
           if (Number(message.from?.id) === Number(message.chat.id)) {
             await bindInvitedStaff(Number(message.from.id));
           }

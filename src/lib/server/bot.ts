@@ -562,11 +562,18 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
         });
         if (questionResult.ok) await clearState(chatId);
         else await previewDraft(chatId, "lec", d);
+        const questionUrl = PORTAL_BASE_URL + "/subjects/" + encodeURIComponent(String(d.subjectId)) +
+          "?tab=questions&section=" + encodeURIComponent(sections[0] || "A");
         await sendMessage(chatId, questionResult.ok
           ? questionResult.inserted
-            ? `✅ أضيفت أسئلة الامتحان إلى بنك الأسئلة.\n📘 المادة: ${subject?.name || d.subjectId}\n📝 النوع: ${EXAM_KINDS[d.examKind as keyof typeof EXAM_KINDS]}\n🔗 ${questionResult.url}`
-            : "ℹ️ هذه الأسئلة موجودة مسبقاً في بنك الأسئلة؛ لم يُنشر ملف مكرر."
-          : `⛔ تعذر النشر: ${questionResult.error}`, {replyMarkup: adminMenu(admin)});
+            ? `✅ <b>نُشرت أسئلة الامتحان في البوابة</b>\n\n📘 المادة: <b>${escapeHtml(subject?.name || String(d.subjectId))}</b>\n📝 النوع: ${escapeHtml(EXAM_KINDS[d.examKind as keyof typeof EXAM_KINDS])}\n📄 العنوان: ${escapeHtml(String(d.title || ""))}\n🎯 الجمهور: ${audienceLabel(sections)}`
+            : "ℹ️ هذه الأسئلة منشورة مسبقاً. ما كررنا الملف."
+          : `⛔ لم تُنشر الأسئلة: ${escapeHtml(questionResult.error)}`, {
+          parseMode:"HTML",
+          replyMarkup: questionResult.ok
+            ? {inline_keyboard: [[{text:"📚 عرض الأسئلة في البوابة",url:questionUrl}],...adminMenu(admin).inline_keyboard]}
+            : adminMenu(admin),
+        });
         return;
       }
       const count = d.materialKind === "summary" ? null : await qOne<{c: number}>(`SELECT count(*)::int AS c FROM portal_lectures WHERE subject_id=$1 AND material_kind='lecture'`, [String(d.subjectId)]);
