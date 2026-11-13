@@ -42,7 +42,9 @@ test("student week follows the Saturday boundary in Baghdad and the selected sec
   }, "A", now);
   assert.equal(result.today, "2026-11-14");
   assert.deepEqual([result.dates[0], result.dates.at(-1)], ["2026-11-14", "2026-11-20"]);
-  assert.deepEqual(result.items.map(item => item.id), ["all", "moved", "quiz"]);
+  assert.deepEqual(result.items.map(item => item.id), ["all", "quiz", "moved"]);
   assert.equal(result.items[0].time, undefined);
-  assert.equal(result.items[2].status, "cancelled");
+  assert.equal(result.items[1].status, "cancelled");
+  assert.equal(result.items[1].time, undefined);
+  assert.equal(result.items[2].time, "09:00");
 });

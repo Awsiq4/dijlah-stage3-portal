@@ -180,7 +180,8 @@ export async function POST(req: NextRequest) {
       } else if (text.startsWith("/")) {
         // a linked admin mid-flow may send a file URL starting with "/" — route by active flow first
         const admin = message.from?.id ? await getLinkedAdmin(Number(message.from.id)) : null;
-        if (["/start", "/menu"].includes(text.trim().split("@")[0])) {
+        const command = text.trim().split(/\s+/, 1)[0].split("@")[0];
+        if ((command === "/start" && (!arg || arg === "welcome")) || command === "/menu") {
           after(()=>syncBotCommands().then(()=>undefined));
           if (Number(message.from?.id) === Number(message.chat.id)) {
             await bindInvitedStaff(Number(message.from.id));

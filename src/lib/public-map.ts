@@ -24,7 +24,7 @@ export const mapAnnouncement = (r: Record<string, unknown>): Announcement => ({
   priority: (s(r.priority) || "normal") as Announcement["priority"], publishedAt: s(r.published_at), pinned: asBool(r.pinned),
 });
 export const mapExam = (r: Record<string, unknown>): Exam => ({
-  id: s(r.id), subjectId: s(r.subject_id), title: s(r.title), type: s(r.type), date: s(r.date), startTime: s(r.start_time),
+  id: s(r.id), subjectId: s(r.subject_id), title: s(r.title), type: s(r.type), date: s(r.date), startTime: r.type === "كوز يومي" ? "" : s(r.start_time),
   room: s(r.room), sections: asArray(r.sections) as Section[], topics: s(r.topics), notes: s(r.notes),
   status: (s(r.status) || "provisional") as Exam["status"],
 });

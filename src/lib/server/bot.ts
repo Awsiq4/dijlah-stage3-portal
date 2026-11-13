@@ -410,19 +410,19 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
     if (!canUseTelegramPublishing(admin)) return;
     const scope = admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general";
     const step = admin.role === "teacher" ? "subject" : "body";
-    await setState(chatId, "ann", {scope, section: admin.assigned_section || "all", step, quick: true, draftId: `ann-tg-${chatId}-${Date.now()}`});
+    await setState(chatId, "ann", {scope, section: admin.assigned_section || "all", step, quick: true, draftId: `ann-tg-${randomBytes(12).toString("hex")}`});
     if (step === "subject") await askSubjects(chatId, admin, "ann:subj:");
     else await sendMessage(chatId, "📢 أرسل نص التبليغ مباشرةً. سنستخرج عنوانه تلقائياً.\nتقدر تنسخ أو تعيد توجيه رسالة نصية.", {replyMarkup: navigation});
     return;
   }
   if (data === "adm:results") {
-    await setState(chatId, "ann", {scope: admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general", section: admin.assigned_section || "all", step: "subject", resultAnnouncement: true, draftId: `ann-tg-${chatId}-${Date.now()}`});
+    await setState(chatId, "ann", {scope: admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general", section: admin.assigned_section || "all", step: "subject", resultAnnouncement: true, draftId: `ann-tg-${randomBytes(12).toString("hex")}`});
     await askSubjects(chatId, admin, "ann:subj:");
     return;
   }
   if (data === "adm:ann") {
     if (!canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ حسابك معلّق — تم سحب صلاحيات النشر فوراً."); return; }
-    await setState(chatId, "ann", {scope: admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general", section: admin.assigned_section || "all", step: admin.role === "teacher" ? "subject" : "title", draftId: `ann-tg-${chatId}-${Date.now()}`});
+    await setState(chatId, "ann", {scope: admin.role === "teacher" ? "teacher" : admin.role === "section_representative" ? "section" : "general", section: admin.assigned_section || "all", step: admin.role === "teacher" ? "subject" : "title", draftId: `ann-tg-${randomBytes(12).toString("hex")}`});
     if (admin.role === "teacher") { await askSubjects(chatId, admin, "ann:subj:"); return; }
     await sendMessage(chatId, "عنوان التبليغ:", {replyMarkup: navigation});
     return;
@@ -433,7 +433,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       return;
     }
     const materialKind = data === "adm:summary" ? "summary" : data === "adm:questions" ? "questions" : "lecture";
-    await setState(chatId, "lec", {step: "subject", materialKind, draftId: `lec-tg-${chatId}-${Date.now()}`});
+    await setState(chatId, "lec", {step: "subject", materialKind, draftId: `lec-tg-${randomBytes(12).toString("hex")}`});
     await askSubjects(chatId, admin, "lec:subj:");
     return;
   }
@@ -553,7 +553,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
       const subject = await qOne<{name: string}>(`SELECT name FROM portal_subjects WHERE id=$1`, [String(d.subjectId)]);
       if (d.materialKind === "questions") {
         const questionResult = await publishPastQuestion(fresh, {
-          id: String(d.draftId || `questions-tg-${chatId}-${Date.now()}`),
+          id: String(d.draftId || `questions-tg-${randomBytes(12).toString("hex")}`),
           subjectId: String(d.subjectId), examKind: d.examKind as "quiz" | "midterm" | "final",
           title: String(d.title || ""),
           academicYear: String(d.title || "").match(/20\d{2}(?:[–/-]20\d{2})?/)?.[0] || "",

@@ -40,8 +40,7 @@ export default function TelegramAdmin(){
         body: JSON.stringify({action: "test"}),
       });
       const j = await res.json();
-      setMsg(res.ok ? `تم إرسال إشعار اختبار: ${JSON.stringify(j.result?.delivery || j.result)}` : `فشل: ${j.error || res.status}`);
-      await load();
+      setMsg(res.ok && j.ok ? "تم إرسال إشعار الاختبار إلى حساب المالك." : j.error || "تعذّر إرسال إشعار الاختبار.");
     } catch { setMsg("تعذّر الاتصال."); }
     finally { setBusy(false); }
   };
@@ -51,7 +50,7 @@ export default function TelegramAdmin(){
       <p className="subtle small">إدارة خدمة إشعارات البوت (Webhook + قاعدة بيانات + طابور التسليم). مفاتيح API تُقرأ من متغيرات بيئة Vercel فقط — لا تُخزن هنا.</p>
       <div className="admin-actions">
         <button className="action-button secondary" onClick={load} disabled={busy}><RefreshCw size={16}/> تحميل الحالة</button>
-        <button className="action-button" onClick={testNotify} disabled={busy}><FlaskConical size={16}/> إرسال إشعار اختبار</button>
+        <button className="action-button" onClick={testNotify} disabled={busy}><FlaskConical size={16}/> إرسال اختبار للمالك</button>
       </div>
       {msg && <p className="note" role="status">{msg}</p>}
       {!data && <Empty description="اضغط «تحميل الحالة»."/>}

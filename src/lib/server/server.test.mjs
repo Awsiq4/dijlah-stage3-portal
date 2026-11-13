@@ -101,6 +101,7 @@ test("backoff: exponential with cap, respects retry_after, caps attempts", () =>
   assert.ok(nextDelayMs(1) < nextDelayMs(3));
   assert.ok(nextDelayMs(20) <= 5 * 60 * 1000);
   assert.equal(nextDelayMs(1, 30), 30_000);
+  assert.equal(nextDelayMs(1, 600), 600_000);
   assert.equal(shouldRetry(MAX_ATTEMPTS, {code: 429}), false);
   assert.equal(shouldRetry(1, {code: 429}), true);
   assert.equal(shouldRetry(1, {code: 403}), false);

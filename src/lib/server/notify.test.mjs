@@ -15,7 +15,7 @@ process.env.TELEGRAM_WEBHOOK_SECRET = "whsec";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const {newDb} = await import("pg-mem");
 const {setPoolForTests, q} = await import("./db.ts");
-const {createEvent} = await import("./notify.ts");
+const {createEvent, drainQueue} = await import("./notify.ts");
 
 async function makeDb() {
   const mem = newDb();
@@ -88,4 +88,29 @@ test("notifications: duplicate event key is idempotent (no duplicate deliveries)
   const d = await q(`SELECT count(*)::int AS c FROM tg_deliveries`);
   assert.equal(d[0].c, 3); // created once -> one delivery per eligible subscriber, no duplicates
   await pool.end();
+});
+
+test("queued deliveries honor current opt-out, section changes and preferences", async t => {
+  const pool = await makeDb();
+  t.after(() => pool.end());
+  const event = await createEvent({type: "exam", refId: "queued", version: 1, title: "test", scope: "section", section: "A"});
+  const nextFetch = t.mock.method(globalThis, "fetch", async () => Response.json({ok: true}));
+
+  for (const [chatId, status, section, prefs] of [
+    [1001, "stopped", "A", {}],
+    [1002, "active", "B", {}],
+    [1003, "active", "A", {exams: false}],
+  ]) {
+    await q("UPDATE tg_subscribers SET status=$2,section=$3,prefs=$4 WHERE chat_id=$1", [chatId, status, section, JSON.stringify(prefs)]);
+    if (chatId !== 1001) {
+      const [subscriber] = await q("SELECT id FROM tg_subscribers WHERE chat_id=$1", [chatId]);
+      await q("INSERT INTO tg_deliveries(event_id,subscriber_id) VALUES($1,$2)", [event.eventId, subscriber.id]);
+    }
+  }
+  const outcome = await drainQueue(20, [event.eventId]);
+  assert.equal(outcome.skipped, 3);
+  assert.equal(nextFetch.mock.callCount(), 0);
+  const deliveries = await q("SELECT status,last_error FROM tg_deliveries WHERE event_id=$1", [event.eventId]);
+  assert.equal(deliveries.length, 3);
+  assert.ok(deliveries.every(d => d.status === "failed" && d.last_error === "subscriber no longer eligible"));
 });

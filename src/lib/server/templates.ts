@@ -7,7 +7,8 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export function renderMessage(event: TgEvent & {title: string; body?: string | null; url?: string | null; subjectName?: string | null}, baseUrl: string): RenderedMessage {
   const link = event.url ? `${baseUrl}${event.url}` : baseUrl;
   const section = event.section && event.section !== "all" ? `\nالشعبة: <b>${esc(event.section)}</b>` : "";
-  const btn = `<a href="${esc(link)}">فتح في البوابة</a>`;
+  const safeLink = esc(link).replace(/"/g, "&quot;");
+  const btn = `<a href="${safeLink}">فتح في البوابة</a>`;
   let text = "";
   switch (event.type) {
     case "lecture": {
@@ -18,7 +19,7 @@ export function renderMessage(event: TgEvent & {title: string; body?: string | n
         ? "\n🎯 الجمهور: جميع الشعب (A, B, C, F)"
         : event.section && event.section !== "all" ? `\n🎯 الجمهور: شعبة ${esc(event.section)}` : "";
       const description = event.body?.trim() ? `\n\n${esc(event.body.trim())}` : "";
-      text = `📚 <b>محاضرة جديدة</b>${subject ? `\n📘 المادة: <b>${esc(subject)}</b>` : ""}\n📄 المحاضرة: <b>${esc(event.title)}</b>${audience}${description}\n\n📎 <a href="${esc(link)}">فتح المحاضرة</a>`;
+      text = `📚 <b>محاضرة جديدة</b>${subject ? `\n📘 المادة: <b>${esc(subject)}</b>` : ""}\n📄 المحاضرة: <b>${esc(event.title)}</b>${audience}${description}\n\n📎 <a href="${safeLink}">فتح المحاضرة</a>`;
       break;
     }
     case "exam": {
@@ -28,9 +29,11 @@ export function renderMessage(event: TgEvent & {title: string; body?: string | n
       text = `${quiz ? "📝 <b>كوز جديد</b>" : "📢 <b>موعد امتحان</b>"}${subject ? "\n📘 المادة: <b>"+esc(subject)+"</b>" : ""}${audience}\n📌 العنوان: <b>${esc(event.title)}</b>\n\n${esc(event.body || "تفاصيل الامتحان في البوابة.")}\n\n${btn}`;
       break;
     }
-    case "assignment":
-      text = `📝 <b>واجب جديد</b>\n${esc(event.title)}${section}\n\n${esc(event.body || "")}\n\n${btn}`;
+    case "assignment": {
+      const subject = event.subjectName?.trim();
+      text = `📝 <b>واجب جديد</b>${subject ? `\n📘 المادة: <b>${esc(subject)}</b>` : ""}\n${esc(event.title)}${section}\n\n${esc(event.body || "")}\n\n${btn}`;
       break;
+    }
     case "schedule":
       text = `🗓️ <b>تغيير في الجدول</b>${section}\n\n${esc(event.body || "")}\n\n${btn}`;
       break;

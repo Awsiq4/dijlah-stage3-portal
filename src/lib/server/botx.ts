@@ -2,11 +2,12 @@
 // (إدارة منشوراتي), direct-PDF flow B, draft recovery. All mutations go through
 // publish.ts services -> identical server-side authorization as the website.
 import {q, qOne} from "./db.ts";
+import {randomBytes} from "node:crypto";
 import {sendMessage} from "./telegram.ts";
 import {PORTAL_BASE_URL} from "./flags.ts";
 import {assignmentDisplayDay,baghdadToday} from "../assignment-date.ts";
 import type {AdminInfo} from "./rbac.ts";
-import {isActive, canUseTelegramPublishing, SECTIONS} from "./rbac.ts";
+import {canUseTelegramPublishing, SECTIONS} from "./rbac.ts";
 import {
   listOwnContent, updateAnnouncementOwn, updateLectureMetaOwn, replaceLectureFileOwn,
   archiveContent, deleteOwnContent,
@@ -125,7 +126,8 @@ export async function handleStudentCallback(chatId: number, userId: number, data
     await sendMessage(chatId, rows.length ? `📑 أسئلة ${EXAM_KINDS[kind]} السابقة — اختر الملف:` : await questionBankReady()
       ? "لا توجد أسئلة منشورة من هذا النوع لشعبتك حالياً."
       : "⏳ بنك الأسئلة قيد الإعداد.", {replyMarkup: {inline_keyboard: [
-      ...rows.map(item=>[{text: "📎 " + item.title.slice(0, 40), url: item.file_url}]),
+      ...rows.map(item=>[{text: "📎 " + item.title.slice(0, 40),
+        url: `${PORTAL_BASE_URL}/questions/${encodeURIComponent(item.id)}?section=${encodeURIComponent(sec)}`}]),
       [{text: "🔙 أنواع الامتحانات", callback_data: "stu:bank:" + subjectId}],
       ...backHome.inline_keyboard,
     ]}});
@@ -174,7 +176,7 @@ export async function handleStudentCallback(chatId: number, userId: number, data
 // ---------- manage own content ----------
 export async function handleManageCallback(chatId: number, userId: number, data: string): Promise<void> {
   const admin = await getLinkedAdmin(userId);
-  if (!admin || !isActive(admin)) { await sendMessage(chatId, "⚠️ حسابك غير مربوط أو معلّق.", {replyMarkup: backHome}); return; }
+  if (!admin || !canUseTelegramPublishing(admin)) { await sendMessage(chatId, "⚠️ حسابك غير مخوّل لإدارة المنشورات.", {replyMarkup: backHome}); return; }
   if (data.startsWith("cw:")) {
     const {handleCourseworkCallback}=await import("./bot-coursework-manage.ts");
     await handleCourseworkCallback(chatId,userId,data);return;
@@ -204,8 +206,9 @@ export async function handleManageCallback(chatId: number, userId: number, data:
   }
   if (data.startsWith("page:my:")) {
     const [, , type, pageStr] = data.split(":");
-    const page = Number(pageStr) || 0;
-    const {rows, total} = await listOwnContent(admin, type as "announcements" | "lectures", page, PER_PAGE);
+    const page = Number(pageStr);
+    if ((type !== "announcements" && type !== "lectures") || !Number.isSafeInteger(page) || page < 0 || page > 1000) return;
+    const {rows, total} = await listOwnContent(admin, type, page, PER_PAGE);
     const kb: {text: string; callback_data: string}[][] = rows.map(r => [{text: `${type === "announcements" ? "📢" : "📚"} ${String(r.title).slice(0, 30)}${r.archived_at ? " (مؤرشف)" : ""}`, callback_data: `it:${type}:${r.id}`}]);
     const nav: {text: string; callback_data: string}[] = [];
     if (page > 0) nav.push({text: "⬅️ السابق", callback_data: `page:my:${type}:${page - 1}`});
@@ -304,6 +307,10 @@ export async function handleManageCallback(chatId: number, userId: number, data:
 // ---------- navigation + draft recovery + Flow B ----------
 export async function handleNavCallback(chatId: number, userId: number, data: string, document?: {file_id: string; file_name?: string; mime_type?: string; file_size?: number}): Promise<void> {
   const admin = await getLinkedAdmin(userId);
+  if ((data.startsWith("adm:") || data === "pdf:new") && (!admin || !canUseTelegramPublishing(admin))) {
+    await sendMessage(chatId, "⚠️ حسابك غير مخوّل للنشر.", {replyMarkup: backHome});
+    return;
+  }
   if (data === "nav:owner") {
     if (admin?.role !== "super_admin") return;
     const counts = await qOne<{admins: number; lectures: number; announcements: number; subscribers: number}>(`SELECT (SELECT count(*) FROM portal_admins) AS admins, (SELECT count(*) FROM portal_lectures) AS lectures, (SELECT count(*) FROM portal_announcements) AS announcements, (SELECT count(*) FROM tg_subscribers WHERE status='active') AS subscribers`);
@@ -338,7 +345,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
   if (data === "adm:new") {
     await sendMessage(chatId, "➕ شنو تريد تنشر؟", {replyMarkup: {inline_keyboard: [
       [{text: "📚 محاضرة أو ملخص", callback_data: "adm:materials"}],
-      [{text: "📋 واجب / واجب", callback_data: "adm:asg"}],
+      [{text: "📋 واجب", callback_data: "adm:asg"}],
       [{text: "📝 كوز يومي", callback_data: "adm:exam"}],
       [{text: "📑 أسئلة امتحانات سابقة", callback_data: "adm:questions"}],
       [{text: "🏠 الرئيسية", callback_data: "nav:home"}],
@@ -369,7 +376,7 @@ export async function handleNavCallback(chatId: number, userId: number, data: st
     const doc = (st?.data || {}) as {file_id?: string; file_name?: string};
     if (!doc.file_id) { await sendMessage(chatId, "⚠️ انتهت صلاحية الملف — أرسله من جديد."); return; }
     // start lec flow with the file pre-attached
-    await setFlowState(chatId, "lec", {step: "subject", draftId: `lec-tg-${chatId}-${Date.now()}`, pendingDoc: doc});
+    await setFlowState(chatId, "lec", {step: "subject", draftId: `lec-tg-${randomBytes(12).toString("hex")}`, pendingDoc: doc});
     const all = await q<{id: string; name: string}>(`SELECT id, name FROM portal_subjects ORDER BY name`);
     const subjects = admin?.role === "teacher" ? all.filter(x => admin.assigned_subjects?.includes(x.id)) : all;
     await sendMessage(chatId, "📚 اختر المادة:", {replyMarkup: {inline_keyboard: (subjects || []).map(x => [{text: x.name, callback_data: "lec:subj:" + x.id}])}});
