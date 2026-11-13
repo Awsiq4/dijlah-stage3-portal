@@ -1,0 +1,8 @@
+role,view content,publish,edit own,edit any,archive/delete,manage users,owner dashboard,evidence
+student,yes,no,no,no,no,no,no,T09+T14 (own: rejected ✅)
+teacher,yes,subject-scope only,own only,no,own only,no,no,rbac.test.mjs 113/113
+section_representative,yes,own section,own only,no,own only,no,no,publish.test.mjs ownership tests
+ general_representative,yes,all sections,own only,no,own only,no,no,publish.test.mjs
+super_admin,yes,yes,yes,yes,yes,yes,no (OWNER منفصل),admin-api.test.mjs
+OWNER (BOT_OWNER_ID),yes,no (عبر حسابه الإداري),no,no,no,yes (users/stats),yes,13/13 live T14
+anonymous,public pages only,no,no,no,no,no,no,T09 401s
