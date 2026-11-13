@@ -3,6 +3,7 @@ import React,{createContext,useCallback,useContext,useEffect,useMemo,useRef,useS
 import {usePathname} from "next/navigation";
 import {SECTIONS} from "./seed";
 import {mapAuthoritativeContent} from "./public-map";
+import {needsPublicContent} from "./public-route";
 import type {PortalData,Section} from "./types";
 
 export type ContentStatus = "loading" | "ready" | "error";
@@ -33,6 +34,7 @@ const emptyData:PortalData={
 
 export function PortalProvider({children}:{children:React.ReactNode}){
   const pathname=usePathname();
+  const needsData=needsPublicContent(pathname);
   const [data,updateData]=useState<PortalData>(emptyData);
   const [section,updateSection]=useState<Section>("A");
   const [dark,setDark]=useState(false);
@@ -41,6 +43,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   const [contentSection,setContentSection]=useState<Section|null>(null);
   const [contentPath,setContentPath]=useState<string|null>(null);
   const [reloadTick,setReloadTick]=useState(0);
+  const lastRequestedAt=useRef(0);
   const fetchSerial=useRef(0);
   const themeCleanup=useRef<(()=>void)|null>(null);
 
@@ -71,8 +74,9 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   useEffect(()=>()=>themeCleanup.current?.(),[]);
 
   useEffect(()=>{
-    if(!hydrated)return;
+    if(!hydrated||!needsData)return;
     const controller=new AbortController();
+    lastRequestedAt.current=Date.now();
     const requestId=++fetchSerial.current;
     setContentStatus("loading");
     const get=async()=>{
@@ -99,7 +103,22 @@ export function PortalProvider({children}:{children:React.ReactNode}){
     };
     void get();
     return ()=>controller.abort();
-  },[hydrated,section,pathname,reloadTick]);
+  },[hydrated,section,pathname,reloadTick,needsData]);
+  // Refresh returning students after a reasonable idle period; no background
+  // polling or duplicate fetch per page beyond the existing navigation fetch.
+  useEffect(()=>{
+    if(!hydrated)return;
+    const onReturn=()=>{
+      if(document.visibilityState==="visible" && needsPublicContent(window.location.pathname) &&
+        Date.now()-lastRequestedAt.current>120_000) setReloadTick(n=>n+1);
+    };
+    document.addEventListener("visibilitychange",onReturn);
+    window.addEventListener("focus",onReturn);
+    return ()=>{
+      document.removeEventListener("visibilitychange",onReturn);
+      window.removeEventListener("focus",onReturn);
+    };
+  },[hydrated]);
   useEffect(()=>{
     if(hydrated)try{localStorage.setItem(SECTION_KEY,section);}catch{/* unavailable storage */}
   },[section,hydrated]);

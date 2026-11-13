@@ -6,8 +6,6 @@ import {ArrowUpLeft, CalendarDays} from "lucide-react";
 import {Empty, PageHeading, Status} from "@/components/UI";
 import {usePortal} from "@/lib/storage";
 import {getSubject} from "@/lib/seed";
-import {mapPublicContent} from "@/lib/public-map";
-import type {PortalData, Section} from "@/lib/types";
 import {studentWeek} from "@/lib/student-week";
 
 const LABELS = {assignment: "واجب", quiz: "كويز", schedule: "الجدول"};
@@ -22,30 +20,16 @@ const asDate = (day: string) => new Date(day + "T12:00:00Z");
 export default function ThisWeek() {
   const {data, section, hydrated} = usePortal();
   const [now, setNow] = useState<Date | null>(null);
-  const [loaded, setLoaded] = useState<{section: Section; content?: Partial<PortalData>; failed?: boolean} | null>(null);
-  useEffect(() => {
-    if (!hydrated) return;
-    const controller = new AbortController();
-    fetch(`/api/public/content?type=week&section=${section}`, {cache: "no-store", signal: controller.signal})
-      .then(async response => {
-        if (!response.ok) throw new Error("Week unavailable");
-        const result = await response.json();
-        if (!controller.signal.aborted) {
-          setLoaded({section, content: result.fromDatabase ? mapPublicContent(result.content) : undefined});
-        }
-      })
-      .catch(() => {if (!controller.signal.aborted) setLoaded({section, failed: true});});
-    return () => controller.abort();
-  }, [section, hydrated]);
   useEffect(() => {
     setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  if (!now || !hydrated || loaded?.section !== section) return <PageHeading title="هذا الأسبوع" description="جارٍ تجهيز المواعيد…"/>;
-  if (loaded.failed) return <><PageHeading title="هذا الأسبوع"/><Empty title="تعذّر تحميل مواعيد الأسبوع" description="حدّث الصفحة وحاول مرة ثانية."/></>;
-  const week = studentWeek({...data, ...loaded.content}, section, now);
+  if (!now || !hydrated) return <PageHeading title="هذا الأسبوع" description="جارٍ تجهيز المواعيد…"/>;
+  // Shared provider has already loaded the authoritative section snapshot.
+  // Avoid an extra request to /api/public/content?type=week per visit.
+  const week = studentWeek(data, section, now);
 
   return <>
     <PageHeading title="هذا الأسبوع" description={`شعبة ${section} · ${formatDate.format(asDate(week.dates[0]))} – ${formatDate.format(asDate(week.dates[6]))}`}/>
