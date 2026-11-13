@@ -10,7 +10,7 @@ export const metadata:Metadata={
  openGraph:{
   type:"website",locale:"ar_IQ",siteName:"بوابة طلبة المرحلة الثالثة",
   title:"بوابة طلبة المرحلة الثالثة – جامعة دجلة",
-  description:"المحاضرات والجداول والتبليغات والتكاليف في مكان واحد.",
+  description:"المحاضرات والجداول والتبليغات والواجبات في مكان واحد.",
   url:"https://dj3.top",
   images:[{url:"/images/university-mark.png",width:1024,height:1024,alt:"شعار جامعة دجلة"}],
  },
