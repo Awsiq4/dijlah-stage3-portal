@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {mapPublicContent, mapTelegram} from "./public-map.ts";
+import {mapPublicContent, mapAuthoritativeContent, mapTelegram} from "./public-map.ts";
 
 test("public-map: snake_case rows map to camelCase client types", () => {
   const mapped = mapPublicContent({
@@ -36,4 +36,28 @@ test("public-map: telegram never invents missing channels (F stays empty)", () =
   const tg = mapTelegram([{kind: "section", key: "A", url: "https://t.me/A"}]);
   assert.equal(tg.sections.F, "");
   assert.equal(tg.general, "");
+});
+
+
+test("authoritative section payload cannot retain stale entries from seed or another section",()=>{
+  const first = mapAuthoritativeContent({
+    subjects:[{id:"s",name:"مادة"}],
+    lectures:[{id:"old-A",subject_id:"s",status:"published"}],
+    announcements:[{id:"a-A",section:"A",scope:"section"}],
+  });
+  assert.equal(first.lectures.length,1);
+  assert.equal(first.announcements.length,1);
+  const second = mapAuthoritativeContent({
+    subjects:[{id:"s",name:"مادة"}],
+    lectures:[],announcements:[],assignments:[],exams:[],schedule:[],summaries:[],
+  });
+  assert.deepEqual(second.lectures,[]);
+  assert.deepEqual(second.summaries,[]);
+  assert.deepEqual(second.announcements,[]);
+  assert.deepEqual(second.assignments,[]);
+  assert.deepEqual(second.exams,[]);
+  assert.deepEqual(second.schedule,[]);
+  assert.equal(second.subjects.length,1);
+  assert.equal(second.telegram.sections.A,"");
+  assert.equal(second.lectures.find(x=>x.id==="old-A"),undefined);
 });
