@@ -1,13 +1,24 @@
 import {Pool, type PoolClient} from "pg";
 import {DATABASE_URL, dbConfigured} from "./flags.ts";
 
+// pg-connection-string currently treats sslmode=require/verify-ca as verify-full,
+// but future versions will use weaker libpq semantics. Explicitly require full
+// certificate and hostname verification without logging or exposing credentials.
+export function forceVerifiedPgTlsConnectionString(value: string): string {
+  if (!/^postgres(?:ql)?:\/\//i.test(value)) return value;
+  const url = new URL(value);
+  if (!url.searchParams.has("sslmode")) return value;
+  url.searchParams.set("sslmode", "verify-full");
+  return url.toString();
+}
+
 let pool: Pool | null = null;
 
 export function getPool(): Pool | null {
   if (!dbConfigured()) return null;
   if (!pool) {
     pool = new Pool({
-      connectionString: DATABASE_URL,
+      connectionString: forceVerifiedPgTlsConnectionString(DATABASE_URL),
       // TLS certificate verification is REQUIRED (Neon and other hosted Postgres
       // use publicly trusted CAs). Never disable rejectUnauthorized in code.
       ssl: {rejectUnauthorized: true},
