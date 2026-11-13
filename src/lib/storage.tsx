@@ -4,6 +4,7 @@ import {usePathname} from "next/navigation";
 import {SECTIONS} from "./seed";
 import {mapAuthoritativeContent} from "./public-map";
 import {needsPublicContent} from "./public-route";
+import {hasVerifiedSection,shouldRevalidate} from "./public-readiness";
 import type {PortalData,Section} from "./types";
 
 export type ContentStatus = "loading" | "ready" | "error";
@@ -18,7 +19,6 @@ type State = {
   hydrated:boolean;
   contentStatus:ContentStatus;
   contentSection:Section|null;
-  contentPath:string|null;
   reloadContent:()=>void;
 };
 const Context=createContext<State|null>(null);
@@ -41,11 +41,13 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   const [hydrated,setHydrated]=useState(false);
   const [contentStatus,setContentStatus]=useState<ContentStatus>("loading");
   const [contentSection,setContentSection]=useState<Section|null>(null);
-  const [contentPath,setContentPath]=useState<string|null>(null);
   const [reloadTick,setReloadTick]=useState(0);
   const lastRequestedAt=useRef(0);
   const fetchSerial=useRef(0);
   const themeCleanup=useRef<(()=>void)|null>(null);
+  // A single verified snapshot is reused across routes in the same section;
+  // no localStorage or seed data is used as public content.
+
 
   useEffect(()=>{
     try{
@@ -78,9 +80,12 @@ export function PortalProvider({children}:{children:React.ReactNode}){
     const controller=new AbortController();
     lastRequestedAt.current=Date.now();
     const requestId=++fetchSerial.current;
-    setContentStatus("loading");
-    const get=async()=>{
-      try {
+    // New section or first visit: wait for a verified snapshot.
+    // Same-section background refresh: keep content visible and navigable.
+    const verified=hasVerifiedSection(hydrated,contentStatus,contentSection,section);
+    if(!verified)setContentStatus("loading");
+    const load=async()=>{
+      try{
         const response=await fetch(`/api/public/content?type=all&section=${section}`,
           {cache:"no-store",signal:controller.signal});
         if(!response.ok)throw new Error("public-content-http-"+response.status);
@@ -88,29 +93,39 @@ export function PortalProvider({children}:{children:React.ReactNode}){
         if(!payload||payload.fromDatabase!==true||!payload.content||payload.section!==section)
           throw new Error("public-content-not-authoritative");
         if(controller.signal.aborted||requestId!==fetchSerial.current)return;
-        // Replace the entire snapshot in one state update; no old section
-        // data, localStorage prototype content or baked-in SEED can leak in.
         updateData(mapAuthoritativeContent(payload.content));
         setContentSection(section);
-        setContentPath(pathname||"/");
         setContentStatus("ready");
       }catch(err){
         if(controller.signal.aborted||requestId!==fetchSerial.current)return;
         console.warn("Public content could not be loaded",
           err instanceof Error?err.message:"unknown");
-        setContentStatus("error");
+        // Do not hide verified content because a background refresh failed.
+        // On first fetch or section change, show a retryable error instead.
+        if(!verified)setContentStatus("error");
       }
     };
-    void get();
+    void load();
     return ()=>controller.abort();
-  },[hydrated,section,pathname,reloadTick,needsData]);
-  // Refresh returning students after a reasonable idle period; no background
-  // polling or duplicate fetch per page beyond the existing navigation fetch.
+  // Important: no pathname dependency. Changing routes within a section
+  // must NOT refetch data or display the loading skeleton.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[hydrated,section,reloadTick,needsData]);
+  // If a student comes back after two minutes, or navigates after idle,
+  // revalidate in the background. Requests are throttled per session.
+  useEffect(()=>{
+    if(!hydrated||!needsData)return;
+    if(shouldRevalidate(lastRequestedAt.current,Date.now()))
+      setReloadTick(n=>n+1);
+  },[hydrated,needsData,pathname]);
   useEffect(()=>{
     if(!hydrated)return;
     const onReturn=()=>{
-      if(document.visibilityState==="visible" && needsPublicContent(window.location.pathname) &&
-        Date.now()-lastRequestedAt.current>120_000) setReloadTick(n=>n+1);
+      if(document.visibilityState==="visible" &&
+        needsPublicContent(window.location.pathname) &&
+        shouldRevalidate(lastRequestedAt.current,Date.now())) {
+        setReloadTick(n=>n+1);
+      }
     };
     document.addEventListener("visibilitychange",onReturn);
     window.addEventListener("focus",onReturn);
@@ -135,9 +150,9 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   }),[]);
   const value=useMemo(()=>({
     data,setData,section,setSection:updateSection,dark,toggleDark,reset,hydrated,
-    contentStatus,contentSection,contentPath,reloadContent,
+    contentStatus,contentSection,reloadContent,
   }),[data,setData,section,dark,toggleDark,reset,hydrated,
-      contentStatus,contentSection,contentPath,reloadContent]);
+      contentStatus,contentSection,reloadContent]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function usePortal(){
