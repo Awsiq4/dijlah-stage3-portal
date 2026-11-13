@@ -18,7 +18,7 @@
   --primary:#0d9dc0;
   --primary-strong:#007e9e;
   --primary-soft:color-mix(in srgb,var(--sky) 12%,var(--surface));
-  --on-primary:#ffffff;
+  --on-primary:#062532;
   --pill-bg:color-mix(in srgb,var(--lime-bright) 30%,var(--surface));
   --pill-text:#233a12;
   --day-active-bg:var(--indigo);

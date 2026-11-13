@@ -62,7 +62,7 @@ function ResetPasswordForm() {
           الانتقال لتسجيل الدخول
         </button>
       </> : <>
-        {!token && <p role="alert">⚠️ رابط الاستعادة مفقود أو غير صالح. استخدم الرابط الأصلي في رسالة البريد.</p>}
+        {!token && <p role="alert">⚠️ رابط الاستعادة مفقود أو غير صالح. استخدم الرابط الأصلي في رسالة Telegram.</p>}
         <form className="admin-form" style={{gridTemplateColumns: "1fr"}} onSubmit={submit}>
           <label className="form-field"><span>كلمة المرور الجديدة</span><input type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={password} onChange={e => setPassword(e.target.value)}/></label>
           <label className="form-field"><span>تأكيد كلمة المرور</span><input type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={confirm} onChange={e => setConfirm(e.target.value)}/></label>

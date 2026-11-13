@@ -49,12 +49,14 @@ export async function POST(req: NextRequest) {
       const clean = sanitizeRow(type, body.row);
       if (type === "announcements" && (!clean.scope || clean.scope === "general")) clean.section = "all";
       if (!canWriteContentRecord(admin, type, clean)) throw new ForbiddenError("المحتوى خارج صلاحيات حسابك.");
-      const existing = await qOne<{created_by: number | null}>(`SELECT created_by FROM ${SCHEMAS[type].table} WHERE id=$1`, [clean.id]);
+      const existing = await qOne<{created_by: number | null; status?: string; archived_at?: string | null}>(
+        `SELECT created_by${type === "lectures" ? ", status, archived_at" : ""} FROM ${SCHEMAS[type].table} WHERE id=$1`, [clean.id]);
       if (existing && !canModifyContent(admin, existing)) throw new ForbiddenError("المحتوى خارج صلاحيات حسابك.");
       if (!canManageAllContent(admin.role) && type !== "announcements" && (!Array.isArray(clean.sections) || !clean.sections.length)) {
         clean.sections = ["A", "B", "C", "F"];
       }
-      const queuesTelegram = !existing && publicationQueuesTelegram(type, clean);
+      const startsPublication = !existing || (type === "lectures" && existing.status === "draft" && !existing.archived_at);
+      const queuesTelegram = startsPublication && publicationQueuesTelegram(type, clean);
       return NextResponse.json({
         queuesTelegram,
         pendingDeduplication: queuesTelegram && (type === "lectures" || type === "announcements"),
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
     const e = err as Error & {status?: number};
     if (err instanceof ForbiddenError || e.status === 403) return NextResponse.json({error: e.message}, {status: 403});
     const msg = e.message || "error";
-    const status = /مطلوب|غير صالح|JSON|قيمة غير مسموحة|تعذّر التحقق/.test(msg) ? 400 : 500;
+    const status = e.status === 400 || /مطلوب|غير صالح|JSON|قيمة غير مسموحة|تعذّر التحقق/.test(msg) ? 400 : 500;
     return NextResponse.json({error: status === 400 ? msg : "Server error"}, {status});
   }
 }
@@ -134,9 +136,13 @@ export async function DELETE(req: NextRequest) {
   if (!type || !TYPES.includes(type) || type === "telegram" || !id) return NextResponse.json({error: "invalid request"}, {status: 400});
   try {
     await withTx(async db => {
-      if (type === "lectures" || type === "announcements") await lockPublication(db, type);
+      if (type === "lectures" || type === "announcements" || type === "exams") await lockPublication(db, type);
       const table = (SCHEMAS as Record<string, {table: string}>)[type]?.table;
       if (!table) throw new ForbiddenError("forbidden");
+      if (type === "exams" && admin.role !== "super_admin") {
+        const exam = await db.qOne<{type: string}>("SELECT type FROM portal_exams WHERE id=$1 FOR UPDATE", [id]);
+        if (exam && exam.type !== "كوز يومي") throw new ForbiddenError("جدول امتحانات الجامعة من صلاحيات المالك.");
+      }
       if (!canManageAllContent(admin.role)) {
         if (!canUseTelegramPublishing(admin) || type === "subjects" || type === "schedule") throw new ForbiddenError("forbidden");
         const row = await db.qOne<{created_by: number | null}>(`SELECT created_by FROM ${table} WHERE id=$1 FOR UPDATE`, [id]);

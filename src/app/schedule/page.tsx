@@ -30,9 +30,9 @@ export default function Schedule(){
  };
  return <>
   <PageHeading title="الجدول الأسبوعي" description={`شعبة ${SECTION_LABELS[section]||section} · من جدول 2026-2027 الرقمي المصحّح`}/>
-  <div className="view-toggle" role="tablist" aria-label="طريقة العرض">
-   <button className={view==="day"?"selected":""} onClick={()=>setView("day")}>عرض يومي</button>
-   <button className={view==="week"?"selected":""} onClick={()=>setView("week")}>عرض أسبوعي</button>
+  <div className="view-toggle" role="group" aria-label="طريقة العرض">
+   <button type="button" aria-pressed={view==="day"} className={view==="day"?"selected":""} onClick={()=>setView("day")}>عرض يومي</button>
+   <button type="button" aria-pressed={view==="week"} className={view==="week"?"selected":""} onClick={()=>setView("week")}>عرض أسبوعي</button>
   </div>
   <div className="day-picker">{DAY_ORDER.map(n=><button key={n} onClick={()=>{setDay(n);setView("day");}} className={`${day===n&&view==="day"?"active":""} day-${n}`}>{DAYS[n]}{n===1&&<small className="rest-tag">استراحة</small>}</button>)}</div>
   {view==="day"&&<div className="panel"><div className="panel-heading"><h2><CalendarDays size={20}/> {DAYS[day]}</h2><span className="subtle">{day===1?"استراحة الطلبة":`${slots.length} محاضرة · ${slots.reduce((a,s)=>a+(s.periods?.length||1),0)} حصة`}</span></div>

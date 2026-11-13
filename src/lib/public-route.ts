@@ -5,3 +5,8 @@ export function needsPublicContent(pathname:string|null|undefined):boolean {
   return pathname==="/" ||
     /^\/(?:subjects|schedule|announcements|assignments|exams|lectures|questions|this-week|notifications)(?:\/|$)/.test(pathname);
 }
+
+export function readsLinkedSection(pathname: string | null | undefined): boolean {
+  return pathname === "/announcements" || pathname === "/exams" || pathname === "/assignments" ||
+    /^\/(?:lectures|subjects|questions)\//.test(pathname || "");
+}

@@ -56,17 +56,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_trigger WHERE tgname='trg_tg_student_section_change'
+      AND tgrelid='public.tg_subscribers'::regclass
   ) THEN
     CREATE TRIGGER trg_tg_student_section_change
     AFTER INSERT OR UPDATE OF section ON tg_subscribers
     FOR EACH ROW EXECUTE FUNCTION record_tg_student_section_change();
   END IF;
 END;
-$;
+$$;
 
 -- Retention for activity and section-history data is 90 days after capture.
 -- Purge is triggered periodically by the webhook, and a manual purge is safe.

@@ -6,7 +6,7 @@ import {sendMessage} from "./telegram.ts";
 import {canUseTelegramPublishing, type AdminInfo} from "./rbac.ts";
 import {defaultAudience,validAudience,PUBLISH_SECTIONS} from "./publisher-audience.ts";
 import {validExamDay,validExamSchedule} from "./exam-validation.ts";
-import {publishExam} from "./publish.ts";
+import {courseworkUrl, publishExam} from "./publish.ts";
 import {PORTAL_BASE_URL} from "./flags.ts";
 
 type Draft=Record<string,unknown>;
@@ -70,7 +70,7 @@ export async function startExamFlow(chatId:number,userId:number) {
   if(!admin||!canUseTelegramPublishing(admin)){
     await sendMessage(chatId,"⛔ الحساب غير مخوّل لنشر الكوزات.");return;
   }
-  const d={step:"subject",draftId:"quiz-tg-"+chatId+"-"+Date.now(),type:"كوز يومي",status:"confirmed"};
+  const d={step:"subject",draftId:"quiz-tg-"+randomBytes(12).toString("hex"),type:"كوز يومي",status:"confirmed"};
   await setFlowState(chatId,"exam",d);
   await subjects(chatId,admin);
 }
@@ -168,7 +168,7 @@ export async function handleExamCallback(chatId:number,userId:number,data:string
       if(result.ok) {
         await setFlowState(chatId,"",{});
         if(result.notificationEvents?.length)onPublished?.(result.notificationEvents);
-        await sendMessage(chatId,result.inserted?"✅ تم نشر الكوز للشعب المحددة.\n🔗 "+PORTAL_BASE_URL+"/exams":
+        await sendMessage(chatId,result.inserted?"✅ تم نشر الكوز للشعب المحددة.\n🔗 "+PORTAL_BASE_URL+courseworkUrl("exams",result.id,sections.length < PUBLISH_SECTIONS.length ? sections[0] : undefined):
           "ℹ️ هذا الكوز منشور من قبل؛ ما كررناه.",{replyMarkup:{inline_keyboard:[
             [{text:"📝 نشر كوز آخر",callback_data:"adm:exam"}],...nav.inline_keyboard]}});
       } else {

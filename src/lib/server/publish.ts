@@ -18,6 +18,12 @@ import {assignmentDayAllowed,assignmentDisplayDay,validAssignmentDay} from "../a
 
 const fail = (error: string): PublishFail => ({ok: false, error});
 
+export function courseworkUrl(type: "exams" | "assignments", id: string, section?: string): string {
+  const query = section ? `?section=${encodeURIComponent(section)}` : "";
+  const anchor = type === "exams" ? "exam" : "assignment";
+  return `/${type}${query}#${anchor}-${encodeURIComponent(id)}`;
+}
+
 async function insertWithOwnership(
   type: WritableContentType,
   admin: AdminInfo,
@@ -32,7 +38,7 @@ async function insertWithOwnership(
       const prepared = await preparePublication(tx, admin, type, row, hash, options);
       if (prepared.result) return prepared.result;
       hash = prepared.hash;
-      newPublication = !prepared.existing;
+      newPublication = !prepared.existing || prepared.wasDraft;
       if (prepared.existing && mode === "nothing") return {ok: true, id: String(row.id), inserted: false};
     }
     const {sql, params} = buildUpsert(type, row, mode);
@@ -56,7 +62,7 @@ async function insertWithOwnership(
 async function preparePublication(
   db: Queryer, admin: AdminInfo, type: PublicationKind, row: Record<string, unknown>,
   hash: string | null, options: PublicationOptions,
-): Promise<{existing: boolean; hash: string | null; result?: PublishOk}> {
+): Promise<{existing: boolean; wasDraft: boolean; hash: string | null; result?: PublishOk}> {
   await lockPublication(db, type);
   const existing = await db.qOne<{
     created_by: number; file_url?: string; file_sha256?: string | null; archived_at: string | null;
@@ -66,7 +72,7 @@ async function preparePublication(
   }
   const effective = existing ? {...existing, ...row} : row;
   if (type === "lectures" && !hash && existing && effective.file_url === existing.file_url) hash = existing.file_sha256 || null;
-  const prepared = {existing: Boolean(existing), hash};
+  const prepared = {existing: Boolean(existing), wasDraft: type === "lectures" && existing?.status === "draft" && !existing.archived_at, hash};
   if (existing?.archived_at || (type === "lectures" && effective.status !== "published")) return prepared;
   const decision = await checkPublication(db, admin, type, effective, hash, existing ? {} : options, !existing);
   if (decision.expanded && decision.addedSections) {
@@ -139,21 +145,21 @@ async function enqueueNewPublication(db: Queryer, type: WritableContentType, row
         (row.room ? "\n🏫 القاعة: " + String(row.room) : "") +
         (row.topics ? "\n📖 المواضيع: " + String(row.topics) : "") +
         (row.notes ? "\n🗒 ملاحظات: " + String(row.notes) : ""),
-      url: "/exams", subject_id};
+      url: courseworkUrl("exams", refId), subject_id};
     if (sections.length === 4 && ["A","B","C","F"].every(s => sections.includes(s))) {
       await enqueue({...info, version: 1, scope: "general"});
     } else for (const section of sections) {
-      await enqueue({...info, version: "audience-" + section, scope: "section", section});
+      await enqueue({...info, url: courseworkUrl("exams", refId, section), version: "audience-" + section, scope: "section", section});
     }
   } else if (type === "assignments") {
     const sections = Array.isArray(row.sections) ? [...new Set(row.sections.map(String))] : [];
     const info = {type: "assignment" as const, refId, title,
       body: String(row.instructions || "") + "\nآخر يوم للتسليم: " + assignmentDisplayDay(row.due_at),
-      url: "/assignments", subject_id};
+      url: courseworkUrl("assignments", refId), subject_id};
     if (sections.length === 4 && ["A","B","C","F"].every(s => sections.includes(s)))
       await enqueue({...info, version: 1, scope: "general"});
     else for (const section of sections)
-      await enqueue({...info, version: "audience-" + section, scope: "section", section});
+      await enqueue({...info, url: courseworkUrl("assignments", refId, section), version: "audience-" + section, scope: "section", section});
   }
   return eventIds;
 }
@@ -320,14 +326,19 @@ export async function applyContentUpsert(
   let newPublication = false;
   if (type === "assignments" || type === "exams") {
     await lockPublication(tx, type);
-    const existing = await tx.qOne<{id: string}>(`SELECT id FROM ${SCHEMAS[type].table} WHERE id=$1`, [id]);
+    const existing = type === "exams"
+      ? await tx.qOne<{id: string; type: string}>(`SELECT id,type FROM portal_exams WHERE id=$1`, [id])
+      : await tx.qOne<{id: string; type?: string}>(`SELECT id FROM portal_assignments WHERE id=$1`, [id]);
+    if (type === "exams" && existing && existing.type !== "كوز يومي" && admin.role !== "super_admin") {
+      throw Object.assign(new Error("جدول امتحانات الجامعة من صلاحيات المالك."), {status: 403});
+    }
     newPublication = !existing;
   }
   if (type === "announcements" || type === "lectures") {
     const prepared = await preparePublication(tx, admin, type, clean, hash, options);
     if (prepared.result) return prepared.result;
     hash = prepared.hash;
-    newPublication = !prepared.existing;
+    newPublication = !prepared.existing || prepared.wasDraft;
   }
   if (scoped) {
     const update = buildOwnedUpdate(type, clean, admin.id);

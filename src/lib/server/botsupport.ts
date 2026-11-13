@@ -3,7 +3,8 @@
 // Ticket history is stored in the pre-existing support tables, independent from /start.
 import {randomUUID} from "node:crypto";
 import {q,qOne} from "./db.ts";
-import {BOT_OWNER_ID,BOT_TOKEN,QSTASH_TOKEN,QSTASH_URL,PORTAL_BASE_URL,WORKER_SECRET} from "./flags.ts";
+import {BOT_OWNER_ID,BOT_TOKEN} from "./flags.ts";
+import {scheduleViaQStash} from "./notify.ts";
 import {sendMessage,tgFetch} from "./telegram.ts";
 import {registerUser,notifyOwnerNewUser,isBotOwner} from "./registry.ts";
 import {checkLoginRateLimit} from "./auth.ts";
@@ -126,11 +127,12 @@ async function saveFileId(ticketId:number,author:string,key:string,fileId?:strin
    (SELECT id FROM support_messages WHERE ticket_id=$1 AND author=$2 AND request_key=$3)`,
    [ticketId,author,key,fileId]);
 }
-async function queue(key:string,id:number,recipient:number,text:string,markup?:SupportKeyboard,mediaFileId?:string) {
- if(!validTicket(id)||!Number.isSafeInteger(recipient)||recipient<=0)return;
+async function queue(key:string,id:number|string,recipient:number,text:string,markup?:SupportKeyboard,mediaFileId?:string) {
+ const ticketId=Number(id); // node-postgres returns BIGSERIAL IDs as strings.
+ if(!validTicket(ticketId)||!Number.isSafeInteger(recipient)||recipient<=0)return;
  await q(`INSERT INTO support_jobs(event_key,recipient,ticket_id,text,reply_markup,media_file_id)
    VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(event_key) DO NOTHING`,
-   [key,recipient,id,text.slice(0,3700),markup?JSON.stringify(markup):null,mediaFileId||null]);
+   [key,recipient,ticketId,text.slice(0,3700),markup?JSON.stringify(markup):null,mediaFileId||null]);
 }
 async function ticketRecipient(id:number):Promise<number|null> {
  const row=await qOne<{telegram_id:string|null}>(`SELECT i.telegram_id::text AS telegram_id
@@ -191,6 +193,7 @@ export async function reconcileMissingOwnerAlerts(limit=20):Promise<number>{
    FROM support_tickets t
    LEFT JOIN support_jobs j ON j.event_key=('new:'||t.id::text)
    WHERE t.source='telegram' AND t.created_at > now()-interval '7 days'
+     AND t.status NOT IN ('resolved','closed')
      AND j.id IS NULL
    ORDER BY t.id DESC LIMIT $1`,[Math.max(1,Math.min(limit,30))]);
  let count=0;
@@ -514,18 +517,6 @@ export async function handleSupportCallback(chatId:number,userId:number,data:str
  }
 }
 
-async function scheduleWorker(delaySeconds=0){
- if(!QSTASH_TOKEN||!QSTASH_URL||!WORKER_SECRET)return;
- try{
-   await fetch(QSTASH_URL+"/publish",{
-     method:"POST",
-     headers:{"authorization":"Bearer "+QSTASH_TOKEN,"content-type":"application/json",
-       ...(delaySeconds?{"Upstash-Delay":Math.ceil(delaySeconds)+"s"}:{})},
-     body:JSON.stringify({url:PORTAL_BASE_URL+"/api/telegram/worker",
-       headers:{"x-worker-secret":WORKER_SECRET}}),
-   });
- }catch{/* webhook delivery still handles immediate attempts */}
-}
 export async function drainSupportQueue(limit=12):Promise<{sent:number;retried:number;failed:number}>{
  await reconcileMissingOwnerAlerts(Math.max(1,Math.min(limit,20)));
  const due=await q<{id:number;recipient:string|number;ticket_id:number;text:string;
@@ -550,15 +541,14 @@ export async function drainSupportQueue(limit=12):Promise<{sent:number;retried:n
    }else if(result.error?.code===403||job.attempts>=6){
      await q("UPDATE support_jobs SET failed=true WHERE id=$1",[job.id]);failed++;
    }else{
-     const delay=Math.min(3600,Math.max(90,90*(2**Math.min(job.attempts,5)),(result.retryAfter||0)));
+     const delay=Math.max(Math.min(3600,90*(2**Math.min(job.attempts,5))),result.retryAfter||0);
      await q("UPDATE support_jobs SET next_at=now()+($2||' seconds')::interval WHERE id=$1",[job.id,String(delay)]);
-     await scheduleWorker(delay+5);
+     await scheduleViaQStash(delay+5);
      retried++;
    }
  }
  return {sent,retried,failed};
 }
 export async function wakeSupportDelivery(){
- await scheduleWorker(0);
  return drainSupportQueue(10);
 }

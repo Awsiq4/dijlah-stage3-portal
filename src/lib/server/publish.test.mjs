@@ -326,6 +326,47 @@ test("workers claim the same notification once and leave unrelated events queued
   }
 });
 
+test("editing a draft to published queues one notification and subsequent saves do not repeat it", async t => {
+  const pool = await makeDb();
+  t.after(() => pool.end());
+  const {withTx} = await import("./db.ts");
+  const {applyContentUpsert} = await import("./publish.ts");
+  const row = {id: "material-draft", subject_id: "nonlinear-optics", number: 1, title: "ملزمة", sections: ["A"]};
+  await withTx(tx => applyContentUpsert(tx, repA, "lectures", {...row, status: "draft"}));
+  assert.equal((await q("SELECT id FROM tg_events")).length, 0);
+  await withTx(tx => applyContentUpsert(tx, repA, "lectures", {...row, status: "published"}));
+  await withTx(tx => applyContentUpsert(tx, repA, "lectures", {...row, status: "published"}));
+  const events = await q("SELECT event_key FROM tg_events");
+  assert.deepEqual(events.map(row => row.event_key), ["lecture:material-draft:vaudience-A"]);
+});
+
+test("coursework notifications link to the exact publication and section", async t => {
+  const pool = await makeDb();
+  t.after(() => pool.end());
+  const {withTx} = await import("./db.ts");
+  const {applyContentUpsert} = await import("./publish.ts");
+  const subject_id = "nonlinear-optics";
+  await withTx(tx => applyContentUpsert(tx, repA, "exams", {id: "quiz-link", title: "كوز", subject_id,
+    sections: ["A"], type: "كوز يومي", date: "2099-11-25", status: "confirmed"}));
+  await withTx(tx => applyContentUpsert(tx, repA, "assignments", {id: "assignment-link", title: "واجب", subject_id,
+    sections: ["A", "B", "C", "F"], assigned_at: "2099-11-25", due_at: "2099-11-26"}));
+  const events = await q("SELECT url FROM tg_events ORDER BY id");
+  assert.deepEqual(events.map(row => row.url), ["/exams?section=A#exam-quiz-link", "/assignments#assignment-assignment-link"]);
+});
+
+test("an editor cannot overwrite an owner-managed exam by supplying a quiz payload", async t => {
+  const pool = await makeDb();
+  t.after(() => pool.end());
+  const {withTx} = await import("./db.ts");
+  const {applyContentUpsert} = await import("./publish.ts");
+  const row = {id: "owner-final", title: "Final", subject_id: "nonlinear-optics", sections: ["A"], date: "2099-11-25", start_time: "09:00", status: "confirmed"};
+  await q(`INSERT INTO portal_exams(id,subject_id,title,type,date,start_time,sections,status)
+    VALUES('owner-final','nonlinear-optics','Final','Final','2099-11-25','09:00','["A"]','confirmed')`);
+  await assert.rejects(withTx(tx => applyContentUpsert(tx, {...repA, role: "editor"}, "exams", {...row, type: "كوز يومي"})),
+    error => error.status === 403);
+  assert.equal((await qOne("SELECT type FROM portal_exams WHERE id=$1", [row.id])).type, "Final");
+});
+
 test("owner publication stores public display name instead of login email", async () => {
   const pool = await makeDb();
   const owner = {id: 1, role: "super_admin", is_active: true, status: "active", name: "", email: "owner@private.test"};

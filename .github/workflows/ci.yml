@@ -11,6 +11,19 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: portal_test
+          POSTGRES_PASSWORD: portal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d portal_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -27,8 +40,10 @@ jobs:
         run: npm run verify:schedule:json
       - name: Unit and security regression tests
         run: npm test
-      - name: Support integration tests (isolated in-memory PostgreSQL)
-        run: node --experimental-strip-types scripts/support-live-test.mjs --memory
+      - name: Support and schema integration tests (isolated PostgreSQL)
+        run: node --experimental-strip-types scripts/support-live-test.mjs --local-postgres
+        env:
+          PORTAL_TEST_PG_URL: postgresql://postgres:portal_test@127.0.0.1:5432/portal_test
       - name: Assignment calendar-date validation
         run: node --experimental-strip-types --test src/lib/assignment-date.test.mjs
       - name: Telegram student calendar query regression

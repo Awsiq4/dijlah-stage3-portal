@@ -2,7 +2,7 @@ export const MAX_ATTEMPTS = 5;
 export const MAX_DELAY_MS = 5 * 60 * 1000;
 
 export function nextDelayMs(attempts: number, retryAfterSec?: number): number {
-  if (retryAfterSec && retryAfterSec > 0) return Math.min(retryAfterSec * 1000, MAX_DELAY_MS);
+  if (retryAfterSec && retryAfterSec > 0) return retryAfterSec * 1000;
   const base = Math.min(1000 * Math.pow(2, Math.max(0, attempts - 1)), MAX_DELAY_MS);
   const jitter = Math.floor(Math.random() * 500);
   return Math.min(base + jitter, MAX_DELAY_MS);

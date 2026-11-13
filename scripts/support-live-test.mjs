@@ -4,19 +4,35 @@ import {createInterface} from 'node:readline';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 const memory=process.argv.includes('--memory');
-console.log(memory?'Using isolated in-memory PostgreSQL emulation':'Provide isolated test connection on stdin (hidden):');
+const localPostgres=process.argv.includes('--local-postgres');
+console.log(memory?'Using isolated in-memory PostgreSQL emulation':localPostgres?'Using isolated local PostgreSQL service':'Provide isolated test connection on stdin (hidden):');
 let url='postgres://test';
-if(!memory){const rl=createInterface({input:process.stdin});[url]=await new Promise(resolve=>rl.once('line',l=>resolve([l])));rl.close();}
+if(localPostgres){
+ url=process.env.PORTAL_TEST_PG_URL||'';
+ const target=new URL(url);
+ assert.ok(['postgres:','postgresql:'].includes(target.protocol)&&target.hostname==='127.0.0.1'&&
+   target.pathname==='/portal_test'&&!target.search&&!target.hash,'Use the dedicated loopback database portal_test');
+}else if(!memory){const rl=createInterface({input:process.stdin});[url]=await new Promise(resolve=>rl.once('line',l=>resolve([l])));rl.close();}
 process.env.DATABASE_URL=url; process.env.SESSION_SECRET='isolated-support-test';
 process.env.BOT_OWNER_ID='999999999'; process.env.TELEGRAM_BOT_TOKEN='mock-test-token';
 process.env.TELEGRAM_BOT_USERNAME='test_portal_bot'; process.env.TELEGRAM_BOT_ENABLED='true';
-const {q,qOne}=await import('../src/lib/server/db.ts');
+const {q,qOne,setPoolForTests}=await import('../src/lib/server/db.ts');
 const S=await import('../src/lib/server/support.ts');
+if(localPostgres){
+ const {Pool}=await import('pg');
+ const pool=new Pool({connectionString:url,ssl:false,allowExitOnIdle:true});
+ setPoolForTests(pool);
+ const migrations=['portal-schema.sql','telegram-notifications.sql','portal-rbac.sql','portal-material-kind.sql',
+  'portal-owner-analytics.sql','portal-owner-activity.sql','portal-owner-mfa.sql','portal-passkeys.sql',
+  'portal-password-recovery.sql','portal-past-questions.sql','support.sql','support-experience.sql','support-site-telegram.sql'];
+ for(const name of migrations)await q(readFileSync(new URL('../database/'+name,import.meta.url),'utf8'));
+  await q(readFileSync(new URL('../database/portal-owner-activity.sql',import.meta.url),'utf8'));
+}
 if(memory){
  const {newDb,DataType}=await import('pg-mem'); const mem=newDb();
  mem.public.registerFunction({name:'octet_length',args:[DataType.bytea],returns:DataType.integer,implementation:b=>b.length});
- const {Pool}=mem.adapters.createPg(); (await import('../src/lib/server/db.ts')).setPoolForTests(new Pool());
- await q(`CREATE TABLE portal_admins(id BIGSERIAL PRIMARY KEY,name TEXT,email TEXT,role TEXT,status TEXT,is_active BOOLEAN,assigned_section TEXT,assigned_subjects JSONB,perms JSONB);CREATE TABLE portal_telegram_links(id BIGSERIAL PRIMARY KEY,admin_id BIGINT,telegram_user_id BIGINT,revoked_at TIMESTAMPTZ);CREATE SEQUENCE tg_reg_seq START 10;
+ const {Pool}=mem.adapters.createPg(); setPoolForTests(new Pool());
+ await q(`CREATE TABLE portal_admins(id BIGSERIAL PRIMARY KEY,name TEXT,email TEXT,role TEXT,status TEXT,is_active BOOLEAN,assigned_section TEXT,assigned_subjects JSONB,perms JSONB,password_hash TEXT);CREATE TABLE portal_telegram_links(id BIGSERIAL PRIMARY KEY,admin_id BIGINT,telegram_user_id BIGINT,revoked_at TIMESTAMPTZ);CREATE SEQUENCE tg_reg_seq START 10;
 CREATE TABLE tg_subscribers(chat_id BIGINT PRIMARY KEY,user_id BIGINT,first_name TEXT,last_name TEXT,username TEXT,reg_seq BIGINT,section TEXT,role TEXT,status TEXT,registered_at TIMESTAMPTZ,last_activity_at TIMESTAMPTZ,updated_at TIMESTAMPTZ,consent_at TIMESTAMPTZ);
 CREATE TABLE tg_owner_notifs(event_key TEXT PRIMARY KEY,chat_id BIGINT,payload JSONB,sent_at TIMESTAMPTZ,attempts INT NOT NULL DEFAULT 0);
 CREATE TABLE bot_settings(key TEXT PRIMARY KEY,value JSONB);CREATE TABLE portal_login_attempts(key TEXT PRIMARY KEY,count INTEGER,reset_at TIMESTAMPTZ);`);
@@ -88,7 +104,7 @@ ok(await S.anonymousIdentity(newBrowserSecret)===identity,'website-only recovery
 await assert.rejects(()=>S.recoverBrowserIdentity(newBrowserIdentity,newBrowserSecret,recoveryCode));passed++;
 console.log('PASS recovery code cannot be reused');
 
-await q("INSERT INTO portal_admins(id,name,email,role,status,is_active) VALUES(1,'Site Owner','owner@example.test','super_admin','active',true)");
+await q("INSERT INTO portal_admins(id,name,email,role,status,is_active,password_hash) VALUES(1,'Site Owner','owner@example.test','super_admin','active',true,'test-fixture')");
 const siteOwner=await S.adminActor({id:1,email:'owner@example.test',role:'super_admin',is_active:true});
 ok(siteOwner.owner===true,'site super admin manages support without Telegram account linkage');
 ok(typeof S.createLink==='undefined'&&typeof S.bindLink==='undefined'&&typeof S.telegramActor==='function',
@@ -192,6 +208,9 @@ try{
  const statusAlerts=await qOne('SELECT count(*)::int AS n FROM support_jobs WHERE event_key LIKE $1',
    ['status:'+siteTicket.id+':resolved:%']);
  ok(Number(statusAlerts?.n)===1,'repeated status callback does not generate a duplicate student notification');
+ await q("DELETE FROM support_jobs WHERE event_key=$1",["new:"+siteTicket.id]);
+ ok((await B.reconcileMissingOwnerAlerts(10))===0,
+   'already resolved tickets do not receive belated new-ticket alerts');
  await B.handleSupportCallback(999999999,999999999,'sup:o:history:'+siteTicket.id+':0');
  ok(sentMessages.some(m=>m.payload.chat_id===999999999&&String(m.payload.text||'').includes('الرسائل')),
    'owner can view paginated ticket history');

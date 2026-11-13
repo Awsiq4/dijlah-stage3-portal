@@ -5,7 +5,7 @@ import {q, qOne} from "./db.ts";
 import {sendMessage, tgFetch} from "./telegram.ts";
 import {canUseTelegramPublishing, type AdminInfo} from "./rbac.ts";
 import {defaultAudience,validAudience} from "./publisher-audience.ts";
-import {publishAssignment} from "./publish.ts";
+import {courseworkUrl, publishAssignment} from "./publish.ts";
 import {BOT_TOKEN, PORTAL_BASE_URL} from "./flags.ts";
 import {materialMime, validMaterialFile, storageConfigured, MAX_PDF_BYTES, uploadLectureFile} from "./storage.ts";
 import {safeFileUrl} from "../safe-url.ts";
@@ -99,7 +99,7 @@ export async function startAssignmentFlow(chatId: number, userId: number) {
   if (!admin || !canUseTelegramPublishing(admin)) {
     await sendMessage(chatId,"⛔ حسابك غير مخوّل لنشر الواجبات."); return;
   }
-  const data = {step:"subject",draftId:"asg-tg-"+chatId+"-"+Date.now()};
+  const data = {step:"subject",draftId:"asg-tg-"+randomBytes(12).toString("hex")};
   await setFlowState(chatId,"asg",data);
   await subjectOptions(chatId,admin);
 }
@@ -181,7 +181,7 @@ export async function handleAssignmentCallback(chatId: number,userId: number,dat
         await setFlowState(chatId,"",{});
         if (res.notificationEvents?.length) onPublished?.(res.notificationEvents);
         await sendMessage(chatId,res.inserted
-          ? "✅ تم نشر الواجب للطلاب.\n🔗 "+PORTAL_BASE_URL+"/assignments"
+          ? "✅ تم نشر الواجب للطلاب.\n🔗 "+PORTAL_BASE_URL+courseworkUrl("assignments",res.id,sections.length < ALL.length ? sections[0] : undefined)
           : "ℹ️ الواجب منشور مسبقاً، ولم تتم إعادة نشره.",
           {replyMarkup:{inline_keyboard:[[ {text:"📋 نشر واجب آخر",callback_data:"adm:asg"} ],...nav.inline_keyboard]}});
       } else {

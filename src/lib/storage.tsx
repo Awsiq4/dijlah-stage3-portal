@@ -3,7 +3,7 @@ import React,{createContext,useCallback,useContext,useEffect,useMemo,useRef,useS
 import {usePathname} from "next/navigation";
 import {SECTIONS} from "./seed";
 import {mapAuthoritativeContent} from "./public-map";
-import {needsPublicContent} from "./public-route";
+import {needsPublicContent,readsLinkedSection} from "./public-route";
 import {hasVerifiedSection,shouldRevalidate} from "./public-readiness";
 import type {PortalData,Section} from "./types";
 
@@ -51,7 +51,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
 
   useEffect(()=>{
     try{
-      const linkedPublication=pathname==="/announcements"||pathname?.startsWith("/lectures/")||pathname?.startsWith("/subjects/")||pathname?.startsWith("/questions/");
+      const linkedPublication=readsLinkedSection(pathname);
       const linkSection=linkedPublication?new URLSearchParams(window.location.search).get("section"):null;
       const savedSection=localStorage.getItem(SECTION_KEY);
       const selected=SECTIONS.includes(linkSection as Section)?linkSection:savedSection;

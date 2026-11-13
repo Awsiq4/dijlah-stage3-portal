@@ -34,10 +34,8 @@ export function studentWeek(data: Pick<PortalData, "assignments" | "exams" | "sc
 
   for (const quiz of data.exams) {
     if (quiz.type !== "كوز يومي" || !quiz.sections.includes(section) || !inWeek(quiz.date) || quiz.date < today) continue;
-    const begins = quiz.startTime ? Date.parse(quiz.date + "T" + quiz.startTime + ":00+03:00") : Number.NaN;
-    if (Number.isFinite(begins) && begins < now.getTime()) continue;
     items.push({id: quiz.id, kind: "quiz", title: quiz.title, subjectId: quiz.subjectId,
-      date: quiz.date, time: quiz.startTime || undefined, status: quiz.status,
+      date: quiz.date, status: quiz.status,
       href: "/exams#exam-" + encodeURIComponent(quiz.id)});
   }
 

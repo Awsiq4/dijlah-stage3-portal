@@ -1,10 +1,10 @@
 import {NextRequest, NextResponse} from "next/server";
-import {telegramServiceEnabled, botConfigured, dbConfigured, PORTAL_BASE_URL, WEBHOOK_SECRET} from "@/lib/server/flags";
+import {telegramServiceEnabled, botConfigured, dbConfigured, BOT_OWNER_ID, PORTAL_BASE_URL, WEBHOOK_SECRET} from "@/lib/server/flags";
 import {q} from "@/lib/server/db";
-import {getMe, setWebhook, tgFetch, syncBotCommands} from "@/lib/server/telegram";
+import {getMe, sendMessage, setWebhook, tgFetch, syncBotCommands} from "@/lib/server/telegram";
 import {expectedProductionWebhook,isOfficialProductionWebhook,isKnownProjectPreviewWebhook} from "@/lib/server/telegram-webhook-hosts";
 import {requireAdmin} from "@/lib/server/auth";
-import {publishAndDeliver} from "@/lib/server/notify";
+import {renderMessage} from "@/lib/server/templates";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const admin = await requireAdmin(req, {write: true});
   if (admin?.role !== "super_admin") return NextResponse.json({error: "forbidden"}, {status: 403});
+  if (process.env.VERCEL_ENV === "preview") return NextResponse.json({error: "إجراءات البوت غير متاحة في المعاينة."}, {status: 403});
   const body = await req.json().catch(() => ({}));
   if (body?.action === "configure-webhook") {
     if (!telegramServiceEnabled() || !WEBHOOK_SECRET) {
@@ -69,14 +70,17 @@ export async function POST(req: NextRequest) {
   }
   if (!telegramServiceEnabled()) return NextResponse.json({error: "service disabled (flag/db/bot missing)"}, {status: 503});
   if (body?.action !== "test") return NextResponse.json({error: "unknown action"}, {status: 400});
-  const result = await publishAndDeliver({
-    type: "test",
-    refId: `test-${Date.now()}`,
-    version: 1,
+  const ownerChatId = Number(BOT_OWNER_ID);
+  if (!Number.isSafeInteger(ownerChatId) || ownerChatId <= 0) {
+    return NextResponse.json({error: "حساب مالك البوت غير مهيأ لاستلام الاختبار."}, {status: 503});
+  }
+  const message = renderMessage({
+    type: "test", scope: "general",
     title: "رسالة اختبار من مركز إشعارات تليجرام",
-    body: `اختبار توصيل من لوحة الإدارة — ${new Date().toISOString()}`,
+    body: "اختبار توصيل من لوحة الإدارة.",
     url: "/",
-    scope: "general",
-  });
-  return NextResponse.json({ok: true, result});
+  }, PORTAL_BASE_URL);
+  const sent = await sendMessage(ownerChatId, message.text, {parseMode: message.parseMode});
+  if (!sent.ok) return NextResponse.json({error: "تعذّر إرسال رسالة الاختبار إلى المالك."}, {status: 502});
+  return NextResponse.json({ok: true});
 }

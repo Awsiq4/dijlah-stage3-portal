@@ -7,7 +7,7 @@ import {sendMessage} from "./telegram.ts";
 import {audit} from "./content.ts";
 import {canManageAllContent, canModifyContent, canWriteContentRecord, isActive, type AdminInfo} from "./rbac.ts";
 import {validAudience} from "./publisher-audience.ts";
-import {validExamDay,validExamTime,validExamSchedule} from "./exam-validation.ts";
+import {validExamDay,validExamSchedule} from "./exam-validation.ts";
 import {assignmentDayAllowed,assignmentDisplayDay,baghdadToday} from "../assignment-date.ts";
 import {safeFileUrl} from "../safe-url.ts";
 import {PORTAL_BASE_URL} from "./flags.ts";
@@ -85,7 +85,7 @@ function cleanValue(kind:CourseworkKind,field:Field,input:unknown):{value:unknow
   if((field==="title"||field==="instructions")&&!s)return {value:null,error:"هذا الحقل ما يصير فارغ"};
   if(field==="due_at"&&!assignmentDayAllowed(s))return {value:null,error:"اكتب تاريخ اليوم أو بعده YYYY-MM-DD، بدون ساعة"};
   if(field==="date"&&(!validExamDay(s)||s<baghdadToday()))return {value:null,error:"اكتب تاريخاً صحيحاً اليوم أو بعده YYYY-MM-DD"};
-  if(field==="start_time"&&!validExamTime(s))return {value:null,error:"اكتب الوقت HH:mm بتوقيت بغداد"};
+  if(field==="start_time")return {value:null,error:"الكوز اليومي يُحدد بالتاريخ فقط."};
   if(field==="status"){
     const available=kind==="a"?["active","closed","cancelled"]:["confirmed","provisional","cancelled"];
     if(!available.includes(s))return {value:null,error:"الحالة غير صالحة"};
@@ -158,14 +158,14 @@ async function showItem(chatId:number,admin:AdminInfo,kind:CourseworkKind,id:str
   const sections=Array.isArray(row.sections)?row.sections.join("، "):"—";
   const body=kind==="a"?
     `📄 التعليمات: ${short(row.instructions,900)}\n📅 آخر يوم للتسليم: ${assignmentDisplayDay(row.due_at)}\n📨 التسليم: ${short(row.submission)||"غير محدد"}\n📎 مرفق: ${row.attachment_url?"موجود":"لا يوجد"}`:
-    `📅 اليوم: ${short(row.date)}\n🕘 الوقت: ${short(row.start_time)}\n🏫 القاعة: ${short(row.room)||"غير محددة"}\n📖 المواضيع: ${short(row.topics,900)||"غير محددة"}\n🗒 الملاحظات: ${short(row.notes,300)||"لا توجد"}`;
+    `📅 اليوم: ${short(row.date)}\n🏫 القاعة: ${short(row.room)||"غير محددة"}\n📖 المواضيع: ${short(row.topics,900)||"غير محددة"}\n🗒 الملاحظات: ${short(row.notes,300)||"لا توجد"}`;
   await sendMessage(chatId,`${label(kind)}\n\n${short(row.title,180)}\n📘 المادة: ${short(row.subject_id,100)}
 🎯 الشعب: ${sections}\n📌 الحالة: ${ownerName(row)}\n${body}\n\n🔗 ${PORTAL_BASE_URL}/${kind==="a"?"assignments":"exams"}`,
       {replyMarkup:itemButtons(kind,id,Boolean(row.archived_at))});
 }
 function fieldButtons(kind:CourseworkKind,id:string) {
   return {inline_keyboard:[
-    ...FIELDS[kind].map((field,index)=>[{text:"✏️ "+NAMES[field],callback_data:`cw:f:${kind}:${index}:${id}`}]),
+    ...FIELDS[kind].flatMap((field,index)=>field==="start_time"?[]:[[{text:"✏️ "+NAMES[field],callback_data:`cw:f:${kind}:${index}:${id}`}]]),
     [{text:"🔙 المنشور",callback_data:`cw:i:${kind}:${id}`}],...nav.inline_keyboard,
   ]};
 }
@@ -225,8 +225,9 @@ export async function resumeCourseworkEdit(chatId:number,userId:number){
   if(!admin||state?.flow!=="manage-coursework")return;
   const d=state.data,field=String(d.field) as Field;
   if(String(d.actor)!==String(admin.id))return;
+  if(field==="start_time"){await sendMessage(chatId,"الكوز اليومي يُحدد بالتاريخ فقط.",{replyMarkup:nav});return;}
   if(d.step==="input"){
-    await sendMessage(chatId,`✏️ أرسل ${NAMES[field]} الجديد. ${field==="due_at"?"مثال: 2026-11-20 (بدون ساعة)":field==="date"?"مثال: 2026-11-20":field==="start_time"?"مثال: 09:30":""}`);
+    await sendMessage(chatId,`✏️ أرسل ${NAMES[field]} الجديد. ${field==="due_at"?"مثال: 2026-11-20 (بدون ساعة)":field==="date"?"مثال: 2026-11-20":""}`);
   } else if(d.step==="confirm")await presentProposed(chatId,d,d.nextValue);
   else if(d.step==="delete")await sendMessage(chatId,"هناك تأكيد حذف مفتوح. استخدم زر التأكيد أو الإلغاء.");
 }
@@ -261,6 +262,7 @@ export async function handleCourseworkCallback(chatId:number,userId:number,data:
     if(!validManageKind(kind))return;
     const id=ids.join(":"),field=FIELDS[kind][Number(index)];
     if(!field)return;
+    if(field==="start_time"){await sendMessage(chatId,"الكوز اليومي يُحدد بالتاريخ فقط.");return;}
     const row=await getCoursework(admin,kind,id);
     if(!row){await sendMessage(chatId,"هذا المنشور مو ضمن صلاحياتك.");return;}
     const d={kind,id,field,oldValue:row[field],step:"input",actor:admin.id};
@@ -282,7 +284,7 @@ export async function handleCourseworkCallback(chatId:number,userId:number,data:
       ]}});return;
     }
     await setFlowState(chatId,"manage-coursework",d);
-    await sendMessage(chatId,`✏️ اكتب ${NAMES[field]} الجديد.${field==="due_at"?"\n📅 تاريخ فقط YYYY-MM-DD بدون ساعة.":field==="date"?"\n📅 YYYY-MM-DD":field==="start_time"?"\n🕘 HH:mm (بتوقيت بغداد)":""}${["submission","attachment_url","room","topics","notes"].includes(field)?"\nأرسل «بدون» لمسح الحقل.":""}`,
+    await sendMessage(chatId,`✏️ اكتب ${NAMES[field]} الجديد.${field==="due_at"?"\n📅 تاريخ فقط YYYY-MM-DD بدون ساعة.":field==="date"?"\n📅 YYYY-MM-DD":""}${["submission","attachment_url","room","topics","notes"].includes(field)?"\nأرسل «بدون» لمسح الحقل.":""}`,
       {replyMarkup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:`cw:i:${kind}:${id}`}] ]}});
     return;
   }

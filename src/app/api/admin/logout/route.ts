@@ -1,11 +1,12 @@
 import {NextRequest, NextResponse} from "next/server";
-import {revokeSession, requireAdmin, SESSION_COOKIE} from "@/lib/server/auth";
+import {csrfWriteOk, revokeSession, requireAdmin, SESSION_COOKIE} from "@/lib/server/auth";
 import {audit} from "@/lib/server/content";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin(req, {write: true});
+  if (!csrfWriteOk(req)) return NextResponse.json({error: "forbidden"}, {status: 403});
+  const admin = await requireAdmin(req);
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (token) {
     await revokeSession(token).catch(() => undefined);
