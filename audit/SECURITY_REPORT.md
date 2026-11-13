@@ -4,7 +4,7 @@
 - Authz server-side لكل admin API (401 بدون جلسة — T09) وwebhook (401 بدون secret — T09) — PASS
 - RBAC ownership على كل mutation (publish.test.mjs) — PASS
 - SQLi: parameterized queries فقط — PASS (code review)
-- XSS: esc() في رسائل Бوت + React escaping — PASS
+- XSS: esc() في رسائل الوت + React escaping — PASS
 - Secrets: لا أسرار في git history؛ .env gitignored — PASS (T06)
 - Headers إنتاج: CSP, HSTS, XFO:DENY, nosniff, referrer-policy — PASS (T10)
 - Dependencies: npm audit prod = 0 — PASS (T05)
