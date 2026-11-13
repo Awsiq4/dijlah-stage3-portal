@@ -6,7 +6,7 @@ test("navigation inside a loaded section stays immediately ready",()=>{
   // Moving across Home, Subjects, Lectures, Announcements and Assignments
   // must not trigger a loading overlay for the same verified section.
   for(const route of ["/","/subjects","/subjects/optoelectronics",
-    "/lectures/one","/announcements","/assignments","/exams","/this-week"]) {
+    "/lectures/one","/questions/one","/announcements","/assignments","/exams","/this-week"]) {
     assert.equal(hasVerifiedSection(true,"ready","A","A"),true,route);
   }
 });
