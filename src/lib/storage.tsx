@@ -1,7 +1,7 @@
 "use client";
 import React,{createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from "react";
 import {usePathname} from "next/navigation";
-import {SEED,SECTIONS} from "./seed";
+import {SECTIONS} from "./seed";
 import {mapPublicContent} from "./public-map";
 import type {PortalData,Section} from "./types";
 
