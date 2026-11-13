@@ -221,15 +221,15 @@ test("teacher assignment defaults to allowed audience, rejects forged section on
 });
 
 
-test("quiz publishing uses subject + one date/time message and publishes once",async()=>{
+test("quiz publishing uses subject + date-only message and publishes once",async()=>{
  const pool=await makeDb();await linked(pool,2);sent.length=0;
  await handleAdminCallback(2,2,"adm:exam");
  assert.equal((await getFlowState(2)).data.step,"subject");
  await handleAdminCallback(2,2,"quiz:subj:nonlinear-optics");
  let state=await getFlowState(2);
- assert.equal(state.data.step,"datetime");
+ assert.equal(state.data.step,"date");
  assert.deepEqual(state.data.sections,["A"]);
- await handleAdminMessage(2,2,"2099-11-24 09:30");
+ await handleAdminMessage(2,2,"2099-11-24");
  state=await getFlowState(2);
  assert.equal(state.data.step,"confirm");
  assert.match(sent.at(-1).text,/2099-11-24/);
@@ -244,7 +244,7 @@ test("quiz publishing uses subject + one date/time message and publishes once",a
  assert.equal(rows[0].title,"كوز يومي");
  assert.equal(rows[0].type,"كوز يومي");
  assert.equal(rows[0].date,"2099-11-24");
- assert.equal(rows[0].start_time,"09:30");
+ assert.equal(rows[0].start_time,"");
  assert.equal(rows[0].topics,"محاضرات الفصل الأول");
  assert.deepEqual(asArr(rows[0].sections),["A"]);
  await handleAdminCallback(2,2,"pub:exam:"+state.data.nonce);
@@ -260,7 +260,7 @@ test("teacher quiz audience defaults to permitted sections and rejects forged ed
  assert.equal((await getFlowState(4)).data.step,"subject");
  await handleAdminCallback(4,4,"quiz:subj:nonlinear-optics");
  assert.deepEqual((await getFlowState(4)).data.sections,["A","B"]);
- await handleAdminMessage(4,4,"2099-11-24 09:30");
+ await handleAdminMessage(4,4,"2099-11-24");
  await handleAdminCallback(4,4,"quiz:aud");
  await handleAdminCallback(4,4,"quiz:aud:C");
  assert.equal((await getFlowState(4)).data.step,"audience");

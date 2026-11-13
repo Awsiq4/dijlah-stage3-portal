@@ -68,6 +68,7 @@ test("public layer (pg-mem): only published rows, section targeting correct, dra
   assert.deepEqual(c.summaries.map(l => l.id), ["summary-a"]); // draft excluded
   assert.deepEqual(c.announcements.map(a => a.id).sort(), ["a-A", "a-gen"]); // B excluded for section A
   assert.deepEqual(c.exams.map(e => e.id), ["e-AB"]); // C exam excluded
+  assert.deepEqual(c.questions, []); // additive bank migration may not be installed
   assert.deepEqual(c.schedule.map(x => x.id), ["s-A"]);
 
   const pubB = await getPublicContent("all", "B", defaultQueryer);

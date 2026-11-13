@@ -4,7 +4,7 @@ import {validExamDay,validExamTime,validExamSchedule} from "./exam-validation.ts
 
 const valid={
   subject_id:"nonlinear-optics",title:"كوز الفصل الأول",type:"كوز يومي",
-  date:"2099-11-25",start_time:"09:30",
+  date:"2099-11-25",start_time:"",
   sections:["A","B"],status:"confirmed",topics:"الفصل الأول",
 };
 test("Baghdad exam scheduling validates dates and local clock",()=>{
@@ -15,6 +15,8 @@ test("Baghdad exam scheduling validates dates and local clock",()=>{
  assert.equal(validExamTime("24:00"),false);
  assert.equal(validExamTime("9:30"),false);
  assert.equal(validExamSchedule(valid),null);
+ assert.equal(validExamSchedule({...valid,type:"Midterm",start_time:""}), "تاريخ الامتحان أو وقته غير صالح");
+ assert.equal(validExamSchedule({...valid,type:"Midterm",start_time:"09:30"}),null);
  assert.match(validExamSchedule({...valid,date:"2001-01-01"})||"",/مضى/);
  assert.equal(validExamSchedule({...valid,date:"2001-01-01"},false),null);
 });
