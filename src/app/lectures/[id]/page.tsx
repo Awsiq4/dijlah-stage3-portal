@@ -9,10 +9,16 @@ import {Empty,PageHeading} from "@/components/UI";
 import {formatDate,getSubject} from "@/lib/seed";
 export default function Lecture() {
   const {id} = useParams<{id: string}>();
-  const {data} = usePortal();
+  const {data,reloadContent} = usePortal();
   const summary = data.summaries?.find(item => item.id === id && item.status === "published");
   const lecture = summary || data.lectures.find(item => item.id === id && item.status === "published");
-  if (!lecture) return <Empty title="المحاضرة أو الملخص غير موجود"/>;
+  if (!lecture) return <div className="stack">
+    <Empty title="تعذّر العثور على المحاضرة أو الملخص" description="تحقق من الشعبة المختارة، أو أعد تحميل البيانات. إذا استمر الأمر فقد يكون الملف مؤرشفاً."/>
+    <div className="row-actions">
+      <button type="button" className="action-button" onClick={reloadContent}>تحديث البيانات</button>
+      <Link href="/subjects" className="action-button secondary">العودة للمواد</Link>
+    </div>
+  </div>;
   const subject = getSubject(data, lecture.subjectId);
   const safeUrl = safeFileUrl(lecture.fileUrl);
   const pdf = /\.pdf(?:$|[?#])/i.test(lecture.fileUrl) || /\.pdf$/i.test(lecture.fileName || "");

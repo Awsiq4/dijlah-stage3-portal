@@ -802,3 +802,19 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .student-week-link{color:var(--text);text-decoration:none}
 .student-week-link svg{flex:none;color:var(--primary)}
 :is([id^="assignment-"],[id^="exam-"],[id^="slot-"]){scroll-margin-top:100px}
+
+/* Public DB readiness: avoid showing stale seed data or wrong-section content. */
+.portal-content-loading {display:grid;gap:14px;min-height:45vh;padding:10px 0;}
+.portal-skeleton-line,.portal-skeleton-panel {
+ background:linear-gradient(100deg,var(--surface,rgba(125,135,150,.09)) 12%,rgba(125,135,150,.15) 36%,var(--surface,rgba(125,135,150,.09)) 62%);
+ background-size:200% 100%;animation:portal-skeleton-shimmer 1.6s ease-in-out infinite;
+ border:1px solid var(--border,rgba(125,135,150,.11));border-radius:12px;
+}
+.portal-skeleton-line{height:20px;max-width:420px;}
+.portal-skeleton-line.short{max-width:240px;height:14px;}
+.portal-skeleton-panel{height:118px;}
+.portal-content-error{max-width:700px;margin:24px auto;}
+.portal-content-error .panel-body{display:grid;gap:12px;}
+.portal-content-error .action-button{justify-self:start;}
+@keyframes portal-skeleton-shimmer{to{background-position-x:-200%;}}
+@media(prefers-reduced-motion:reduce){.portal-skeleton-line,.portal-skeleton-panel{animation:none;}}

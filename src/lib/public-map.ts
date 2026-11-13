@@ -77,3 +77,21 @@ export function mapPublicContent(c: PublicContentPayload): Partial<PortalData> {
   if (c.telegram) out.telegram = mapTelegram(c.telegram);
   return out;
 }
+
+
+/** An authoritative DB snapshot must replace every collection at once.
+ * Absent fields are empty, NOT preserved from a previous section or SEED.
+ */
+export function mapAuthoritativeContent(c: PublicContentPayload): PortalData {
+  const mapped = mapPublicContent(c);
+  return {
+    subjects: mapped.subjects ?? [],
+    lectures: mapped.lectures ?? [],
+    summaries: mapped.summaries ?? [],
+    announcements: mapped.announcements ?? [],
+    exams: mapped.exams ?? [],
+    assignments: mapped.assignments ?? [],
+    schedule: mapped.schedule ?? [],
+    telegram: mapped.telegram ?? {general: "", sections: {A: "", B: "", C: "", F: ""}, subjects: {}},
+  };
+}

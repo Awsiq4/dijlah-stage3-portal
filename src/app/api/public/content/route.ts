@@ -22,6 +22,8 @@ export async function GET(req: NextRequest) {
   if (!PUBLIC_TYPES.includes(type)) return NextResponse.json({error: "invalid type"}, {status: 400});
   const {fromDatabase, content} = await getPublicContent(type, section);
   const res = NextResponse.json({fromDatabase, section, type, content});
-  res.headers.set("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+  // Publishing and section changes must show the latest approved content.
+  // A long shared cache could show removed/old files or wrong counts.
+  res.headers.set("Cache-Control", "no-store, max-age=0");
   return res;
 }
