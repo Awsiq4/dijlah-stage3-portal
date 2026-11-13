@@ -145,8 +145,16 @@ export async function handleStudentCallback(chatId: number, userId: number, data
     return;
   }
   if (data === "stu:exams") {
-    const exams = await q<Record<string, unknown>>(`SELECT title, date, type, room FROM portal_exams WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') AND date >= CURRENT_DATE ORDER BY date LIMIT 8`, [sec]);
-    const asg = await q<Record<string, unknown>>(`SELECT title, due_at FROM portal_assignments WHERE archived_at IS NULL AND (sections IS NULL OR sections::text LIKE '%'||$1||'%') AND LEFT(due_at,10) >= $2 ORDER BY due_at LIMIT 8`, [sec,baghdadToday()]);
+    // Exam dates are YYYY-MM-DD TEXT, not PostgreSQL DATE. Compare with a
+    // Baghdad calendar-day TEXT parameter to avoid text >= date SQL errors.
+    const exams = await q<Record<string, unknown>>(`SELECT title, date, type, room FROM portal_exams
+      WHERE archived_at IS NULL AND status <> 'cancelled'
+      AND sections @> $1::jsonb AND date >= $2::text
+      ORDER BY date, start_time LIMIT 8`, [JSON.stringify([sec]),baghdadToday()]);
+    const asg = await q<Record<string, unknown>>(`SELECT title, due_at FROM portal_assignments
+      WHERE archived_at IS NULL AND status = 'active'
+      AND sections @> $1::jsonb AND LEFT(due_at,10) >= $2::text
+      ORDER BY due_at LIMIT 8`, [JSON.stringify([sec]),baghdadToday()]);
     const text = [
       exams.length ? "📝 الامتحانات:\n" + exams.map(e => `• ${e.title} — ${e.date} ${e.room ? "· " + e.room : ""}`).join("\n") : "",
       asg.length ? "📄 الواجبات:\n" + asg.map(a => `• ${a.title} — حتى ${assignmentDisplayDay(a.due_at)}`).join("\n") : "",
