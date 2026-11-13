@@ -1,0 +1,5 @@
+id,severity,feature,file,root cause,status,fix,retest
+B01,P3,security headers,CSP script-src unsafe-inline,next.config,open,—,—
+B02,P3,deps,6 dev-only vulnerabilities,package.json,open,—,—
+B03,P2,bot,real delivery unverified,—,—,BLOCKED T15,—
+B04,P2,prod db,direct schema compare on prod DB,—,—,BLOCKED T16,—
