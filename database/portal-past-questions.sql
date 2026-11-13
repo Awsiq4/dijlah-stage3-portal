@@ -1,4 +1,4 @@
--- Telegram-only bank for past exam questions. No student-site UI changes.
+-- Published past exam questions: Telegram uploads and student subject-tab reads.
 -- Additive migration; all existing data and notification preferences are retained.
 CREATE TABLE IF NOT EXISTS portal_past_questions (
   id TEXT PRIMARY KEY,

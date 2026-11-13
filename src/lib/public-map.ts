@@ -1,7 +1,7 @@
 import {safeFileUrl} from "./safe-url.ts";
 // Pure mappers: DB rows (snake_case) -> client PortalData types (camelCase).
 // Type-only import is erased at runtime, so this file is unit-testable under node.
-import type {Announcement, Assignment, Exam, Lecture, PortalData, ScheduleSlot, Section, Subject} from "./types";
+import type {Announcement, Assignment, Exam, Lecture, PastQuestion, PortalData, ScheduleSlot, Section, Subject} from "./types";
 
 const s = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 const asArray = (v: unknown): string[] => {
@@ -27,6 +27,11 @@ export const mapExam = (r: Record<string, unknown>): Exam => ({
   id: s(r.id), subjectId: s(r.subject_id), title: s(r.title), type: s(r.type), date: s(r.date), startTime: s(r.start_time),
   room: s(r.room), sections: asArray(r.sections) as Section[], topics: s(r.topics), notes: s(r.notes),
   status: (s(r.status) || "provisional") as Exam["status"],
+});
+export const mapPastQuestion = (r: Record<string, unknown>): PastQuestion => ({
+  id: s(r.id), subjectId: s(r.subject_id), examKind: (["quiz", "midterm", "final"].includes(s(r.exam_kind)) ? s(r.exam_kind) : "quiz") as PastQuestion["examKind"],
+  title: s(r.title), academicYear: s(r.academic_year), fileUrl: safeFileUrl(s(r.file_url)),
+  fileName: s(r.file_name), sections: asArray(r.sections) as Section[], createdAt: s(r.created_at),
 });
 export const mapAssignment = (r: Record<string, unknown>): Assignment => ({
   id: s(r.id), subjectId: s(r.subject_id), title: s(r.title), instructions: s(r.instructions), assignedAt: s(r.assigned_at),
@@ -58,6 +63,7 @@ export type PublicContentPayload = {
   summaries?: Record<string, unknown>[];
   announcements?: Record<string, unknown>[];
   exams?: Record<string, unknown>[];
+  questions?: Record<string, unknown>[];
   assignments?: Record<string, unknown>[];
   schedule?: Record<string, unknown>[];
   telegram?: Record<string, unknown>[];
@@ -72,6 +78,7 @@ export function mapPublicContent(c: PublicContentPayload): Partial<PortalData> {
   if (c.summaries) out.summaries = c.summaries.map(mapLecture);
   if (c.announcements) out.announcements = c.announcements.map(mapAnnouncement);
   if (c.exams) out.exams = c.exams.map(mapExam);
+  if (c.questions) out.questions = c.questions.map(mapPastQuestion);
   if (c.assignments) out.assignments = c.assignments.map(mapAssignment);
   if (c.schedule) out.schedule = c.schedule.map(mapScheduleSlot);
   if (c.telegram) out.telegram = mapTelegram(c.telegram);
@@ -90,6 +97,7 @@ export function mapAuthoritativeContent(c: PublicContentPayload): PortalData {
     summaries: mapped.summaries ?? [],
     announcements: mapped.announcements ?? [],
     exams: mapped.exams ?? [],
+    questions: mapped.questions ?? [],
     assignments: mapped.assignments ?? [],
     schedule: mapped.schedule ?? [],
     telegram: mapped.telegram ?? {general: "", sections: {A: "", B: "", C: "", F: ""}, subjects: {}},

@@ -8,6 +8,7 @@ test("public-map: snake_case rows map to camelCase client types", () => {
     lectures: [{id: "l", subject_id: "s", number: "2", title: "t", status: "published", file_url: "/f.pdf", file_name: "f.pdf", updated_at: "2026-11-05"}],
     announcements: [{id: "a", title: "t", body: "b", scope: "section", section: "A", subject_id: "s", author: "x", priority: "urgent", published_at: "2026-11-05", pinned: true}],
     exams: [{id: "e", subject_id: "s", title: "t", sections: '["A","B"]', status: "confirmed"}],
+    questions: [{id:"q1",subject_id:"s",exam_kind:"quiz",title:"Test",sections:["A"],file_url:"https://example.com/test.pdf"}],
     assignments: [{id: "w", subject_id: "s", title: "t", sections: ["F"], status: "active"}],
     schedule: [{id: "c", section: "A", day: 6, start: "09:00", end: "10:35", kind: "practical", periods: '["09:00–09:45"]'}],
     telegram: [
@@ -23,6 +24,7 @@ test("public-map: snake_case rows map to camelCase client types", () => {
   assert.equal(mapped.announcements[0].pinned, true);
   assert.equal(mapped.announcements[0].priority, "urgent");
   assert.deepEqual(mapped.exams[0].sections, ["A", "B"]);
+  assert.equal(mapped.questions[0].subjectId,"s");
   assert.deepEqual(mapped.assignments[0].sections, ["F"]);
   assert.equal(mapped.schedule[0].kind, "practical");
   assert.deepEqual(mapped.schedule[0].periods, ["09:00–09:45"]);
@@ -56,6 +58,7 @@ test("authoritative section payload cannot retain stale entries from seed or ano
   assert.deepEqual(second.announcements,[]);
   assert.deepEqual(second.assignments,[]);
   assert.deepEqual(second.exams,[]);
+  assert.deepEqual(second.questions,[]);
   assert.deepEqual(second.schedule,[]);
   assert.equal(second.subjects.length,1);
   assert.equal(second.telegram.sections.A,"");

@@ -5,7 +5,7 @@ import {q,qOne} from "./db.ts";
 import {sendMessage} from "./telegram.ts";
 import {canUseTelegramPublishing, type AdminInfo} from "./rbac.ts";
 import {defaultAudience,validAudience,PUBLISH_SECTIONS} from "./publisher-audience.ts";
-import {validExamDay,validExamTime,validExamSchedule} from "./exam-validation.ts";
+import {validExamDay,validExamSchedule} from "./exam-validation.ts";
 import {publishExam} from "./publish.ts";
 import {PORTAL_BASE_URL} from "./flags.ts";
 
@@ -20,15 +20,13 @@ async function subjects(chatId:number,admin:AdminInfo) {
     replyMarkup:{inline_keyboard:[...available.map(s=>[{text:s.name,callback_data:"quiz:subj:"+s.id}]),...nav.inline_keyboard]}
   });
 }
-async function askDatetime(chatId:number) {
-  await sendMessage(chatId,"📅 أرسل موعد الكوز برسالة وحدة (بتوقيت بغداد):\nمثال: 2026-11-25 09:30",
-    {replyMarkup:nav});
+async function askDate(chatId:number) {
+  await sendMessage(chatId,"📅 أرسل تاريخ الكوز فقط (بتوقيت بغداد):\nمثال: 2099-11-25",{replyMarkup:nav});
 }
-function parseWhen(text:string):{date:string;start_time:string}|null {
-  const m=/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/.exec(text.trim());
-  return m&&validExamDay(m[1])&&validExamTime(m[2])&&
-    Date.parse(m[1]+"T"+m[2]+":00+03:00")>Date.now()
-    ?{date:m[1],start_time:m[2]}:null;
+function parseDate(text:string):{date:string;start_time:string}|null {
+  const date=text.trim();
+  return validExamDay(date) && Date.parse(date+"T23:59:59+03:00")>Date.now()
+    ? {date,start_time:""} : null;
 }
 async function preview(chatId:number,d:Draft) {
   const {setFlowState}=await bot();
@@ -36,7 +34,7 @@ async function preview(chatId:number,d:Draft) {
   await setFlowState(chatId,"exam",{...d,step:"confirm",nonce});
   const row=await qOne<{name:string}>("SELECT name FROM portal_subjects WHERE id=$1",[String(d.subjectId)]);
   const text="📝 معاينة الكوز\n\n📘 "+(row?.name||d.subjectId)+
-    "\n📅 "+String(d.date||"")+" · "+String(d.start_time||"")+" (بغداد)"+
+    "\n📅 "+String(d.date||"")+
     "\n🎯 "+(Array.isArray(d.sections)?d.sections.join("، "):"")+
     (d.title&&d.title!==("كوز يومي — "+(row?.name||d.subjectId))?"\n✏️ "+d.title:"")+
     (d.room?"\n🏫 "+d.room:"")+
@@ -60,7 +58,7 @@ async function audience(chatId:number,admin:AdminInfo,subjectId:string) {
 }
 async function details(chatId:number) {
   await sendMessage(chatId,"✏️ التفاصيل الإضافية اختيارية. اختَر الشيء اللي تريد تعدله:",{replyMarkup:{inline_keyboard:[
-    [{text:"📅 الموعد",callback_data:"quiz:edit:datetime"},{text:"✏️ العنوان",callback_data:"quiz:edit:title"}],
+    [{text:"📅 التاريخ",callback_data:"quiz:edit:date"},{text:"✏️ العنوان",callback_data:"quiz:edit:title"}],
     [{text:"🏫 القاعة",callback_data:"quiz:edit:room"},{text:"📖 المواضيع",callback_data:"quiz:edit:topics"}],
     [{text:"🗒 ملاحظات",callback_data:"quiz:edit:notes"}],
     [{text:"🔙 رجوع للمعاينة",callback_data:"quiz:preview"}],...nav.inline_keyboard
@@ -82,7 +80,7 @@ export async function resumeExamDraft(chatId:number,userId:number) {
   if(!admin||state?.flow!=="exam")return;
   const d=state.data,step=String(d.step||"");
   if(step==="subject")await subjects(chatId,admin);
-  else if(step==="datetime")await askDatetime(chatId);
+  else if(step==="date"||step==="datetime")await askDate(chatId);
   else if(step==="confirm")await preview(chatId,d);
   else if(step==="audience")await audience(chatId,admin,String(d.subjectId||""));
   else if(step==="more")await details(chatId);
@@ -108,8 +106,8 @@ export async function handleExamCallback(chatId:number,userId:number,data:string
     if(!subject||!validAudience(admin,subjectId,sections)){
       await sendMessage(chatId,"المادة مو ضمن صلاحيات حسابك.");return;
     }
-    await setFlowState(chatId,"exam",{...d,subjectId,sections,step:"datetime"});
-    await askDatetime(chatId);return;
+    await setFlowState(chatId,"exam",{...d,subjectId,sections,step:"date"});
+    await askDate(chatId);return;
   }
   if(data==="quiz:aud") {
     if(step!=="confirm")return;
@@ -137,9 +135,9 @@ export async function handleExamCallback(chatId:number,userId:number,data:string
   if(data.startsWith("quiz:edit:")) {
     if(step!=="more")return;
     const key=data.slice("quiz:edit:".length);
-    if(!["datetime","title","room","topics","notes"].includes(key))return;
-    await setFlowState(chatId,"exam",{...d,step:"edit:"+key});
-    await sendMessage(chatId,key==="datetime"?"📅 اكتب الموعد الجديد: YYYY-MM-DD HH:mm":
+    if(!["date","datetime","title","room","topics","notes"].includes(key))return;
+    await setFlowState(chatId,"exam",{...d,step:"edit:"+(key==="datetime"?"date":key)});
+    await sendMessage(chatId,key==="date"||key==="datetime"?"📅 اكتب التاريخ الجديد: YYYY-MM-DD":
       "✏️ أرسل القيمة الجديدة (أو تخطي لحذف التفاصيل):",{replyMarkup:nav});
     return;
   }
@@ -157,7 +155,7 @@ export async function handleExamCallback(chatId:number,userId:number,data:string
       const input={
         id:String(d.draftId||""),subjectId:String(d.subjectId||""),sections,
         title:String(d.title||"كوز يومي"),type:"كوز يومي",
-        date:String(d.date||""),start_time:String(d.start_time||""),
+        date:String(d.date||""),start_time:"",
         room:String(d.room||""),topics:String(d.topics||""),notes:String(d.notes||""),
         status:"confirmed",source:"telegram" as const,
       };
@@ -188,16 +186,16 @@ export async function handleExamMessage(chatId:number,userId:number,text:string)
   const admin=await getLinkedAdmin(userId),state=await getFlowState(chatId);
   if(!admin||!canUseTelegramPublishing(admin)||state?.flow!=="exam")return;
   const d=state.data,step=String(d.step||"");
-  if(step==="datetime") {
-    const parsed=parseWhen(text);
-    if(!parsed){await sendMessage(chatId,"⚠️ الموعد غير صحيح أو مضى. مثال: 2026-11-25 09:30");return;}
+  if(step==="date"||step==="datetime") {
+    const parsed=parseDate(text);
+    if(!parsed){await sendMessage(chatId,"⚠️ التاريخ غير صحيح أو مضى. مثال: 2099-11-25");return;}
     await preview(chatId,{...d,...parsed,title:"كوز يومي"});return;
   }
   if(step.startsWith("edit:")) {
     const key=step.slice(5),value=text.trim();
-    if(key==="datetime"){
-      const parsed=parseWhen(value);
-      if(!parsed){await sendMessage(chatId,"⚠️ اكتب موعداً قادماً مثل 2026-11-25 09:30");return;}
+    if(key==="date"||key==="datetime"){
+      const parsed=parseDate(value);
+      if(!parsed){await sendMessage(chatId,"⚠️ اكتب تاريخاً قادماً مثل 2099-11-25");return;}
       await preview(chatId,{...d,...parsed});return;
     }
     if(!["title","room","topics","notes"].includes(key))return;

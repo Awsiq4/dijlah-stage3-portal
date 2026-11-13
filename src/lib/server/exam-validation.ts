@@ -24,8 +24,10 @@ export function validExamSchedule(input: Record<string,unknown>, requireFuture =
   const status = String(input.status || "provisional");
   if (!subject || subject.length > 120 || !title || title.length > 180 ||
       !type || type.length > 80) return "المادة أو عنوان الامتحان أو نوعه غير صالح";
-  if (!validExamDay(date) || !validExamTime(start)) return "تاريخ الامتحان أو وقته غير صالح";
-  const at = Date.parse(date+"T"+start+":00+03:00");
+  const isQuiz = type === "كوز يومي";
+  if (!validExamDay(date) || (!isQuiz && !validExamTime(start)) ||
+      (isQuiz && start !== "" && !validExamTime(start))) return "تاريخ الامتحان أو وقته غير صالح";
+  const at = Date.parse(date+(isQuiz ? "T23:59:59+03:00" : "T"+start+":00+03:00"));
   if (!Number.isFinite(at) || (requireFuture && at < Date.now()-60_000))
     return "موعد الامتحان مضى أو غير صالح";
   if (!Array.isArray(sections) || !sections.length ||

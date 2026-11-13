@@ -2,7 +2,8 @@ import {NextRequest, NextResponse} from "next/server";
 import {hashToken} from "@/lib/server/rbac";
 import {hashPassword, createSession, SESSION_COOKIE, SESSION_TTL_SECONDS, checkLoginRateLimit, csrfWriteOk} from "@/lib/server/auth";
 import {withTx} from "@/lib/server/db";
-import {dbConfigured} from "@/lib/server/flags";
+import {dbConfigured, PORTAL_BASE_URL, telegramServiceEnabled} from "@/lib/server/flags";
+import {sendMessage} from "@/lib/server/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     );
     if (!row) return {status: 409} as const;
     await db.q(`INSERT INTO portal_audit (actor, action, detail) VALUES ($1,$2,$3)`, [inv.email, "users.activated", {role: inv.role}]);
-    return {status: 200, email: inv.email, role: inv.role, session: await createSession(row.id, db)} as const;
+    return {status: 200, email: inv.email, role: inv.role, telegramId: inv.telegram_expected_id, session: await createSession(row.id, db)} as const;
   }).catch((error: unknown) => {
     if (error instanceof TelegramIdentityConflict ||
       (error && typeof error === "object" && "constraint" in error && error.constraint === "idx_portal_admins_telegram_expected_id")) {
@@ -63,7 +64,16 @@ export async function POST(req: NextRequest) {
       : "هذا الحساب موجود بالفعل. انتقل إلى تسجيل الدخول.";
     return NextResponse.json({error}, {status: result.status});
   }
-  const res = NextResponse.json({ok: true, email: result.email, role: result.role});
+  let telegramNotification: "sent" | "start_required" | "not_requested" =
+    result.telegramId ? "start_required" : "not_requested";
+  if (result.telegramId && telegramServiceEnabled()) {
+    const notification = await sendMessage(Number(result.telegramId),
+      "✅ تم تفعيل حسابك في بوابة المرحلة الثالثة.\n" +
+      "يمكنك الدخول للموقع ونشر المحتوى بصلاحيات حسابك.\n" +
+      PORTAL_BASE_URL + "/admin\n\nاضغط /start لعرض قائمة النشر.");
+    if (notification.ok) telegramNotification = "sent";
+  }
+  const res = NextResponse.json({ok: true, email: result.email, role: result.role, telegramNotification});
   res.cookies.set(SESSION_COOKIE, result.session, {httpOnly: true, sameSite: "lax", secure: true, path: "/", maxAge: SESSION_TTL_SECONDS});
   return res;
 }
