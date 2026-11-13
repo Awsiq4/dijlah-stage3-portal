@@ -1,69 +1,138 @@
 "use client";
-import React, {createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from "react";
+import React,{createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from "react";
+import {usePathname} from "next/navigation";
 import {SEED,SECTIONS} from "./seed";
-import {mergeById} from "./merge";
 import {mapPublicContent} from "./public-map";
 import type {PortalData,Section} from "./types";
 
-type State = { data:PortalData; setData:(updater:(current:PortalData)=>PortalData)=>void; section:Section; setSection:(value:Section)=>void; dark:boolean; toggleDark:()=>void; reset:()=>void; hydrated:boolean };
+export type ContentStatus = "loading" | "ready" | "error";
+type State = {
+  data:PortalData;
+  setData:(updater:(current:PortalData)=>PortalData)=>void;
+  section:Section;
+  setSection:(value:Section)=>void;
+  dark:boolean;
+  toggleDark:()=>void;
+  reset:()=>void;
+  hydrated:boolean;
+  contentStatus:ContentStatus;
+  contentSection:Section|null;
+  contentPath:string|null;
+  reloadContent:()=>void;
+};
 const Context=createContext<State|null>(null);
-const STORE_KEY="dijlah-stage3-prototype-data-v3";
 const SECTION_KEY="dijlah-stage3-section";
-const SCHED_HASH_KEY="dijlah-stage3-schedule-hash";
-const hashStr=(v:string)=>{let h=5381;for(let i=0;i<v.length;i++)h=(h*33^v.charCodeAt(i))>>>0;return h.toString(36);};
 const THEME_KEY="dijlah-stage3-theme";
 
+// Never render baked-in prototype or localStorage content as published content.
+// Preserve only personal preferences (section and theme) between visits.
+const emptyData:PortalData={
+  subjects:[],lectures:[],summaries:[],schedule:[],exams:[],announcements:[],assignments:[],
+  telegram:{general:"",sections:{A:"",B:"",C:"",F:""},subjects:{}},
+};
+
 export function PortalProvider({children}:{children:React.ReactNode}){
-  const [data,updateData]=useState<PortalData>(SEED);
+  const pathname=usePathname();
+  const [data,updateData]=useState<PortalData>(emptyData);
   const [section,updateSection]=useState<Section>("A");
   const [dark,setDark]=useState(false);
   const [hydrated,setHydrated]=useState(false);
+  const [contentStatus,setContentStatus]=useState<ContentStatus>("loading");
+  const [contentSection,setContentSection]=useState<Section|null>(null);
+  const [contentPath,setContentPath]=useState<string|null>(null);
+  const [reloadTick,setReloadTick]=useState(0);
+  const fetchSerial=useRef(0);
   const themeCleanup=useRef<(()=>void)|null>(null);
-  // When the public read-only API reports fromDatabase:true, server-published content
-  // becomes authoritative and is NOT written back into the localStorage prototype store.
-  const fromServer=useRef(false);
+
   useEffect(()=>{
-    try {
-      const stored=localStorage.getItem(STORE_KEY);
-      if(stored){const parsed=JSON.parse(stored) as Partial<PortalData>; updateData({...SEED,...parsed,lectures:mergeById(SEED.lectures,parsed.lectures),schedule:(parsed.schedule&&localStorage.getItem(SCHED_HASH_KEY)===hashStr(JSON.stringify(SEED.schedule)))?mergeById(SEED.schedule,parsed.schedule):SEED.schedule,exams:mergeById(SEED.exams,parsed.exams),announcements:mergeById(SEED.announcements,parsed.announcements),assignments:mergeById(SEED.assignments,parsed.assignments),telegram:{...SEED.telegram,...parsed.telegram,sections:{...SEED.telegram.sections,...parsed.telegram?.sections}}});}
-      const linkedPublication = window.location.pathname === "/announcements" || window.location.pathname.startsWith("/lectures/");
-      const linkSection = linkedPublication ? new URLSearchParams(window.location.search).get("section") : null;
-      const sel = SECTIONS.includes(linkSection as Section) ? linkSection : localStorage.getItem(SECTION_KEY);
-      if(SECTIONS.includes(sel as Section))updateSection(sel as Section);
-      const pref=localStorage.getItem(THEME_KEY);
+    try{
+      const linkedPublication=pathname==="/announcements"||pathname?.startsWith("/lectures/");
+      const linkSection=linkedPublication?new URLSearchParams(window.location.search).get("section"):null;
+      const savedSection=localStorage.getItem(SECTION_KEY);
+      const selected=SECTIONS.includes(linkSection as Section)?linkSection:savedSection;
+      if(SECTIONS.includes(selected as Section))updateSection(selected as Section);
+      const preference=localStorage.getItem(THEME_KEY);
       const mq=window.matchMedia("(prefers-color-scheme: dark)");
-      const applyTheme=(useDark:boolean)=>{setDark(useDark);document.documentElement.dataset.theme=useDark?"dark":"light";};
-      applyTheme(pref?pref==="dark":mq.matches);
-      const onSystem=(e:MediaQueryListEvent)=>{if(!localStorage.getItem(THEME_KEY))applyTheme(e.matches);};
+      const apply=(enabled:boolean)=>{
+        setDark(enabled);
+        document.documentElement.dataset.theme=enabled?"dark":"light";
+      };
+      apply(preference?preference==="dark":mq.matches);
+      const onSystem=(e:MediaQueryListEvent)=>{
+        if(!localStorage.getItem(THEME_KEY))apply(e.matches);
+      };
       mq.addEventListener("change",onSystem);
       themeCleanup.current=()=>mq.removeEventListener("change",onSystem);
-    }catch(err){console.warn("Stored prototype content was not usable",err);}
-    try{localStorage.setItem(SCHED_HASH_KEY,hashStr(JSON.stringify(SEED.schedule)));}catch(err){}
+    }catch(err){console.warn("Unable to read local display preferences",err);}
     setHydrated(true);
+  // Only read the deep-link query once, not every time a route changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
-  useEffect(()=>()=>{themeCleanup.current?.();},[]);
-  // Public read-only server layer: if a database is configured, published content from
-  // PostgreSQL overrides the prototype data for display; localStorage stays untouched.
+  useEffect(()=>()=>themeCleanup.current?.(),[]);
+
   useEffect(()=>{
     if(!hydrated)return;
-    let cancelled=false;
-    fetch(`/api/public/content?type=all&section=${section}`,{cache:"no-store"})
-      .then(r=>r.json())
-      .then(j=>{
-        if(cancelled||!j||j.fromDatabase!==true||!j.content)return;
-        fromServer.current=true;
-        updateData(prev=>({...prev,...mapPublicContent(j.content)}));
-      })
-      .catch(()=>{});
-    return ()=>{cancelled=true;};
-  },[hydrated,section]);
-  useEffect(()=>{if(hydrated&&!fromServer.current)localStorage.setItem(STORE_KEY,JSON.stringify(data));},[data,hydrated]);
-  useEffect(()=>{if(hydrated)localStorage.setItem(SECTION_KEY,section);},[section,hydrated]);
-  useEffect(()=>{document.documentElement.dataset.theme=dark?"dark":"light";},[dark]);
+    const controller=new AbortController();
+    const requestId=++fetchSerial.current;
+    setContentStatus("loading");
+    const get=async()=>{
+      try {
+        const response=await fetch(`/api/public/content?type=all&section=${section}`,
+          {cache:"no-store",signal:controller.signal});
+        if(!response.ok)throw new Error("public-content-http-"+response.status);
+        const payload=await response.json();
+        if(!payload||payload.fromDatabase!==true||!payload.content)
+          throw new Error("public-content-not-authoritative");
+        if(controller.signal.aborted||requestId!==fetchSerial.current)return;
+        const content=mapPublicContent(payload.content);
+        // Every collection comes only from the current DB response.
+        // Missing collections default to empty, never to SEED or a previous section.
+        updateData({
+          subjects:content.subjects??[],
+          lectures:content.lectures??[],
+          summaries:content.summaries??[],
+          schedule:content.schedule??[],
+          exams:content.exams??[],
+          announcements:content.announcements??[],
+          assignments:content.assignments??[],
+          telegram:content.telegram??emptyData.telegram,
+        });
+        setContentSection(section);
+        setContentPath(pathname||"/");
+        setContentStatus("ready");
+      }catch(err){
+        if(controller.signal.aborted||requestId!==fetchSerial.current)return;
+        console.warn("Public content could not be loaded",
+          err instanceof Error?err.message:"unknown");
+        setContentStatus("error");
+      }
+    };
+    void get();
+    return ()=>controller.abort();
+  },[hydrated,section,pathname,reloadTick]);
+  useEffect(()=>{
+    if(hydrated)try{localStorage.setItem(SECTION_KEY,section);}catch{/* unavailable storage */}
+  },[section,hydrated]);
+  useEffect(()=>{
+    document.documentElement.dataset.theme=dark?"dark":"light";
+  },[dark]);
   const setData=useCallback((updater:(current:PortalData)=>PortalData)=>updateData(prev=>updater(prev)),[]);
-  const reset=useCallback(()=>{updateData(SEED);},[]);
-  const toggleDark=useCallback(()=>setDark(v=>{const next=!v;try{localStorage.setItem(THEME_KEY,next?"dark":"light");}catch(err){}return next;}),[]);
-  const value=useMemo(()=>({data,setData,section,setSection:updateSection,dark,toggleDark,reset,hydrated}),[data,setData,section,dark,toggleDark,reset,hydrated]);
+  const reloadContent=useCallback(()=>setReloadTick(v=>v+1),[]);
+  const reset=reloadContent;
+  const toggleDark=useCallback(()=>setDark(v=>{
+    const next=!v;
+    try{localStorage.setItem(THEME_KEY,next?"dark":"light");}catch{/* unavailable storage */}
+    return next;
+  }),[]);
+  const value=useMemo(()=>({
+    data,setData,section,setSection:updateSection,dark,toggleDark,reset,hydrated,
+    contentStatus,contentSection,contentPath,reloadContent,
+  }),[data,setData,section,dark,toggleDark,reset,hydrated,
+      contentStatus,contentSection,contentPath,reloadContent]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
-export function usePortal(){const ctx=useContext(Context);if(!ctx)throw new Error("PortalProvider missing");return ctx;}
+export function usePortal(){
+  const ctx=useContext(Context);
+  if(!ctx)throw new Error("PortalProvider missing");
+  return ctx;
+}
