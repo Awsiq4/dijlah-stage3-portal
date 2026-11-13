@@ -10,7 +10,7 @@ process.env.SESSION_SECRET = "pgmem-test-secret";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const {newDb} = await import("pg-mem");
 const {buildUpsert} = await import("./content-schema.ts");
-const {setPoolForTests, withTx, q} = await import("./db.ts");
+const {setPoolForTests, withTx, q, forceVerifiedPgTlsConnectionString} = await import("./db.ts");
 const {audit, auditBestEffort} = await import("./content.ts");
 
 // Mock pool that records the exact SQL lifecycle of a transaction.
@@ -114,4 +114,18 @@ test("migration safety (real SQL semantics via pg-mem): DO NOTHING preserves adm
   assert.equal((await pool.query(`SELECT title FROM portal_announcements WHERE id='m-1'`)).rows[0].title, "seed-title");
   assert.equal(await count(), 1); // still one row — idempotent
   await pool.end();
+});
+
+
+test("database SSL modes always require verified TLS certificates and hostname", () => {
+  const url = "postgresql://test-user:test-pass@example.neon.tech:5432/neondb";
+  for (const mode of ["prefer", "require", "verify-ca", "disable", "allow", "verify-full"]) {
+    const before = url + "?sslmode=" + mode + "&application_name=portal";
+    const normalized = new URL(forceVerifiedPgTlsConnectionString(before));
+    assert.equal(normalized.searchParams.get("sslmode"), "verify-full");
+    assert.equal(normalized.searchParams.get("application_name"), "portal");
+    assert.equal(normalized.hostname, "example.neon.tech");
+  }
+  assert.equal(forceVerifiedPgTlsConnectionString(url), url);
+  assert.equal(forceVerifiedPgTlsConnectionString("not-a-pg-url"), "not-a-pg-url");
 });
