@@ -58,10 +58,10 @@ export function ExamForm({account,initial,mode="quiz",onSaved}:{
     (rep&&!isAll&&(sections.length!==1||sections[0]!==account.assigned_section))) {
     setNotice("اختَر المادة والشعب والنوع واكتب عنواناً صحيحاً.");return;
   }
-  if(!isValidDay(date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)){
-    setNotice("حدد تاريخاً ووقتاً صحيحين للامتحان.");return;
+  if(!isValidDay(date)||(schedule&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))){
+    setNotice(schedule?"حدد تاريخاً ووقتاً صحيحين للامتحان.":"حدد تاريخاً صحيحاً للكوز.");return;
   }
-  if(!initial && Date.parse(date+"T"+time+":00+03:00")<=Date.now()){
+  if(!initial && Date.parse(date+(schedule?"T"+time+":00+03:00":"T23:59:59+03:00"))<=Date.now()){
     setNotice("يجب أن يكون الامتحان الجديد بموعد قادم.");return;
   }
   if(room.length>120||topics.length>3000||notes.length>3000){
@@ -71,7 +71,7 @@ export function ExamForm({account,initial,mode="quiz",onSaved}:{
   try {
    if(!id.current)id.current="web-"+crypto.randomUUID();
    const row={id:id.current,subject_id:subject,title:title.trim(),type:kind.trim(),date,
-     start_time:time,room:room.trim(),topics:topics.trim(),notes:notes.trim(),sections,status};
+     start_time:schedule?time:"",room:room.trim(),topics:topics.trim(),notes:notes.trim(),sections,status};
    const {response,data}=await request("exams",row,{editing:Boolean(initial),subject:available.find(item=>item.id===subject)?.name});
    if(data.cancelled)return;
    if(!response.ok){setNotice(data.error||"تعذّر نشر الامتحان.");return;}
@@ -107,9 +107,9 @@ export function ExamForm({account,initial,mode="quiz",onSaved}:{
   <label className="form-field"><span>التاريخ *</span>
    <input required type="date" value={date} onChange={e=>setDate(e.target.value)}/>
   </label>
-  <label className="form-field"><span>وقت البدء (بغداد) *</span>
+  {schedule && <label className="form-field"><span>وقت البدء (بغداد) *</span>
    <input required type="time" value={time} onChange={e=>setTime(e.target.value)}/>
-  </label>
+  </label>}
   <div className="form-field wide"><span>الشعب المشمولة *</span>
    <div className="section-pills">
     {(!teacher||allowed.length===ALL.length)&&<label><input type="checkbox" checked={isAll}

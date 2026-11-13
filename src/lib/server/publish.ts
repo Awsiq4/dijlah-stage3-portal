@@ -132,9 +132,13 @@ async function enqueueNewPublication(db: Queryer, type: WritableContentType, row
     }
   } else if (type === "exams" && row.status !== "cancelled") {
     const sections = Array.isArray(row.sections) ? [...new Set(row.sections.map(String))] : [];
+    const quiz = String(row.type) === "كوز يومي";
     const info = {type: "exam" as const, refId, title,
-      body: "النوع: " + String(row.type || "") + "\nالتاريخ: " + String(row.date || "") +
-        "\nالوقت: " + String(row.start_time || "") + "\nالقاعة: " + String(row.room || "غير محددة"),
+      body: "النوع: " + String(row.type || "") + "\n📅 التاريخ: " + String(row.date || "") +
+        (quiz || !row.start_time ? "" : "\n🕒 الوقت: " + String(row.start_time)) +
+        (row.room ? "\n🏫 القاعة: " + String(row.room) : "") +
+        (row.topics ? "\n📖 المواضيع: " + String(row.topics) : "") +
+        (row.notes ? "\n🗒 ملاحظات: " + String(row.notes) : ""),
       url: "/exams", subject_id};
     if (sections.length === 4 && ["A","B","C","F"].every(s => sections.includes(s))) {
       await enqueue({...info, version: 1, scope: "general"});
@@ -234,7 +238,7 @@ export async function publishExam(admin: AdminInfo, input: Record<string, unknow
   const draft: Record<string,unknown> = {
     id, subject_id: subjectId, title: String(input.title || "").trim(),
     type: String(input.type || "").trim(), date: String(input.date || ""),
-    start_time: String(input.start_time || ""), room: String(input.room || "").trim(),
+    start_time: String(input.type || "").trim() === "كوز يومي" ? "" : String(input.start_time || ""), room: String(input.room || "").trim(),
     sections, topics: String(input.topics || "").trim(), notes: String(input.notes || "").trim(),
     status: String(input.status || "provisional"),
   };
@@ -287,6 +291,7 @@ export async function applyContentUpsert(
 ): Promise<PublishOk | void> {
   const id = String(row.id);
   const clean = sanitizeRow(type, row);
+  if (type === "exams" && clean.type === "كوز يومي") clean.start_time = "";
   if (type === "exams") {
     const validationError = validExamSchedule(clean, false);
     if (validationError) throw Object.assign(new Error(validationError), {status: 400});

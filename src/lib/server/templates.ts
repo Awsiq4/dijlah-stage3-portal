@@ -21,9 +21,13 @@ export function renderMessage(event: TgEvent & {title: string; body?: string | n
       text = `📚 <b>محاضرة جديدة</b>${subject ? `\n📘 المادة: <b>${esc(subject)}</b>` : ""}\n📄 المحاضرة: <b>${esc(event.title)}</b>${audience}${description}\n\n📎 <a href="${esc(link)}">فتح المحاضرة</a>`;
       break;
     }
-    case "exam":
-      text = `📢 <b>تحديث امتحان/كويز</b>\nالمادة: ${esc(event.title)}${section}\n\n${esc(event.body || "تم تعديل تفاصيل الامتحان.")}\n\n${btn}`;
+    case "exam": {
+      const subject = event.subjectName?.trim();
+      const quiz = (event.body || "").includes("النوع: كوز يومي");
+      const audience = section ? "\n🎯 "+section.trim() : "\n🎯 الشعب: جميع الشعب";
+      text = `${quiz ? "📝 <b>كوز جديد</b>" : "📢 <b>موعد امتحان</b>"}${subject ? "\n📘 المادة: <b>"+esc(subject)+"</b>" : ""}${audience}\n📌 العنوان: <b>${esc(event.title)}</b>\n\n${esc(event.body || "تفاصيل الامتحان في البوابة.")}\n\n${btn}`;
       break;
+    }
     case "assignment":
       text = `📝 <b>واجب جديد</b>\n${esc(event.title)}${section}\n\n${esc(event.body || "")}\n\n${btn}`;
       break;
