@@ -2,7 +2,7 @@
 import React,{createContext,useCallback,useContext,useEffect,useMemo,useRef,useState} from "react";
 import {usePathname} from "next/navigation";
 import {SECTIONS} from "./seed";
-import {mapPublicContent} from "./public-map";
+import {mapAuthoritativeContent} from "./public-map";
 import type {PortalData,Section} from "./types";
 
 export type ContentStatus = "loading" | "ready" | "error";
@@ -81,22 +81,12 @@ export function PortalProvider({children}:{children:React.ReactNode}){
           {cache:"no-store",signal:controller.signal});
         if(!response.ok)throw new Error("public-content-http-"+response.status);
         const payload=await response.json();
-        if(!payload||payload.fromDatabase!==true||!payload.content)
+        if(!payload||payload.fromDatabase!==true||!payload.content||payload.section!==section)
           throw new Error("public-content-not-authoritative");
         if(controller.signal.aborted||requestId!==fetchSerial.current)return;
-        const content=mapPublicContent(payload.content);
-        // Every collection comes only from the current DB response.
-        // Missing collections default to empty, never to SEED or a previous section.
-        updateData({
-          subjects:content.subjects??[],
-          lectures:content.lectures??[],
-          summaries:content.summaries??[],
-          schedule:content.schedule??[],
-          exams:content.exams??[],
-          announcements:content.announcements??[],
-          assignments:content.assignments??[],
-          telegram:content.telegram??emptyData.telegram,
-        });
+        // Replace the entire snapshot in one state update; no old section
+        // data, localStorage prototype content or baked-in SEED can leak in.
+        updateData(mapAuthoritativeContent(payload.content));
         setContentSection(section);
         setContentPath(pathname||"/");
         setContentStatus("ready");
