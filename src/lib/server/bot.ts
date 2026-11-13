@@ -562,8 +562,8 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
         });
         if (questionResult.ok) await clearState(chatId);
         else await previewDraft(chatId, "lec", d);
-        const questionUrl = PORTAL_BASE_URL + "/subjects/" + encodeURIComponent(String(d.subjectId)) +
-          "?tab=questions&section=" + encodeURIComponent(sections[0] || "A");
+        const questionUrl = PORTAL_BASE_URL + "/questions/" + encodeURIComponent(questionResult.ok ? questionResult.id : "") +
+          "?section=" + encodeURIComponent(sections[0] || "A");
         await sendMessage(chatId, questionResult.ok
           ? questionResult.inserted
             ? `✅ <b>نُشرت أسئلة الامتحان في البوابة</b>\n\n📘 المادة: <b>${escapeHtml(subject?.name || String(d.subjectId))}</b>\n📝 النوع: ${escapeHtml(EXAM_KINDS[d.examKind as keyof typeof EXAM_KINDS])}\n📄 العنوان: ${escapeHtml(String(d.title || ""))}\n🎯 الجمهور: ${audienceLabel(sections)}`
@@ -571,7 +571,7 @@ export async function handleAdminCallback(chatId: number, userId: number, data: 
           : `⛔ لم تُنشر الأسئلة: ${escapeHtml(questionResult.error)}`, {
           parseMode:"HTML",
           replyMarkup: questionResult.ok
-            ? {inline_keyboard: [[{text:"📚 عرض الأسئلة في البوابة",url:questionUrl}],...adminMenu(admin).inline_keyboard]}
+            ? {inline_keyboard: [[{text:"📄 عرض الملف داخل البوابة",url:questionUrl}],...adminMenu(admin).inline_keyboard]}
             : adminMenu(admin),
         });
         return;

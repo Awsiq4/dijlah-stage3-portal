@@ -51,7 +51,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
 
   useEffect(()=>{
     try{
-      const linkedPublication=pathname==="/announcements"||pathname?.startsWith("/lectures/")||pathname?.startsWith("/subjects/");
+      const linkedPublication=pathname==="/announcements"||pathname?.startsWith("/lectures/")||pathname?.startsWith("/subjects/")||pathname?.startsWith("/questions/");
       const linkSection=linkedPublication?new URLSearchParams(window.location.search).get("section"):null;
       const savedSection=localStorage.getItem(SECTION_KEY);
       const selected=SECTIONS.includes(linkSection as Section)?linkSection:savedSection;

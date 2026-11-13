@@ -3,5 +3,5 @@
 export function needsPublicContent(pathname:string|null|undefined):boolean {
   if(!pathname)return false;
   return pathname==="/" ||
-    /^\/(?:subjects|schedule|announcements|assignments|exams|lectures|this-week|notifications)(?:\/|$)/.test(pathname);
+    /^\/(?:subjects|schedule|announcements|assignments|exams|lectures|questions|this-week|notifications)(?:\/|$)/.test(pathname);
 }
