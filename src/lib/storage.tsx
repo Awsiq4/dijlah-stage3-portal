@@ -28,7 +28,7 @@ const THEME_KEY="dijlah-stage3-theme";
 // Never render baked-in prototype or localStorage content as published content.
 // Preserve only personal preferences (section and theme) between visits.
 const emptyData:PortalData={
-  subjects:[],lectures:[],summaries:[],schedule:[],exams:[],announcements:[],assignments:[],
+  subjects:[],lectures:[],summaries:[],schedule:[],exams:[],questions:[],announcements:[],assignments:[],
   telegram:{general:"",sections:{A:"",B:"",C:"",F:""},subjects:{}},
 };
 
@@ -51,7 +51,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
 
   useEffect(()=>{
     try{
-      const linkedPublication=pathname==="/announcements"||pathname?.startsWith("/lectures/");
+      const linkedPublication=pathname==="/announcements"||pathname?.startsWith("/lectures/")||pathname?.startsWith("/subjects/");
       const linkSection=linkedPublication?new URLSearchParams(window.location.search).get("section"):null;
       const savedSection=localStorage.getItem(SECTION_KEY);
       const selected=SECTIONS.includes(linkSection as Section)?linkSection:savedSection;
@@ -78,6 +78,8 @@ export function PortalProvider({children}:{children:React.ReactNode}){
   useEffect(()=>{
     if(!hydrated||!needsData)return;
     const controller=new AbortController();
+    let timedOut=false;
+    const timeout=setTimeout(()=>{timedOut=true;controller.abort();},12000);
     lastRequestedAt.current=Date.now();
     const requestId=++fetchSerial.current;
     // New section or first visit: wait for a verified snapshot.
@@ -97,7 +99,7 @@ export function PortalProvider({children}:{children:React.ReactNode}){
         setContentSection(section);
         setContentStatus("ready");
       }catch(err){
-        if(controller.signal.aborted||requestId!==fetchSerial.current)return;
+        if((controller.signal.aborted&&!timedOut)||requestId!==fetchSerial.current)return;
         console.warn("Public content could not be loaded",
           err instanceof Error?err.message:"unknown");
         // Do not hide verified content because a background refresh failed.
@@ -105,8 +107,8 @@ export function PortalProvider({children}:{children:React.ReactNode}){
         if(!verified)setContentStatus("error");
       }
     };
-    void load();
-    return ()=>controller.abort();
+    void load().finally(()=>clearTimeout(timeout));
+    return ()=>{clearTimeout(timeout);controller.abort();};
   // Important: no pathname dependency. Changing routes within a section
   // must NOT refetch data or display the loading skeleton.
   // eslint-disable-next-line react-hooks/exhaustive-deps

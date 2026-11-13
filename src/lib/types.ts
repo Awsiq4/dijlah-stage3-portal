@@ -51,6 +51,17 @@ export interface Exam {
   notes: string;
   status: ExamStatus;
 }
+export interface PastQuestion {
+  id: string;
+  subjectId: string;
+  examKind: "quiz" | "midterm" | "final";
+  title: string;
+  academicYear: string;
+  fileUrl: string;
+  fileName: string;
+  sections: Section[];
+  createdAt: string;
+}
 export interface Announcement {
   id: string;
   title: string;
@@ -81,6 +92,7 @@ export interface PortalData {
   summaries?: Lecture[];
   schedule: ScheduleSlot[];
   exams: Exam[];
+  questions: PastQuestion[];
   announcements: Announcement[];
   assignments: Assignment[];
   telegram: { general: string; sections: Record<Section, string>; subjects: Record<string, string> };
