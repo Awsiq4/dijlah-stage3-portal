@@ -6,6 +6,7 @@ import {BookOpen,CalendarDays,House,Menu,MessageSquareText,Moon,Sun,Shield,Arrow
 import {SECTIONS} from "@/lib/seed";
 import {usePortal} from "@/lib/storage";
 import {needsPublicContent} from "@/lib/public-route";
+import {hasVerifiedSection} from "@/lib/public-readiness";
 import SectionOnboarding from "@/components/SectionOnboarding";
 import type {Section} from "@/lib/types";
 import React, {createContext, useContext, useEffect, useState} from "react";
@@ -18,9 +19,9 @@ export function useAdminNavigation() {
 }
 const nav=[{href:"/",label:"الرئيسية",Icon:House},{href:"/subjects",label:"المواد",Icon:BookOpen},{href:"/schedule",label:"الجدول",Icon:CalendarDays},{href:"/announcements",label:"التبليغات",Icon:MessageSquareText},{href:"/more",label:"المزيد",Icon:Menu}];
 export default function AppShell({children}:{children:React.ReactNode}){
- const path=usePathname();const {section,setSection,dark,toggleDark,hydrated,contentStatus,contentSection,contentPath,reloadContent}=usePortal();
+ const path=usePathname();const {section,setSection,dark,toggleDark,hydrated,contentStatus,contentSection,reloadContent}=usePortal();
  const contentDependsOnDb = needsPublicContent(path);
- const contentReady = hydrated && contentStatus==="ready" && contentSection===section && contentPath===path;
+ const contentReady = hasVerifiedSection(hydrated,contentStatus,contentSection,section);
  const publicChildren= !contentDependsOnDb || contentReady ? children :
    contentStatus==="error" && hydrated ? <section className="portal-content-error panel" role="alert">
      <div className="panel-body">
