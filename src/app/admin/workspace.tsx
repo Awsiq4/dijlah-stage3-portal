@@ -208,7 +208,14 @@ export function UsersTab() {
     const j = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setNotice(j.error || "فشل إنشاء الدعوة"); return; }
-    setNotice(`✅ تم إنشاء الدعوة. رابط التفعيل (مرة واحدة): ${j.setupUrl}`);
+    const delivery = j.telegramNotification === "sent"
+      ? "📨 وصل إشعار الدعوة إلى Telegram."
+      : j.telegramNotification === "start_required"
+        ? "⚠️ لم يصل إشعار Telegram بعد؛ لازم المستخدم يفتح البوت ويضغط Start أولاً."
+        : j.telegramNotification === "not_configured"
+          ? "⚠️ بوت Telegram غير مهيأ للإشعارات حالياً."
+          : "لم يُحدّد Telegram ID.";
+    setNotice(`✅ تم إنشاء الدعوة. رابط التفعيل (مرة واحدة): ${j.setupUrl}\n${delivery}${j.telegramStartUrl?"\nرابط فتح البوت: "+j.telegramStartUrl:""}`);
     setForm({email: "", name: "", role: "section_representative", assigned_section: "A", telegram_user_id: "", telegram_username: ""});
     load();
   };

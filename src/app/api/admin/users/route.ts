@@ -4,7 +4,8 @@ import {requireAdmin} from "@/lib/server/auth";
 import {canManageUsers, newToken, hashToken, ROLES, SECTIONS} from "@/lib/server/rbac";
 import {withTx, q} from "@/lib/server/db";
 import {audit} from "@/lib/server/content";
-import {dbConfigured, PORTAL_BASE_URL} from "@/lib/server/flags";
+import {dbConfigured, PORTAL_BASE_URL, BOT_USERNAME, telegramServiceEnabled} from "@/lib/server/flags";
+import {sendMessage} from "@/lib/server/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,22 @@ export async function POST(req: NextRequest) {
     return true;
   });
   if (!issued) return NextResponse.json({error: "رقم Telegram ID مسجّل لحساب آخر أو لدعوة فعّالة."}, {status: 409});
-  return NextResponse.json({ok: true, email, role, setupUrl: `${PORTAL_BASE_URL}/admin/setup?token=${encodeURIComponent(token)}`});
+  // Do not claim Telegram delivery unless the bot was able to send it.
+  // Bots cannot initiate a private chat until the recipient first presses Start.
+  let telegramNotification: "sent" | "start_required" | "not_configured" | "not_requested" =
+    telegramId ? "start_required" : "not_requested";
+  if (telegramId && telegramServiceEnabled()) {
+    const notification = await sendMessage(Number(telegramId),
+      "📩 تم إنشاء دعوة لحساب ناشر في بوابة طلبة المرحلة الثالثة.\n" +
+      "👤 " + name.slice(0, 100) + "\n" +
+      "🔐 استلم رابط التفعيل الخاص بك من مالك البوابة.\n" +
+      "بعد تفعيل الحساب افتح /start للوصول إلى قائمة النشر.");
+    telegramNotification = notification.ok ? "sent" : "start_required";
+  } else if (telegramId) telegramNotification = "not_configured";
+  return NextResponse.json({ok: true, email, role,
+    setupUrl: `${PORTAL_BASE_URL}/admin/setup?token=${encodeURIComponent(token)}`,
+    telegramNotification,
+    telegramStartUrl: BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=welcome` : null});
 }
 
 // PATCH: edit account (role/assignments/status). Suspending revokes sessions + telegram links immediately.

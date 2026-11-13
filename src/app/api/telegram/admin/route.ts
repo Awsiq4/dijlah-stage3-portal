@@ -1,7 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import {telegramServiceEnabled, botConfigured, dbConfigured, PORTAL_BASE_URL, WEBHOOK_SECRET} from "@/lib/server/flags";
 import {q} from "@/lib/server/db";
-import {getMe, setWebhook, tgFetch} from "@/lib/server/telegram";
+import {getMe, setWebhook, tgFetch, syncBotCommands} from "@/lib/server/telegram";
 import {expectedProductionWebhook,isOfficialProductionWebhook,isKnownProjectPreviewWebhook} from "@/lib/server/telegram-webhook-hosts";
 import {requireAdmin} from "@/lib/server/auth";
 import {publishAndDeliver} from "@/lib/server/notify";
@@ -57,13 +57,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({error: "Bot is connected to an unknown deployment; manual verification required"}, {status: 409});
     const configured = await setWebhook(target, WEBHOOK_SECRET);
     if (!configured.ok) return NextResponse.json({error: "Telegram webhook registration failed"}, {status: 502});
-    const info = await tgFetch<{url: string; pending_update_count: number; last_error_date?: number}>("getWebhookInfo", {});
+    const [info, commandsConfigured] = await Promise.all([tgFetch<{url: string; pending_update_count: number; last_error_date?: number}>("getWebhookInfo", {}), syncBotCommands()]);
     return NextResponse.json({
       ok: info.ok && info.result?.url === target,
       bot: bot.result?.username,
       webhookHost: new URL(target).host,
       pendingUpdates: info.result?.pending_update_count,
       lastErrorAt: info.result?.last_error_date || null,
+      commandsConfigured,
     });
   }
   if (!telegramServiceEnabled()) return NextResponse.json({error: "service disabled (flag/db/bot missing)"}, {status: 503});
