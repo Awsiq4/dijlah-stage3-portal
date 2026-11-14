@@ -3,6 +3,7 @@ import type {Metadata, Viewport} from "next";
 import Script from "next/script";
 import {PortalProvider} from "@/lib/storage";
 import AppShell from "@/components/AppShell";
+import {PortalInstallation} from "@/components/PortalInstallation";
 export const metadata:Metadata={
  metadataBase:new URL("https://dj3.top"),
  title:"بوابة طلبة المرحلة الثالثة | هندسة الليزر والإلكترونيات البصرية",
@@ -15,9 +16,10 @@ export const metadata:Metadata={
   images:[{url:"/images/university-mark.png",width:1024,height:1024,alt:"شعار جامعة دجلة"}],
  },
  twitter:{card:"summary"},
+ appleWebApp:{title:"بوابة المرحلة الثالثة"},
 };
 export const viewport:Viewport={width:"device-width",initialScale:1};
 export default function RootLayout({children}:{children:React.ReactNode}){
  const themeInit=`(function(){try{var t=localStorage.getItem("dijlah-stage3-theme");var d=t?t==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.dataset.theme=d?"dark":"light";}catch(e){document.documentElement.dataset.theme="light";}})();`;
- return <html lang="ar" dir="rtl" suppressHydrationWarning><body><Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{__html:themeInit}}/><PortalProvider><AppShell>{children}</AppShell></PortalProvider></body></html>;
+ return <html lang="ar" dir="rtl" suppressHydrationWarning><body><Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{__html:themeInit}}/><PortalInstallation><PortalProvider><AppShell>{children}</AppShell></PortalProvider></PortalInstallation></body></html>;
 }
