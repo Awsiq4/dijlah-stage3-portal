@@ -4,7 +4,7 @@ import {getPublicContent} from "@/lib/server/public";
 export const dynamic="force-dynamic";
 const site="https://dj3.top";
 const paths=["/","/subjects","/schedule","/announcements",
-  "/assignments","/exams","/this-week","/about-department","/support"];
+  "/assignments","/exams","/this-week","/about-department","/install","/support"];
 
 export default async function sitemap():Promise<MetadataRoute.Sitemap> {
   const base:MetadataRoute.Sitemap=paths.map(path=>({

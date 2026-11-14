@@ -1,0 +1,83 @@
+.guide {
+  max-width: 760px;
+}
+
+.body {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+}
+
+.body p {
+  margin: 0;
+}
+
+.body :is(button, select, summary, input) {
+  min-height: 44px;
+}
+
+.body :is(button, select, summary, input):focus-visible {
+  outline: 2px solid var(--primary-strong);
+  outline-offset: 2px;
+}
+
+.deviceHeading,
+.installed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.deviceHeading svg,
+.installed svg {
+  flex-shrink: 0;
+}
+
+.installed {
+  color: var(--st-success-text);
+}
+
+.steps {
+  margin: 8px 0 0;
+  padding-inline-start: 1.4rem;
+}
+
+.steps li + li {
+  margin-top: 7px;
+}
+
+.other,
+.picker {
+  width: 100%;
+}
+
+.other {
+  border-top: 1px solid var(--border);
+}
+
+.other summary {
+  cursor: pointer;
+  padding-block: 8px;
+  font-weight: 700;
+}
+
+.picker {
+  display: grid;
+  gap: 5px;
+  padding-block: 4px;
+}
+
+.picker select,
+.link {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.copyStatus:empty {
+  position: absolute;
+}
