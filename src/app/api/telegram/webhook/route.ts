@@ -26,9 +26,7 @@ const HELP = `🤖 بوت بوابة طلبة المرحلة الثالثة
 /settings — إعدادات الإشعارات
 /status — حالة الاشتراك
 /stop — إيقاف الإشعارات
-/help — مساعدة
-
-ℹ️ معلومات الخصوصية: /privacy`;
+/help — مساعدة`;
 
 function sectionKeyboard() {
   return {inline_keyboard: SECTIONS.map(s => [{text: `شعبة ${s}`, callback_data: `sec:${s}`}]), one_time_keyboard: true};
@@ -70,12 +68,6 @@ async function handleCommand(chatId: number, text: string, arg: string, from?: {
     return;
   }
   if (cmd === "/help") { await sendMessage(chatId, HELP); return; }
-  if (cmd === "/privacy") {
-    // Privacy information remains accessible on request even though usage
-    // analytics and historic opt-out preferences are not menu controls.
-    await sendMessage(chatId, "🔒 معلومات الخصوصية\n\nنحفظ بيانات حساب Telegram (الاسم، اليوزر، المعرّف) والشعبة وإعدادات التنبيه وتواريخ التسجيل وآخر نشاط. نُسجّل أنواع الأوامر والأقسام المستخدمة لإعداد إحصائيات إدارة البوابة وتحسين الخدمة، دون تسجيل نصوص المحادثات الدراسية العادية. يُحتفظ بسجل التفاعل حتى 90 يوماً.\n\nعند إرسال طلب دعم تُحفظ الرسائل والمرفقات داخل الطلب حتى يتمكن المالك من الرد. الأمر /stop يوقف إشعارات البوت فقط.");
-    return;
-  }
   if (cmd === "/section") {
     await sendMessage(chatId, "اختر شعبتك الدراسية:", {replyMarkup: sectionKeyboard()});
     return;
