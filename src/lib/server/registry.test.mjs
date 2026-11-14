@@ -262,15 +262,15 @@ test("owner analytics logs only safe classified interactions, never message cont
 });
 
 
-// Keep owner-only usage analytics operational, without the old student controls.
-// Student privacy details remain available when the student requests /privacy.
-test("Telegram student help has no usage analytics toggle and does not auto-send a tracking message", () => {
+// Keep owner-only usage analytics operational without student-facing privacy or analytics commands.
+test("Telegram student help excludes privacy and analytics commands without disabling owner metrics", () => {
   const webhook = readFileSync(path.join(root, "src/app/api/telegram/webhook/route.ts"), "utf8");
   const studentHelp = webhook.slice(webhook.indexOf("const HELP = "), webhook.indexOf("function sectionKeyboard()"));
   assert.doesNotMatch(studentHelp, /analytics_(?:off|on)|تتبع الاستخدام|تحليلات الاستخدام/);
   assert.doesNotMatch(webhook, /cmd === "\/analytics_(?:on|off)"/);
   assert.doesNotMatch(webhook, /خصوصيتك مهمة:/);
-  assert.match(webhook, /if \(cmd === "\/privacy"\)/);
+  assert.doesNotMatch(webhook, /if \(cmd === "\/privacy"\)/);
+  assert.doesNotMatch(studentHelp, /\/privacy/);
   assert.match(webhook, /await recordBotActivity\(update\)/);
   const activity = readFileSync(path.join(root, "src/lib/server/owner-intelligence.ts"), "utf8");
   assert.match(activity, /INSERT INTO tg_student_activity/);
