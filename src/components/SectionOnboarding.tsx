@@ -1,6 +1,7 @@
 "use client";
 import React,{useEffect,useState} from "react";
 import Image from "next/image";
+import {usePathname} from "next/navigation";
 import {SECTIONS} from "@/lib/seed";
 import {usePortal} from "@/lib/storage";
 import type {Section} from "@/lib/types";
@@ -9,6 +10,7 @@ const ONBOARD_KEY="dijlah-stage3-onboarded";
 const SECTION_KEY="dijlah-stage3-section";
 
 export default function SectionOnboarding(){
+  const pathname=usePathname();
   const {section,setSection,hydrated}=usePortal();
   const [visible,setVisible]=useState(false);
   const [choice,setChoice]=useState<Section|null>(null);
@@ -31,7 +33,7 @@ export default function SectionOnboarding(){
     setVisible(false);
   };
 
-  if(!visible)return null;
+  if(!visible||pathname==="/about-portal")return null;
   return <div className="onboard-overlay" role="dialog" aria-modal="true" aria-label="اختيار الشعبة الدراسية">
     <div className="onboard-card">
       <Image className="onboard-logo" src="/images/department-logo.png" width={986} height={915} alt="شعار قسم هندسة الليزر والإلكترونيات البصرية" priority/>
