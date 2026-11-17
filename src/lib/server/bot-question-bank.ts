@@ -1,6 +1,7 @@
 // Dedicated Telegram past-exam question bank; does not modify student website pages.
 // Database table is added by database/portal-past-questions.sql.
 import {withTx, q, qOne} from "./db.ts";
+import {lockCurrentContentAdmin} from "./content-access.ts";
 import {canModifyContent, canPublishMaterial, isActive, type AdminInfo} from "./rbac.ts";
 import {safeFileUrl} from "../safe-url.ts";
 import {put} from "@vercel/blob";
@@ -92,6 +93,10 @@ export async function publishPastQuestion(admin: AdminInfo, input: {
   if (!await questionBankReady()) return {ok: false, error: "بنك الأسئلة قيد الإعداد، ولم تُفعّل قاعدة بياناته بعد"};
   const title = input.title.trim().slice(0, 180);
   return withTx(async tx => {
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current || !canPublishMaterial(current, input.subjectId, input.sections))
+      return {ok: false as const, error: "لا تملك صلاحية النشر لهذه المادة أو الشعب"};
+    admin = current;
     // The unique index prevents concurrent duplicate files across publishers.
     const row = await tx.qOne<{id: string}>(
       `INSERT INTO portal_past_questions
@@ -128,27 +133,38 @@ export async function listPastQuestions(subjectId: string, section: string, kind
     ORDER BY created_at DESC LIMIT 12 OFFSET $${offset}`, vals);
 }
 
+function canManagePastQuestion(admin: AdminInfo, row: PastQuestion): boolean {
+  const sections = Array.isArray(row.sections) && row.sections.length ? row.sections : [...ALL];
+  return canModifyContent(admin, row) && canPublishMaterial(admin, row.subject_id, sections);
+}
+
 export async function listOwnQuestions(admin: AdminInfo, page = 0) {
   if (!isActive(admin) || !await questionBankReady()) return [];
   const privileged = admin.role === "super_admin" || admin.role === "editor";
-  return q<PastQuestion>(
+  const rows = await q<PastQuestion>(
     `SELECT id,subject_id,exam_kind,title,academic_year,file_url,file_name,created_by,sections,created_at,archived_at
      FROM portal_past_questions ${privileged ? "" : "WHERE created_by=$1"} ORDER BY created_at DESC LIMIT 12 OFFSET $${privileged ? 1 : 2}`,
     privileged ? [Math.max(page, 0) * 12] : [admin.id, Math.max(page, 0) * 12]
   );
+  return rows.filter(row => canManagePastQuestion(admin, row));
 }
 
 export async function getOwnPastQuestion(admin: AdminInfo, id: string): Promise<PastQuestion | null> {
   if (!isActive(admin) || !await questionBankReady()) return null;
   const row = await qOne<PastQuestion>("SELECT * FROM portal_past_questions WHERE id=$1", [id]);
-  return row && canModifyContent(admin, row) ? row : null;
+  return row && canManagePastQuestion(admin, row) ? row : null;
 }
 
 export async function modifyPastQuestion(admin: AdminInfo, id: string, action: "archive" | "restore" | "delete") {
   if (!isActive(admin) || !await questionBankReady()) return false;
   return withTx(async tx => {
-    const row = await tx.qOne<{created_by:number}>("SELECT created_by FROM portal_past_questions WHERE id=$1 FOR UPDATE", [id]);
-    if (!row || !canModifyContent(admin,row)) return false;
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current) return false;
+    admin = current;
+    const row = await tx.qOne<PastQuestion>("SELECT * FROM portal_past_questions WHERE id=$1 FOR UPDATE", [id]);
+    // Ownership is necessary, but a changed subject/section assignment also
+    // revokes authority over existing content and old Telegram callbacks.
+    if (!row || !canManagePastQuestion(admin, row)) return false;
     if (action === "delete") await tx.q("DELETE FROM portal_past_questions WHERE id=$1", [id]);
     else await tx.q("UPDATE portal_past_questions SET archived_at=$2 WHERE id=$1", [id, action === "archive" ? new Date().toISOString() : null]);
     await tx.q("INSERT INTO portal_audit(actor,action,detail) VALUES($1,$2,$3)",

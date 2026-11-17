@@ -10,7 +10,7 @@
     "verify": "node scripts/verify-structure.mjs",
     "verify:schedule": "node --experimental-strip-types scripts/verify-schedule.mjs",
     "gen:schedule-csv": "node --experimental-strip-types scripts/gen-schedule-csv.mjs",
-    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/assignment-terminology.test.mjs src/lib/public-map.test.mjs src/lib/public-route.test.mjs src/lib/public-readiness.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs src/lib/server/owner-mfa.test.mjs src/lib/server/content-schema.test.mjs src/lib/server/db.test.mjs src/lib/server/public.test.mjs src/lib/server/rbac.test.mjs src/lib/server/publish.test.mjs src/lib/server/admin-api.test.mjs src/lib/server/notify.test.mjs src/lib/server/exam-validation.test.mjs src/lib/server/registry.test.mjs src/lib/server/telegram-webhook-hosts.test.mjs",
+    "test": "node --experimental-strip-types --test src/lib/merge.test.mjs src/lib/assignment-terminology.test.mjs src/lib/public-map.test.mjs src/lib/public-route.test.mjs src/lib/public-readiness.test.mjs src/lib/server/server.test.mjs src/lib/server/auth.test.mjs src/lib/server/owner-mfa.test.mjs src/lib/server/content-schema.test.mjs src/lib/server/db.test.mjs src/lib/server/public.test.mjs src/lib/server/rbac.test.mjs src/lib/server/publish.test.mjs src/lib/server/admin-api.test.mjs src/lib/server/notify.test.mjs src/lib/server/exam-validation.test.mjs src/lib/server/registry.test.mjs src/lib/server/telegram-webhook-hosts.test.mjs src/lib/server/content-security.test.mjs src/lib/server/auth-routes.test.mjs src/lib/server/telegram-security.test.mjs src/lib/server/telegram-update.test.mjs src/lib/server/bot-ux.test.mjs src/lib/server/bot-calendar-query.test.mjs src/lib/server/users-security.test.mjs src/lib/server/telegram-webhook-handler.test.mjs",
     "test:e2e": "node --experimental-strip-types scripts/e2e-publish-test.mjs",
     "db:schema": "node --experimental-strip-types scripts/apply-portal-schema.mjs",
     "db:rbac": "node --experimental-strip-types scripts/apply-portal-rbac.mjs",
@@ -19,7 +19,8 @@
     "bootstrap:neon": "bash scripts/bootstrap-neon-phase1.sh",
     "create:super-admin": "node --experimental-strip-types scripts/create-super-admin.mjs",
     "migrate:seed": "node --experimental-strip-types scripts/migrate-seed-to-db.mjs",
-    "verify:schedule:json": "node --experimental-strip-types scripts/verify-schedule-json.mjs"
+    "verify:schedule:json": "node --experimental-strip-types scripts/verify-schedule-json.mjs",
+    "test:security:postgres": "node --experimental-strip-types --test src/lib/server/content-security-postgres.test.mjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "14.0.0",

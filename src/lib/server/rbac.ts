@@ -138,6 +138,12 @@ export function canModifyContent(a: AdminInfo, row: {created_by?: number | null}
   return canUseTelegramPublishing(a) && String(row.created_by) === String(a.id);
 }
 
+// Ownership is necessary but does not retain a subject/section permission after
+// the owner revokes it. Existing records and proposed values use the same gate.
+export function canModifyContentRecord(a: AdminInfo, type: string, row: Record<string, unknown>): boolean {
+  return canModifyContent(a, row) && canWriteContentRecord(a, type, row);
+}
+
 // Telegram publishing requires an active linked account of a publishing role.
 export const PUBLISHER_ROLES: readonly string[] = ["super_admin", "editor", "general_representative", "section_representative", "teacher"];
 export const canUseTelegramPublishing = (a: AdminInfo): boolean => isActive(a) && PUBLISHER_ROLES.includes(a.role);

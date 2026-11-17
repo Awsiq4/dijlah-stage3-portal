@@ -15,7 +15,7 @@ process.env.TELEGRAM_WEBHOOK_SECRET = "whsec";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const {newDb} = await import("pg-mem");
 const {setPoolForTests, q} = await import("./db.ts");
-const {createEvent} = await import("./notify.ts");
+const {createEvent, drainQueue} = await import("./notify.ts");
 
 async function makeDb() {
   const mem = newDb();
@@ -88,4 +88,49 @@ test("notifications: duplicate event key is idempotent (no duplicate deliveries)
   const d = await q(`SELECT count(*)::int AS c FROM tg_deliveries`);
   assert.equal(d[0].c, 3); // created once -> one delivery per eligible subscriber, no duplicates
   await pool.end();
+});
+
+
+for (const [name, change] of [
+  ["stopped subscription", "UPDATE tg_subscribers SET status='stopped' WHERE chat_id=1001"],
+  ["changed section", "UPDATE tg_subscribers SET section='B' WHERE chat_id=1001"],
+  ["disabled preference", `UPDATE tg_subscribers SET prefs='{"announcements":false}' WHERE chat_id=1001`],
+]) {
+  test(`notifications: pending delivery respects ${name} at execution`, async () => {
+    const pool = await makeDb();
+    const sent = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, options) => {
+      sent.push(JSON.parse(options.body));
+      return {ok:true, json:async()=>({ok:true,result:{message_id:1}})};
+    };
+    try {
+      const event = await createEvent({type:"announcement", refId:"pending-change", version:1,
+        title:"section A", scope:"section", section:"A"});
+      assert.equal(event.recipients, 1);
+      await pool.query(change);
+      const result = await drainQueue(10);
+      assert.equal(sent.length, 0, "pending notifications must not use stale consent/audience");
+      assert.equal(result.skipped, 1);
+      const row = await q("SELECT status FROM tg_deliveries");
+      assert.equal(row[0].status, "failed");
+    } finally { globalThis.fetch = originalFetch; await pool.end(); }
+  });
+}
+
+test("notifications: eligible pending delivery is sent exactly once across repeated drains", async () => {
+  const pool = await makeDb();
+  const sent = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    sent.push(JSON.parse(options.body));
+    return {ok:true, json:async()=>({ok:true,result:{message_id:1}})};
+  };
+  try {
+    await createEvent({type:"announcement",refId:"eligible",version:1,title:"A",scope:"section",section:"A"});
+    assert.equal((await drainQueue(10)).sent,1);
+    assert.equal((await drainQueue(10)).sent,0);
+    assert.equal(sent.length,1);
+    assert.equal(sent[0].chat_id,1001);
+  } finally { globalThis.fetch = originalFetch; await pool.end(); }
 });

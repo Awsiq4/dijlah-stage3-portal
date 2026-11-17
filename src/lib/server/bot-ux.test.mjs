@@ -369,3 +369,40 @@ test("ownership and authorized sections are enforced server-side for edits and d
  assert.equal((await qOne("SELECT title FROM portal_exams WHERE id='quiz-a'")).title,"كوز A");
  await pool.end();
 });
+
+
+for (const [name, revoke] of [
+ ["suspended account", "UPDATE portal_admins SET status='suspended',is_active=false WHERE id=2"],
+ ["publishing role downgraded to viewer", "UPDATE portal_admins SET role='viewer' WHERE id=2"],
+ ["revoked Telegram binding", "UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=2"],
+]) {
+ test(`Telegram publishing confirmation rejects ${name} after draft creation`,async()=>{
+  const pool=await makeDb();await linked(pool,2);sent.length=0;
+  try {
+   await handleAdminCallback(2,2,"adm:quick");
+   await handleAdminMessage(2,2,"Synthetic security test announcement");
+   const draft=await getFlowState(2);
+   assert.equal(draft.data.step,"confirm");
+   await pool.query(revoke);
+   await handleAdminCallback(2,2,"pub:ann:"+draft.data.nonce);
+   assert.equal((await q("SELECT id FROM portal_announcements")).length,0);
+  } finally {await pool.end();}
+ });
+}
+
+
+test("coursework mutations reject cached authority after a persisted role downgrade",async()=>{
+ const pool=await makeDb();
+ try {
+  await pool.query(`INSERT INTO portal_assignments
+    (id,subject_id,title,instructions,due_at,sections,status,created_by)
+    VALUES ('cached-role','nonlinear-optics','Synthetic assignment','Synthetic instructions','2099-11-20','["A"]','active',2)`);
+  await pool.query("UPDATE portal_admins SET role='viewer' WHERE id=2");
+  assert.equal((await changeCoursework(repA,"a","cached-role","title","Changed title","Synthetic assignment")).ok,false);
+  assert.equal((await archiveCoursework(repA,"a","cached-role",true)).ok,false);
+  assert.equal((await deleteCoursework(repA,"a","cached-role")).ok,false);
+  const current=await qOne("SELECT title,archived_at FROM portal_assignments WHERE id='cached-role'");
+  assert.equal(current.title,"Synthetic assignment");
+  assert.equal(current.archived_at,null);
+ } finally {await pool.end();}
+});

@@ -3,6 +3,7 @@
 // university Midterm/Final timetable. All writes are ownership + RBAC checked.
 import {randomBytes} from "node:crypto";
 import {q, qOne, withTx, type Queryer} from "./db.ts";
+import {lockCurrentContentAdmin} from "./content-access.ts";
 import {sendMessage} from "./telegram.ts";
 import {audit} from "./content.ts";
 import {canManageAllContent, canModifyContent, canWriteContentRecord, isActive, type AdminInfo} from "./rbac.ts";
@@ -99,6 +100,9 @@ export async function changeCoursework(admin:AdminInfo,kind:CourseworkKind,id:st
   const {value,error}=cleanValue(kind,field,raw);
   if(error)return {ok:false,error};
   return withTx<Result>(async tx=>{
+    const current=await lockCurrentContentAdmin(tx,admin.id);
+    if(!current)return {ok:false,error:"الحساب غير مفعل"};
+    admin=current;
     const row=await getCoursework(admin,kind,id,tx,true);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     if(same(row[field],value))return {ok:true,row};
@@ -121,6 +125,9 @@ export async function archiveCoursework(admin:AdminInfo,kind:CourseworkKind,id:s
  archive:boolean,source:"web"|"telegram"="telegram"):Promise<Result>{
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
   return withTx<Result>(async tx=>{
+    const current=await lockCurrentContentAdmin(tx,admin.id);
+    if(!current)return {ok:false,error:"الحساب غير مفعل"};
+    admin=current;
     const row=await getCoursework(admin,kind,id,tx,true);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     if(Boolean(row.archived_at)===archive)return {ok:true,row};
@@ -134,6 +141,9 @@ export async function archiveCoursework(admin:AdminInfo,kind:CourseworkKind,id:s
 export async function deleteCoursework(admin:AdminInfo,kind:CourseworkKind,id:string):Promise<Result>{
   if(!isActive(admin))return {ok:false,error:"الحساب غير مفعل"};
   return withTx<Result>(async tx=>{
+    const current=await lockCurrentContentAdmin(tx,admin.id);
+    if(!current)return {ok:false,error:"الحساب غير مفعل"};
+    admin=current;
     const row=await getCoursework(admin,kind,id,tx,true);
     if(!row)return {ok:false,error:"المنشور غير موجود أو ما عندك صلاحية"};
     await tx.q(`DELETE FROM ${table(kind)} WHERE id=$1`,[id]);

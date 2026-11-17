@@ -1,4 +1,5 @@
 import {after, NextRequest, NextResponse} from "next/server";
+import {privateTelegramUpdate, readTelegramUpdateBody, TelegramUpdateBodyError} from "@/lib/server/telegram-update";
 import {WEBHOOK_SECRET, TELEGRAM_BOT_ENABLED, telegramServiceEnabled, SUBSCRIPTION_SECRET, botConfigured, webhookAuthorized} from "@/lib/server/flags";
 import {issueOwnerEnrollment} from "@/lib/server/owner-mfa";
 import {verifySubscribeToken} from "@/lib/server/tokens";
@@ -127,9 +128,9 @@ export async function POST(req: NextRequest) {
     if (auth === "disabled") return NextResponse.json({ok: true, disabled: true});
     if (auth === "unauthorized") return new NextResponse("unauthorized", {status: 401});
     if (!telegramServiceEnabled()) return NextResponse.json({ok: true, disabled: true}); // enabled+configured but DB missing -> inert
-    const update = await req.json().catch(() => null);
-    if (!update || typeof update !== "object") return NextResponse.json({ok: true});
-    const chatId0 = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id ?? update.edited_message?.chat?.id;
+    const update = privateTelegramUpdate(await readTelegramUpdateBody(req));
+    if (!update) return NextResponse.json({ok: true});
+    const chatId0 = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id;
     if (chatId0) await touchActivity(Number(chatId0));
     const message = update.message;
     const callback = update.callback_query;
@@ -242,6 +243,7 @@ export async function POST(req: NextRequest) {
     after(()=>wakeSupportDelivery().catch(err=>console.error("support delivery retry:",err instanceof Error?err.message:"error")));
     return NextResponse.json({ok: true});
   } catch (err) {
+    if (err instanceof TelegramUpdateBodyError) return NextResponse.json({error: "invalid update"}, {status: err.status});
     console.error("telegram webhook error", err instanceof Error ? err.message : err);
     if (replyChat) await sendMessage(replyChat, "تعذر إكمال الخطوة الآن. ارجع للمسودة أو حاول مجددًا.", {replyMarkup: {inline_keyboard: [[{text: "🏠 القائمة الرئيسية", callback_data: "nav:home"}]]}});
     return NextResponse.json({ok: true});
