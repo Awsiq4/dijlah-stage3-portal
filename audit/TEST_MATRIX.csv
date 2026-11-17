@@ -1,0 +1,22 @@
+id,area,test,method,result,evidence
+T01,build,typecheck main,npx tsc --noEmit,PASS,0 errors
+T02,build,npm run build,next build,PASS,Compiled successfully
+T03,unit,113 اختبارات (auth/rbac/publish/notify/bot-ux/registry/public/db/content-schema/admin-api/merge/public-map/server),npm test,PASS,113/113
+T04,structure,verify-structure + verify-schedule + verify-schedule:json,npm run verify*,PASS,36 blocks=reference JSON
+T05,security,npm audit --omit=dev,npm audit,PASS,0 production vulnerabilities (6 dev-only: @vercel/cli, postcss, zod…)
+T06,secrets,git history scan (rev-list 200) + tracked .env files,git grep,PASS,لا أسرار؛ .env gitignored؛ .env.example placeholders فقط
+T07,prod-pages,11 مسار على https://dj3.top,fetch read-only,PASS,200 allemaal (157–1050ms)
+T08,prod-api,/api/health + /api/public/content + /api/telegram/health,GET,PASS,databaseConnected+migrationApplied+botConfigured=true؛ content fromDatabase=true
+T09,prod-authz,admin/stats و admin/content بدون جلسة و webhook بدون secret,GET/POST,PASS,401/401/401
+T10,prod-headers,CSP,HSTS,XFO,nosniff,referrer-policy على dj3.top,fetch headers,PASS,mوجودة (CSP تحتوي unsafe-inline — P3)
+T11,db,مقارنة الجداول مقابل ملفات SQL (Neon test),information_schema,PASS,25 جدولاً متطابقة
+T12,load,Hammer 10/25/50/100/200 متزامناً على بناء محلي معزول (main),node fetch,PASS,0 errors؛ p95=274ms صفحة، p95=334ms API عند 200
+T13,bot,23/23 تدفق UX Бوت (webhook محاكى على Neon حقيقي) — فرع PR #13,POST /api/telegram/webhook,PASS,commit ea433f5
+T14,bot,13/13 تدفقات OWNER مع BOT_OWNER_ID=7320661178 (register/reg_seq/owner notif/dedup/reject non-owner),webhook vs Neon,PASS,commit ea433f5
+T15,bot-real,تسليم Telegram حقيقي لحساب اختبار,real bot interaction,BLOCKED,يتطلب إرسال رسالة حقيقية من حساب Telegram — غير متاح من البيئة
+T16,prod-db-direct,مقارنة schema مباشرة على DB الإنتاج,SQL on prod,BLOCKED,لا يوجد access لقاعدة الإنتاج؛Evidence غير مباشر: /api/health migrationApplied=true
+T17,devices,Responsive على أجهزة حقيقية + Screenshots,Selenium/devices,BLOCKED,لا متصفحات/أجهزة في البيئة؛ فحص ثابت: dir=rtl وlang=ar وviewport موجودة في layout.tsx
+T18,a11y,WCAG 2.2 AA بقارئ شاشة,screen reader,BLOCKED,يتطلب اختبار يدوي على جهاز حقيقي
+T19,load-prod,Hammer 200 على الإنتاج,load vs prod,BLOCKED/ممنوع,الدليل: اختبار 200 محلي + مقاييس Vercel غير متاحة
+T20,passkeys,MFA/Passkeys live flow,webauthn ceremony,BLOCKED,يتطلب جهاز/متصفح بدعم WebAuthn
+T21,perf-prod,Vercel analytics/logs,Vercel API,BLOCKED,connector Vercel غير متاح

@@ -1,0 +1,8 @@
+event,trigger,audience,prefs respected,dedup,idempotent webhook,delivery verified,result
+new lecture published,publish.lectures,section/subject targets,yes,tg_events unique,yes,NOT TESTED real (T15),unit PASS (notify.test.mjs)
+new announcement,publish.announcements,general/section,yes,yes,yes,NOT TESTED real,unit PASS
+new exam/quiz,publish.exams,section,yes,yes,yes,NOT TESTED real,unit PASS
+new assignment,publish.assignments,section,yes,yes,yes,NOT TESTED real,unit PASS
+schedule change,notifyScheduleChange,section,yes,yes,yes,NOT TESTED real,unit PASS
+new user registration (owner),registerUser isNew,tg_owner_notifs event_key dedupe,BOT_OWNER_ID only,yes,yes,NOT TESTED real (sendMessage real),live PASS vs Neon (T14)
+blocked user / failure,worker retry bounded,dead-letter,tg_deliveries states,yes,yes,NOT TESTED real,unit PASS

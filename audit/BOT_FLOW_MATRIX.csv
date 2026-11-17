@@ -1,0 +1,12 @@
+flow,steps,test,result
+/start first-time,register→reg_seq→owner notif→home menu,webhook vs Neon,PASS (T14)
+/start repeat,no dup record/notif,webhook vs Neon,PASS (T14)
+section pick sec:A/B/C/F,register+update,webhook vs Neon,PASS (T13)
+student browse stu:ann/lec/sched/exams/prefs,callbacks,webhook vs Neon,PASS (T13)
+publisher menu adm:new→ann/lec,publish→preview→confirm→link,webhook vs Neon,PASS (T13)
+direct PDF Flow B,document→offer→pdf:new→draft,webhook vs Neon,PASS (T13)
+manage منشوراتي it:/page:my,list/edit/archive/delete/replace PDF,webhook vs Neon,PASS 23/23 (T13)
+draft recovery flow:resume/discard,nav:home with active draft,PASS (T13)
+owner dashboard own:stats/growth/users/search/notif,BOT_OWNER_ID only,PASS 13/13 (T14)
+old/tampered callbacks,graceful reject,webhook vs Neon,PASS (T13)
+real Telegram delivery,—,BLOCKED (T15)
