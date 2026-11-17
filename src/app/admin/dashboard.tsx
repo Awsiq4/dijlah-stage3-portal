@@ -135,8 +135,16 @@ export default function AdminDashboard(){
   }, [me]);
 
   const logout = async () => {
-    await fetch("/api/admin/logout", {method: "POST", headers: WRITE_HEADERS});
-    router.push("/admin/login");
+    try {
+      const response = await fetch("/api/admin/logout", {method: "POST", headers: WRITE_HEADERS});
+      if (!response.ok) {
+        window.alert("تعذّر إنهاء الجلسة. حاول تسجيل الخروج مجددًا.");
+        return;
+      }
+      router.push("/admin/login");
+    } catch {
+      window.alert("تعذّر الاتصال بالخادم. حاول تسجيل الخروج مجددًا.");
+    }
   };
 
   function navigate(next: TabId) {

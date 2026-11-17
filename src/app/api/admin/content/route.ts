@@ -1,13 +1,14 @@
 import {after, NextRequest, NextResponse} from "next/server";
 import {requireAdmin} from "@/lib/server/auth";
-import {listContent, deleteContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
+import {listContent, upsertTelegram, audit, SCHEMAS, type ContentType} from "@/lib/server/content";
 import {qOne, withTx} from "@/lib/server/db";
 import {dbConfigured} from "@/lib/server/flags";
-import {canModifyContent, canManageAllContent, canUseTelegramPublishing, canWriteContentRecord} from "@/lib/server/rbac";
-import {indexLegacyPdfFiles, pdfFingerprint, lockPublication, PublicationConflict} from "@/lib/server/publication-dedup";
+import {canModifyContentRecord, canManageAllContent, canUseTelegramPublishing, canWriteContentRecord} from "@/lib/server/rbac";
+import {lockCurrentContentAdmin} from "@/lib/server/content-access";
+import {indexLegacyPdfFiles, pdfFingerprint, PublicationConflict} from "@/lib/server/publication-dedup";
 import {sanitizeRow} from "@/lib/server/content-schema";
 import {drainQueue} from "@/lib/server/notify";
-import {applyContentUpsert, archiveContent, publicationQueuesTelegram} from "@/lib/server/publish";
+import {applyContentUpsert, archiveContent, deleteContentRecord, publicationQueuesTelegram} from "@/lib/server/publish";
 
 import {archiveCoursework, changeCoursework} from "@/lib/server/bot-coursework-manage";
 
@@ -49,8 +50,8 @@ export async function POST(req: NextRequest) {
       const clean = sanitizeRow(type, body.row);
       if (type === "announcements" && (!clean.scope || clean.scope === "general")) clean.section = "all";
       if (!canWriteContentRecord(admin, type, clean)) throw new ForbiddenError("المحتوى خارج صلاحيات حسابك.");
-      const existing = await qOne<{created_by: number | null}>(`SELECT created_by FROM ${SCHEMAS[type].table} WHERE id=$1`, [clean.id]);
-      if (existing && !canModifyContent(admin, existing)) throw new ForbiddenError("المحتوى خارج صلاحيات حسابك.");
+      const existing = await qOne<Record<string, unknown>>(`SELECT * FROM ${SCHEMAS[type].table} WHERE id=$1`, [clean.id]);
+      if (existing && !canModifyContentRecord(admin, type, existing)) throw new ForbiddenError("المحتوى خارج صلاحيات حسابك.");
       if (!canManageAllContent(admin.role) && type !== "announcements" && (!Array.isArray(clean.sections) || !clean.sections.length)) {
         clean.sections = ["A", "B", "C", "F"];
       }
@@ -70,9 +71,10 @@ export async function POST(req: NextRequest) {
     }));
     const result = await withTx(async db => {
       if (body.type === "telegram") {
-        if (!canManageAllContent(admin.role)) throw new ForbiddenError("forbidden");
+        const current = await lockCurrentContentAdmin(db, admin.id);
+        if (!current || !canManageAllContent(current.role)) throw new ForbiddenError("forbidden");
         await upsertTelegram(String(body.kind || ""), String(body.key || ""), String(body.url || ""), db);
-        await audit(admin.email || `admin#${admin.id}`, "content.upsert.telegram", {key: body.key}, db);
+        await audit(current.email || `admin#${current.id}`, "content.upsert.telegram", {key: body.key}, db);
       } else {
         // ownership + source are set server-side from the session identity only
         return applyContentUpsert(db, admin, body.type, body.row, "web", options, hash);
@@ -133,21 +135,12 @@ export async function DELETE(req: NextRequest) {
   const id = sp.get("id") || "";
   if (!type || !TYPES.includes(type) || type === "telegram" || !id) return NextResponse.json({error: "invalid request"}, {status: 400});
   try {
-    await withTx(async db => {
-      if (type === "lectures" || type === "announcements") await lockPublication(db, type);
-      const table = (SCHEMAS as Record<string, {table: string}>)[type]?.table;
-      if (!table) throw new ForbiddenError("forbidden");
-      if (!canManageAllContent(admin.role)) {
-        if (!canUseTelegramPublishing(admin) || type === "subjects" || type === "schedule") throw new ForbiddenError("forbidden");
-        const row = await db.qOne<{created_by: number | null}>(`SELECT created_by FROM ${table} WHERE id=$1 FOR UPDATE`, [id]);
-        if (!row || !canModifyContent(admin, row)) throw new ForbiddenError("forbidden: not the owner");
-      }
-      await deleteContent(type, id, db);
-      await audit(admin.email || `admin#${admin.id}`, `content.delete.${type}`, {id}, db);
-    });
+    await withTx(db => deleteContentRecord(db, admin, type, id));
     return NextResponse.json({ok: true});
   } catch (err) {
-    if (err instanceof ForbiddenError) return NextResponse.json({error: err.message}, {status: 403});
+    if (err instanceof ForbiddenError || (err as {status?: number}).status === 403) {
+      return NextResponse.json({error: err instanceof Error ? err.message : "forbidden"}, {status: 403});
+    }
     const msg = err instanceof Error ? err.message : "error";
     const status = /غير صالح/.test(msg) ? 400 : 500;
     return NextResponse.json({error: status === 400 ? msg : "Server error"}, {status});

@@ -2,7 +2,7 @@ import {TELEGRAM_STAFF_ROLES} from "@/lib/telegram-roles";
 import {NextRequest, NextResponse} from "next/server";
 import {requireAdmin} from "@/lib/server/auth";
 import {canManageUsers, newToken, hashToken, ROLES, SECTIONS} from "@/lib/server/rbac";
-import {withTx, q} from "@/lib/server/db";
+import {withTx, q, type Queryer} from "@/lib/server/db";
 import {audit} from "@/lib/server/content";
 import {dbConfigured, PORTAL_BASE_URL, BOT_USERNAME, telegramServiceEnabled} from "@/lib/server/flags";
 import {sendMessage} from "@/lib/server/telegram";
@@ -14,6 +14,19 @@ async function requireUserAdmin(req: NextRequest) {
   if (!admin) return {admin: null, res: NextResponse.json({error: "unauthorized"}, {status: 401})};
   if (!canManageUsers(admin.role)) return {admin: null, res: NextResponse.json({error: "forbidden: super_admin only"}, {status: 403})};
   return {admin, res: null as NextResponse | null};
+}
+
+// Lock the acting account before any account/invitation mutation. A request
+// authenticated before a concurrent demotion must not restore owner privileges.
+async function lockUserAdmin(db: Queryer, adminId: number, targetId = adminId): Promise<boolean> {
+  // Always lock actor/target in ID order, including when two owners edit each
+  // other concurrently, to avoid introducing opposing account-lock order.
+  const accounts = await db.q<{id: number; role: string; is_active: boolean; status: string}>(
+    `SELECT id,role,is_active,status FROM portal_admins
+     WHERE id=$1 OR id=$2 ORDER BY id FOR UPDATE`, [adminId, targetId]
+  );
+  const current = accounts.find(account => Number(account.id) === Number(adminId));
+  return Boolean(current?.is_active && current.status === "active" && canManageUsers(current.role));
 }
 
 // GET: account directory (never returns password hashes)
@@ -60,22 +73,24 @@ export async function POST(req: NextRequest) {
   const token = newToken();
   const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
   const issued = await withTx(async db => {
+    if (!await lockUserAdmin(db, admin.id)) return "forbidden";
     if (telegramId && await db.qOne(
       `SELECT 1 FROM portal_admins WHERE telegram_expected_id=$1
        UNION ALL SELECT 1 FROM portal_telegram_links WHERE telegram_user_id=$1 AND revoked_at IS NULL
        UNION ALL SELECT 1 FROM portal_invitations WHERE telegram_expected_id=$1 AND email<>$2
          AND used_at IS NULL AND expires_at>now() LIMIT 1`,
       [telegramId, email]
-    )) return false;
+    )) return "duplicate";
     await db.q(
       `INSERT INTO portal_invitations (email, name, role, assigned_section, assigned_subjects, perms, token_hash, expires_at, created_by, telegram_expected_id, telegram_expected_username)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [email, name, role, section, JSON.stringify(subjects), JSON.stringify(perms), hashToken(token), expires, admin.id, telegramId || null, telegramUsername || null]
     );
     await audit(admin.email, "users.invite", {email, role, section, subjects, telegram_preassigned: Boolean(telegramId)}, db);
-    return true;
+    return "issued";
   });
-  if (!issued) return NextResponse.json({error: "رقم Telegram ID مسجّل لحساب آخر أو لدعوة فعّالة."}, {status: 409});
+  if (issued === "forbidden") return NextResponse.json({error: "forbidden"}, {status: 403});
+  if (issued === "duplicate") return NextResponse.json({error: "رقم Telegram ID مسجّل لحساب آخر أو لدعوة فعّالة."}, {status: 409});
   // Do not claim Telegram delivery unless the bot was able to send it.
   // Bots cannot initiate a private chat until the recipient first presses Start.
   let telegramNotification: "sent" | "start_required" | "not_configured" | "not_requested" =
@@ -120,7 +135,8 @@ export async function PATCH(req: NextRequest) {
   }
   if (!fields.length) return NextResponse.json({error: "nothing to update"}, {status: 400});
   params.push(id);
-  await withTx(async db => {
+  const updated = await withTx(async db => {
+    if (!await lockUserAdmin(db, admin.id, id)) return false;
     await db.q(`UPDATE portal_admins SET ${fields.join(", ")} WHERE id=$${i}`, params);
     if (String(body.status) === "suspended") {
       await db.q(`UPDATE portal_sessions SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL`, [id]);
@@ -129,6 +145,8 @@ export async function PATCH(req: NextRequest) {
       await db.q(`UPDATE portal_telegram_links SET revoked_at=now() WHERE admin_id=$1 AND revoked_at IS NULL`, [id]);
     }
     await audit(admin.email, "users.update", {id, fields: Object.keys(body)}, db);
+    return true;
   });
+  if (!updated) return NextResponse.json({error: "forbidden"}, {status: 403});
   return NextResponse.json({ok: true});
 }

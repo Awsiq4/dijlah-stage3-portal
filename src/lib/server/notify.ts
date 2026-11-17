@@ -58,8 +58,18 @@ export async function drainQueue(limit = 100, eventIds?: readonly number[]): Pro
       WHERE id=$1 AND status='pending' AND next_attempt_at<=now() RETURNING id`, [d.id]);
     if (!claim) { skipped++; continue; }
     const event: TgEvent & {title: string; body: string | null; url: string | null; subjectName: string | null} = {type: d.type as TgEvent["type"], scope: d.scope as TgEvent["scope"], section: d.section, priority: d.priority, title: d.title, body: d.body, url: d.url, subjectName: d.subject_name};
+    // A queued recipient is only a snapshot. Honour opt-outs and section changes
+    // again at delivery, including retries, before sending anything to Telegram.
+    const subscriber = await qOne<TgSubscriber>(
+      `SELECT id, chat_id, section, status, prefs FROM tg_subscribers WHERE id=$1`, [d.subscriber_id]
+    );
+    if (!subscriber || !selectRecipients(event, [subscriber]).length) {
+      await q(`UPDATE tg_deliveries SET status='failed', last_error='recipient no longer eligible' WHERE id=$1`, [d.id]);
+      skipped++;
+      continue;
+    }
     const msg = renderMessage(event, PORTAL_BASE_URL);
-    const res = await sendMessage(d.chat_id, msg.text, {parseMode: msg.parseMode});
+    const res = await sendMessage(subscriber.chat_id, msg.text, {parseMode: msg.parseMode});
     if (res.ok) {
       await q(`UPDATE tg_deliveries SET status='sent', sent_at=now(), last_error=NULL WHERE id=$1`, [d.id]);
       sent++;

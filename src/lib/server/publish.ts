@@ -4,7 +4,8 @@ import {safeFileUrl} from "../safe-url.ts";
 import {withTx, defaultQueryer, type Queryer} from "./db.ts";
 import {buildOwnedUpdate, buildUpsert, sanitizeRow, SCHEMAS, type WritableContentType} from "./content-schema.ts";
 import {audit} from "./content.ts";
-import {canPublishAnnouncement, canPublishSubjectContent, canPublishMaterial, canModifyContent, canManageAllContent, canWriteContentRecord, isActive, type AdminInfo} from "./rbac.ts";
+import {canPublishAnnouncement, canPublishSubjectContent, canPublishMaterial, canModifyContent, canModifyContentRecord, canManageAllContent, canWriteContentRecord, isActive, type AdminInfo} from "./rbac.ts";
+import {lockCurrentContentAdmin} from "./content-access.ts";
 import {checkPublication, indexLegacyPdfFiles, lockPublication, pdfFingerprint, publicationUrl, PublicationConflict, type PublicationIssue, type PublicationKind, type PublicationOptions} from "./publication-dedup.ts";
 import {telegramServiceEnabled} from "./flags.ts";
 
@@ -27,6 +28,11 @@ async function insertWithOwnership(
   options: PublicationOptions = {}, hash: string | null = null
 ): Promise<PublishOk> {
   return withTx(async tx => {
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current || !canWriteContentRecord(current, type, row)) {
+      throw Object.assign(new Error("forbidden: role/scope no longer authorized"), {status: 403});
+    }
+    admin = current;
     let newPublication = false;
     if (type === "announcements" || type === "lectures") {
       const prepared = await preparePublication(tx, admin, type, row, hash, options);
@@ -61,8 +67,8 @@ async function preparePublication(
   const existing = await db.qOne<{
     created_by: number; file_url?: string; file_sha256?: string | null; archived_at: string | null;
   } & Record<string, unknown>>(`SELECT * FROM ${SCHEMAS[type].table} WHERE id=$1`, [row.id]);
-  if (existing && !canModifyContent(admin, existing)) {
-    throw Object.assign(new Error("forbidden: not the owner"), {status: 403});
+  if (existing && !canModifyContentRecord(admin, type, existing)) {
+    throw Object.assign(new Error("forbidden: not the owner or outside current scope"), {status: 403});
   }
   const effective = existing ? {...existing, ...row} : row;
   if (type === "lectures" && !hash && existing && effective.file_url === existing.file_url) hash = existing.file_sha256 || null;
@@ -289,6 +295,9 @@ export async function applyContentUpsert(
   source: "web" | "telegram" = "web",
   options: PublicationOptions = {}, hash: string | null = null
 ): Promise<PublishOk | void> {
+  const current = await lockCurrentContentAdmin(tx, admin.id);
+  if (!current) throw Object.assign(new Error("forbidden: account is not active"), {status: 403});
+  admin = current;
   const id = String(row.id);
   const clean = sanitizeRow(type, row);
   if (type === "exams" && clean.type === "كوز يومي") clean.start_time = "";
@@ -320,7 +329,10 @@ export async function applyContentUpsert(
   let newPublication = false;
   if (type === "assignments" || type === "exams") {
     await lockPublication(tx, type);
-    const existing = await tx.qOne<{id: string}>(`SELECT id FROM ${SCHEMAS[type].table} WHERE id=$1`, [id]);
+    const existing = await tx.qOne<Record<string, unknown>>(`SELECT * FROM ${SCHEMAS[type].table} WHERE id=$1 FOR UPDATE`, [id]);
+    if (existing && !canModifyContentRecord(admin, type, existing)) {
+      throw Object.assign(new Error("forbidden: not the owner or outside current scope"), {status: 403});
+    }
     newPublication = !existing;
   }
   if (type === "announcements" || type === "lectures") {
@@ -368,7 +380,7 @@ async function loadOwnedRow(db: {qOne: Queryer["qOne"]}, admin: AdminInfo, type:
   const table = SCHEMAS[type].table;
   const row = await db.qOne<Record<string, unknown>>(`SELECT * FROM ${table} WHERE id=$1`, [id]);
   if (!row) return null;
-  if (!canModifyContent(admin, row)) return null; // ownership enforced
+  if (!canModifyContentRecord(admin, type, row)) return null;
   return row;
 }
 
@@ -388,6 +400,9 @@ export async function listOwnContent(admin: AdminInfo, type: "announcements" | "
 export async function updateAnnouncementOwn(admin: AdminInfo, id: string, patch: {title?: string; body?: string}): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
   return withTx(async tx => {
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current) return fail("account is not active");
+    admin = current;
     await lockPublication(tx, "announcements");
     const row = await loadOwnedRow(tx, admin, "announcements", id);
     if (!row) return fail("forbidden: not found or not yours");
@@ -403,6 +418,9 @@ export async function updateAnnouncementOwn(admin: AdminInfo, id: string, patch:
 export async function updateLectureMetaOwn(admin: AdminInfo, id: string, patch: {title?: string; description?: string}): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
   return withTx(async tx => {
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current) return fail("account is not active");
+    admin = current;
     await lockPublication(tx, "lectures");
     const row = await loadOwnedRow(tx, admin, "lectures", id);
     if (!row) return fail("forbidden: not found or not yours");
@@ -419,6 +437,9 @@ export async function replaceLectureFileOwn(admin: AdminInfo, id: string, fileUr
   if (!safeFileUrl(fileUrl)) return fail("invalid file url");
   const hash = fingerprint || await pdfFingerprint(fileUrl);
   return withTx(async tx => {
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current) return fail("account is not active");
+    admin = current;
     await lockPublication(tx, "lectures");
     const row = await loadOwnedRow(tx, admin, "lectures", id);
     if (!row) return fail("forbidden: not found or not yours");
@@ -434,6 +455,9 @@ export async function replaceLectureFileOwn(admin: AdminInfo, id: string, fileUr
 export async function archiveContent(admin: AdminInfo, type: "announcements" | "lectures", id: string, archive: boolean): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
   return withTx(async tx => {
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current) return fail("account is not active");
+    admin = current;
     await lockPublication(tx, type);
     const row = await loadOwnedRow(tx, admin, type, id);
     if (!row || !canWriteContentRecord(admin, type, row)) return fail("forbidden: not found or outside your scope");
@@ -452,6 +476,9 @@ export async function archiveContent(admin: AdminInfo, type: "announcements" | "
 export async function deleteOwnContent(admin: AdminInfo, type: "announcements" | "lectures", id: string): Promise<PublishResult> {
   if (!isActive(admin)) return fail("account is not active");
   return withTx(async tx => {
+    const current = await lockCurrentContentAdmin(tx, admin.id);
+    if (!current) return fail("account is not active");
+    admin = current;
     await lockPublication(tx, type);
     const row = await loadOwnedRow(tx, admin, type, id);
     if (!row) return fail("forbidden: not found or not yours");
@@ -460,6 +487,22 @@ export async function deleteOwnContent(admin: AdminInfo, type: "announcements" |
     await audit(admin.email || `admin#${admin.id}`, "content.delete.own", {type, id, title: row.title}, tx);
     return {ok: true, id, inserted: true} as PublishOk;
   });
+}
+
+// Shared deletion boundary for the API. Editors cannot remove owner-managed
+// university exams through DELETE when POST/PATCH already deny that authority.
+export async function deleteContentRecord(tx: Queryer, admin: AdminInfo, type: WritableContentType, id: string): Promise<void> {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) throw Object.assign(new Error("معرّف غير صالح"), {status: 400});
+  const current = await lockCurrentContentAdmin(tx, admin.id);
+  if (!current) throw Object.assign(new Error("forbidden: account is not active"), {status: 403});
+  if (type === "lectures" || type === "announcements") await lockPublication(tx, type);
+  const table = SCHEMAS[type].table;
+  const row = await tx.qOne<Record<string, unknown>>(`SELECT * FROM ${table} WHERE id=$1 FOR UPDATE`, [id]);
+  if (!row || !canModifyContentRecord(current, type, row)) {
+    throw Object.assign(new Error("forbidden: not the owner or outside current scope"), {status: 403});
+  }
+  await tx.q(`DELETE FROM ${table} WHERE id=$1`, [id]);
+  await audit(current.email || `admin#${current.id}`, `content.delete.${type}`, {id}, tx);
 }
 
 // schedule changes generate a notification event (type schedule)
