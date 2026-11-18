@@ -50,6 +50,8 @@ export interface Exam {
   topics: string;
   notes: string;
   status: ExamStatus;
+  scheduleId?: string;
+  scheduleUpdatedAt?: string;
 }
 export interface PastQuestion {
   id: string;

@@ -12,8 +12,8 @@ process.env.TELEGRAM_BOT_USERNAME = "test_bot";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const {newDb} = await import("pg-mem");
-const {setPoolForTests, q, qOne} = await import("./db.ts");
-const {publishAnnouncement, publishLecture} = await import("./publish.ts");
+const {setPoolForTests, q, qOne, withTx} = await import("./db.ts");
+const {applyContentUpsert, publishAnnouncement, publishLecture} = await import("./publish.ts");
 const {canModifyContent} = await import("./rbac.ts");
 const {lecturesForSection} = await import("./public-filters.ts");
 const asArr = (v) => typeof v === "string" ? (v.trim().startsWith("[") ? JSON.parse(v) : v.split(",").filter(Boolean)) : v;
@@ -161,6 +161,63 @@ test("migration file is idempotent: applying portal-rbac.sql twice succeeds", as
     assert.equal(cols.rowCount, 1, `round ${round}: sections column exists`);
   }
   await pool.end();
+});
+
+test("stage-three midterms import once and retain owner scheduling edits for every section", async () => {
+  const pool = await makeDb();
+  const {SEED} = await import("../seed.ts");
+  const {getPublicContent} = await import("./public.ts");
+  const {mapPublicContent} = await import("../public-map.ts");
+  const scheduleId = "midterm-2026-2027-semester-1";
+  const migration = readFileSync(path.join(root, "database/portal-midterms-2026-2027.sql"), "utf8");
+  const owner = {id: 1, role: "super_admin"};
+  const expected = [
+    ["numerical-analysis", "2026-11-28"],
+    ["laser-safety", "2026-11-29"],
+    ["quantum-mechanics", "2026-12-01"],
+    ["nonlinear-optics", "2026-12-02"],
+    ["digital-systems", "2026-12-05"],
+    ["industrial-lasers", "2026-12-06"],
+    ["optoelectronics", "2026-12-08"],
+  ];
+  try {
+    for (const {id, name} of SEED.subjects) {
+      await pool.query("INSERT INTO portal_subjects (id, name) VALUES ($1,$2) ON CONFLICT (id) DO NOTHING", [id, name]);
+    }
+    await pool.query("INSERT INTO portal_admins (id,email,password_hash,role) VALUES ($1,'owner@x','test','super_admin')", [owner.id]);
+    await pool.query(migration);
+    for (const section of ["A", "B", "C", "F"]) {
+      const {content} = await getPublicContent("exams", section);
+      const exams = mapPublicContent(content).exams;
+      assert.deepEqual(exams.map(({subjectId, date}) => [subjectId, date]), expected);
+      for (const exam of exams) {
+        assert.equal(exam.type, "Midterm");
+        assert.equal(exam.scheduleId, scheduleId);
+        assert.equal(exam.startTime, "12:30");
+        assert.equal(exam.room, "");
+        assert.equal(exam.status, "confirmed");
+        assert.equal(exam.scheduleUpdatedAt, undefined);
+        assert.deepEqual(exam.sections, ["A", "B", "C", "F"]);
+      }
+    }
+    const row = await qOne("SELECT * FROM portal_exams WHERE subject_id='numerical-analysis'");
+    await assert.rejects(withTx(tx => applyContentUpsert(tx, repA, "exams", {...row, start_time: "13:30"})), {status: 403});
+    await withTx(tx => applyContentUpsert(tx, owner, "exams", {...row, room: "القاعة ٢", schedule_updated_at: "2026-11-18T12:00:00Z"}));
+    const roomOnly = await qOne("SELECT * FROM portal_exams WHERE id=$1", [row.id]);
+    assert.equal(roomOnly.schedule_updated_at, null);
+    await withTx(tx => applyContentUpsert(tx, owner, "exams", {...roomOnly, start_time: "13:30"}));
+    await pool.query(migration);
+
+    const {content} = await getPublicContent("exams", "F");
+    const exams = mapPublicContent(content).exams;
+    assert.equal(exams.length, expected.length);
+    const edited = exams.find(exam => exam.id === row.id);
+    assert.equal(edited.startTime, "13:30");
+    assert.equal(edited.room, "القاعة ٢");
+    assert.ok(Number.isFinite(Date.parse(edited.scheduleUpdatedAt)));
+  } finally {
+    await pool.end();
+  }
 });
 
 // ---------- content management services (ownership, archive, replace, delete) ----------

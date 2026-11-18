@@ -7,6 +7,6 @@ test("all student pages that read public data are protected by the same loading 
   "/announcements","/exams","/assignments","/this-week","/notifications"])
   assert.equal(needsPublicContent(path),true,path);
  for(const path of ["/admin","/admin/passkeys","/admin-legacy","/api/public/content",
-  "/more","/support","/about-department"])
+  "/more","/support","/about-department","/exams/midterm/original"])
   assert.equal(needsPublicContent(path),false,path);
 });

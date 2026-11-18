@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS portal_exams (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE portal_exams ADD COLUMN IF NOT EXISTS schedule_id TEXT;
+ALTER TABLE portal_exams ADD COLUMN IF NOT EXISTS schedule_updated_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS portal_assignments (
   id TEXT PRIMARY KEY,
   subject_id TEXT NOT NULL DEFAULT '',

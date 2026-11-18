@@ -34,7 +34,8 @@ const SELECTS: Record<Exclude<PublicType, "all">, string> = {
     LEFT JOIN portal_admins owner_email ON owner_email.email=a.author AND owner_email.role='super_admin'
     WHERE a.archived_at IS NULL AND (a.scope='general' OR a.section='all' OR a.section=$1)
     ORDER BY a.pinned DESC, a.published_at DESC`,
-  exams: `SELECT id,subject_id,title,type,date,start_time,room,sections,topics,notes,status FROM portal_exams WHERE archived_at IS NULL AND sections @> $1::jsonb ORDER BY date`,
+  exams: `SELECT id,subject_id,title,type,date,start_time,room,sections,topics,notes,status,
+    schedule_id,schedule_updated_at FROM portal_exams WHERE archived_at IS NULL AND sections @> $1::jsonb ORDER BY date`,
   assignments: `SELECT id,subject_id,title,instructions,assigned_at,due_at,sections,submission,status,attachment_url FROM portal_assignments WHERE archived_at IS NULL AND sections @> $1::jsonb ORDER BY due_at`,
   schedule: `SELECT id,section,day,start,"end",subject_id,teacher,room,kind,status,note,periods FROM portal_schedule WHERE section=$1 ORDER BY day,start`,
   telegram: "SELECT kind,key,url FROM portal_telegram ORDER BY kind,key",
