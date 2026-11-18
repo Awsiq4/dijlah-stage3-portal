@@ -1,0 +1,151 @@
+.navigation {
+  flex-wrap: wrap;
+}
+
+.navigation .tab {
+  margin-inline-start: 0;
+}
+
+.navigation .tab[aria-current="page"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.summary {
+  color: var(--primary-strong);
+  font-size: .85rem;
+  font-weight: 800;
+}
+
+.schedule {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: start;
+  font-size: .84rem;
+}
+
+.schedule th,
+.schedule td {
+  padding: 13px 20px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+}
+
+.schedule th {
+  color: var(--muted);
+  background: var(--surface2);
+  font-size: .76rem;
+}
+
+.schedule td {
+  overflow-wrap: anywhere;
+}
+
+.date {
+  color: var(--muted);
+  width: 32%;
+}
+
+.date time {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.date > *,
+.subject > * {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.date > * + *,
+.subject > * + * {
+  margin-block-start: 5px;
+}
+
+.subject a {
+  color: var(--primary-strong);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.subject a:hover {
+  color: var(--text);
+}
+
+.nearest {
+  background: var(--primary-soft);
+}
+
+.nearest .date {
+  box-shadow: inset -3px 0 var(--primary);
+}
+
+.mobileRoomLabel {
+  display: none;
+}
+
+.footer {
+  padding: 15px 20px;
+}
+
+@media (max-width: 640px) {
+  .schedule,
+  .schedule tbody {
+    display: block;
+  }
+
+  .schedule thead {
+    position: absolute;
+    overflow: hidden;
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+  }
+
+  .schedule tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr);
+    gap: 0 12px;
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .schedule td {
+    padding: 0;
+    border: 0;
+  }
+
+  .schedule .nearest {
+    box-shadow: inset -3px 0 var(--primary);
+  }
+
+  .schedule .nearest .date {
+    box-shadow: none;
+  }
+
+  .date {
+    width: auto;
+  }
+
+  .room {
+    grid-column: 2;
+    color: var(--muted);
+  }
+
+  .room:not(:empty) {
+    margin-block-start: 4px;
+  }
+
+  .mobileRoomLabel {
+    display: inline;
+  }
+
+  .footer {
+    padding: 13px 15px;
+  }
+}

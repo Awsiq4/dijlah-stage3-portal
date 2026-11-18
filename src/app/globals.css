@@ -277,6 +277,9 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .status.info{background:var(--st-info-bg);color:var(--st-info-text);border-color:transparent}
 .highlight-item{padding:20px}
 .highlight-item p{margin:5px 0}
+.midterm-home{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+.midterm-home p{margin:0 0 4px}
+.midterm-home strong{display:block;font-size:1.12rem;margin-bottom:4px}
 
 /* ---------- Subjects ---------- */
 .subject-card{

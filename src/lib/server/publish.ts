@@ -327,6 +327,7 @@ export async function applyContentUpsert(
     }
   }
   let newPublication = false;
+  let examScheduleChanged = false;
   if (type === "assignments" || type === "exams") {
     await lockPublication(tx, type);
     const existing = await tx.qOne<Record<string, unknown>>(`SELECT * FROM ${SCHEMAS[type].table} WHERE id=$1 FOR UPDATE`, [id]);
@@ -334,6 +335,8 @@ export async function applyContentUpsert(
       throw Object.assign(new Error("forbidden: not the owner or outside current scope"), {status: 403});
     }
     newPublication = !existing;
+    examScheduleChanged = type === "exams" && Boolean(existing?.schedule_id) && !existing?.archived_at &&
+      (clean.date !== existing?.date || clean.start_time !== existing?.start_time);
   }
   if (type === "announcements" || type === "lectures") {
     const prepared = await preparePublication(tx, admin, type, clean, hash, options);
@@ -353,6 +356,9 @@ export async function applyContentUpsert(
   } else {
     const upsert = buildUpsert(type, clean);
     await tx.q(upsert.sql, upsert.params);
+  }
+  if (examScheduleChanged) {
+    await tx.q("UPDATE portal_exams SET schedule_updated_at=now() WHERE id=$1", [id]);
   }
   if (!scoped && type !== "subjects") {
     const sourceSet = type === "schedule" ? "" : ", source=$3";

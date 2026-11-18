@@ -27,6 +27,8 @@ export const mapExam = (r: Record<string, unknown>): Exam => ({
   id: s(r.id), subjectId: s(r.subject_id), title: s(r.title), type: s(r.type), date: s(r.date), startTime: s(r.start_time),
   room: s(r.room), sections: asArray(r.sections) as Section[], topics: s(r.topics), notes: s(r.notes),
   status: (s(r.status) || "provisional") as Exam["status"],
+  scheduleId: s(r.schedule_id) || undefined,
+  scheduleUpdatedAt: (r.schedule_updated_at instanceof Date ? r.schedule_updated_at.toISOString() : s(r.schedule_updated_at)) || undefined,
 });
 export const mapPastQuestion = (r: Record<string, unknown>): PastQuestion => ({
   id: s(r.id), subjectId: s(r.subject_id), examKind: (["quiz", "midterm", "final"].includes(s(r.exam_kind)) ? s(r.exam_kind) : "quiz") as PastQuestion["examKind"],
