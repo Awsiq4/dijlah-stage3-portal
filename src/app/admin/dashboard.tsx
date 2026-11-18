@@ -101,7 +101,10 @@ export default function AdminDashboard(){
   const calendar = CALENDARS.find(item => item.id === tab);
   const setting = SETTINGS.find(item => item.id === tab);
   const dataType = tab === "examSchedule" ? "exams" : publication || calendar || tab === "subjects" || tab === "telegram" ? tab : null;
-  const {rows, failed: rowsFailed, reload} = useAdminRows(me?.authenticated && ["super_admin", "editor"].includes(me.role || "") ? dataType : null);
+  const {rows, failed: rowsFailed, reload} = useAdminRows(
+    me?.authenticated && ["super_admin", "editor"].includes(me.role || "") ? dataType : null,
+    tab === "examSchedule",
+  );
   const [statsFailed, setStatsFailed] = useState(false);
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
