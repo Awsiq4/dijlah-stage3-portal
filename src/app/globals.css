@@ -417,7 +417,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .pdf-filename{flex:1 1 130px;min-width:0;overflow-wrap:anywhere;font-size:.85rem}
 .pdf-controls .icon-button{width:38px;height:38px}
 .pdf-page-ind{font-size:.74rem;font-weight:800;color:var(--muted);white-space:nowrap}
-.pdf-pages{height: min(68vh, 850px);height:min(68dvh,850px);min-height:0;overflow:auto;padding:14px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;overscroll-behavior:contain}
+/* Keep the measured page width stable when Safari toggles the vertical scrollbar. */
+.pdf-pages{height: min(68vh, 850px);height:min(68dvh,850px);min-height:0;overflow-x:auto;overflow-y:scroll;padding:14px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;overscroll-behavior:contain}
 .pdf-expanded .pdf-pages{flex:1;height:auto}
 .pdf-page{flex:0 0 auto;max-width:none;background:#fff;box-shadow:var(--shadow);overflow:hidden}
 .pdf-canvas{display:block;width:100%;height:100%}
