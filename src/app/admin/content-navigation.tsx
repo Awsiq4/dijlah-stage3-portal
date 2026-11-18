@@ -51,8 +51,8 @@ function rowDate(row: Row, field: string) {
   return Date.parse(String(row[field] || ""));
 }
 
-export function useAdminRows(type: string | null) {
-  const [result, setResult] = useState<{type: string; rows: Row[]; failed: boolean} | null>(null);
+export function useAdminRows(type: string | null, requireCurrentVersion = false) {
+  const [result, setResult] = useState<{type: string; version: number; rows: Row[]; failed: boolean} | null>(null);
   const [version, setVersion] = useState(0);
   useEffect(() => {
     if (!type) return;
@@ -61,16 +61,17 @@ export function useAdminRows(type: string | null) {
       .then(async response => {
         if (!response.ok) throw new Error("Content unavailable");
         const data = await response.json();
-        if (!controller.signal.aborted) setResult({type, rows: data.rows || [], failed: false});
+        if (!controller.signal.aborted) setResult({type, version, rows: data.rows || [], failed: false});
       })
       .catch(() => {
-        if (!controller.signal.aborted) setResult({type, rows: [], failed: true});
+        if (!controller.signal.aborted) setResult({type, version, rows: [], failed: true});
       });
     return () => controller.abort();
   }, [type, version]);
+  const current = result?.type === type && (!requireCurrentVersion || result.version === version) ? result : null;
   return {
-    rows: result?.type === type ? result.rows : null,
-    failed: result?.type === type && result.failed,
+    rows: current?.rows ?? null,
+    failed: current?.failed ?? false,
     reload: () => setVersion(value => value + 1),
   };
 }
